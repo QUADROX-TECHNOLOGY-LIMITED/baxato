@@ -387,7 +387,7 @@ export default function RegisterPage() {
                   <input 
                     {...register('website')} 
                     onBlur={handleWebsiteBlur}
-                    placeholder="quadrox.tech"
+                    placeholder="website.com"
                     className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" 
                   />
                   {errors.website && <p className="mt-1 text-xs text-red-600">{errors.website.message}</p>}
@@ -474,7 +474,7 @@ export default function RegisterPage() {
                 disabled={isSubmitting || !emailVerified || !phoneVerified}
                 className="flex w-full justify-center items-center rounded-full bg-[#1c44e4] py-4 px-4 text-base font-bold text-white shadow-lg hover:bg-blue-800 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#1c44e4] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5 active:translate-y-0"
               >
-                {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'CREATE SECURE ACCOUNT'}
+                {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'CREATE ACCOUNT'}
               </button>
               {(!emailVerified || !phoneVerified) && (
                 <p className="text-center mt-3 text-xs font-medium text-amber-600">
@@ -489,7 +489,7 @@ export default function RegisterPage() {
             <p className="text-sm text-gray-600 font-medium">
               Already have an account?{' '}
               <Link href="/login" className="font-bold text-[#1c44e4] hover:text-blue-800 transition-colors">
-                Sign in to dashboard &rarr;
+                Sign in &rarr;
               </Link>
             </p>
           </div>
