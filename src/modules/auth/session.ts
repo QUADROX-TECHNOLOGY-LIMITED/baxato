@@ -15,10 +15,6 @@ type AccessTokenPayload = {
   role: string;
 };
 
-/**
- * Generates a short-lived Access Token (Stateless JWT).
- * Safe to be verified in Next.js Edge Middleware.
- */
 export async function createAccessToken(payload: AccessTokenPayload): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
@@ -27,9 +23,6 @@ export async function createAccessToken(payload: AccessTokenPayload): Promise<st
     .sign(JWT_SECRET);
 }
 
-/**
- * Verifies the Access Token.
- */
 export async function verifyAccessToken(token: string): Promise<AccessTokenPayload | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
@@ -39,25 +32,15 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
   }
 }
 
-/**
- * Establishes a completely new dashboard session.
- * 1. Generates Access Token.
- * 2. Generates raw Refresh Token.
- * 3. Hashes and stores Refresh Token in PostgreSQL.
- * 4. Sets HTTP-Only cookies.
- */
 export async function establishDashboardSession(userId: string, role: string) {
-  // 1. Create stateless access token
   const accessToken = await createAccessToken({ userId, role });
 
-  // 2. Create stateful refresh token
   const { rawToken } = generateRefreshToken();
   const tokenHash = await hashData(rawToken);
   
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
-  // 3. Store hash in PostgreSQL
   await prisma.session.create({
     data: {
       userId,
@@ -66,15 +49,14 @@ export async function establishDashboardSession(userId: string, role: string) {
     },
   });
 
-  // 4. Set secure cookies
-  const cookieStore = cookies();
+  const cookieStore = await cookies(); // Added await here
   
   cookieStore.set('baxato_access', accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 15 * 60, // 15 minutes
+    maxAge: 15 * 60, 
   });
 
   cookieStore.set('baxato_refresh', rawToken, {
@@ -86,9 +68,6 @@ export async function establishDashboardSession(userId: string, role: string) {
   });
 }
 
-/**
- * Revokes all sessions for a user (Remote Logout / Compromise Response).
- */
 export async function revokeAllUserSessions(userId: string) {
   await prisma.session.deleteMany({
     where: { userId },
