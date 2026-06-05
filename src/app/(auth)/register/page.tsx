@@ -195,30 +195,29 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
-          <Image 
-            src="/baxato-logo.png" 
-            alt="BAXATO Logo" 
-            width={200} 
-            height={54} 
-            className="h-14 w-auto object-contain" 
-            priority
-          />
-        </div>
-        <h2 className="text-center text-3xl font-extrabold tracking-tight text-gray-900">
-          Create your account
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
-          Join the enterprise infrastructure platform
-        </p>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
-        <div className="bg-white py-10 px-6 shadow-2xl sm:rounded-3xl sm:px-12 border border-gray-100">
+      <div className="sm:mx-auto sm:w-full sm:max-w-xl">
+        
+        {/* The Unified White Card */}
+        <div className="bg-white py-12 px-6 shadow-2xl sm:rounded-3xl sm:px-12 border border-gray-100">
           
+          {/* Brand Header INSIDE the card */}
+          <div className="flex flex-col items-center mb-8">
+            <Image 
+              src="/baxato-logo.png" 
+              alt="BAXATO Logo" 
+              width={220} 
+              height={60} 
+              className="h-14 w-auto object-contain mb-6" 
+              priority
+            />
+            <h2 className="text-center text-3xl font-extrabold tracking-tight text-gray-900">
+              Create your account
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-500">
+              Join the enterprise infrastructure platform
+            </p>
+          </div>
+
           {serverError && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded-r-md flex items-center gap-2">
               <AlertCircle className="h-5 w-5" />
@@ -234,17 +233,17 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                  <input {...register('firstName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                  <input {...register('firstName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                   {errors.firstName && <p className="mt-1 text-xs text-red-600">{errors.firstName.message}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                  <input {...register('lastName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                  <input {...register('lastName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                   {errors.lastName && <p className="mt-1 text-xs text-red-600">{errors.lastName.message}</p>}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name <span className="text-gray-400 font-normal">(Optional)</span></label>
-                  <input {...register('middleName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                  <input {...register('middleName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                 </div>
               </div>
             </div>
@@ -260,10 +259,10 @@ export default function RegisterPage() {
                   <input 
                     {...register('email')} 
                     disabled={emailVerified}
-                    className={`block w-full border-none focus:ring-0 sm:text-sm px-4 py-3 ${emailVerified ? 'bg-green-50 text-green-900' : 'bg-gray-50'}`} 
+                    className={`block w-full border-none focus:ring-0 sm:text-sm px-4 py-3 ${emailVerified ? 'bg-green-50 text-green-900' : 'bg-white'}`} 
                   />
                   {!emailVerified && !emailOtpSent && (
-                    <button type="button" onClick={() => handleSendOtp('EMAIL')} disabled={!watchEmail || isVerifyingEmail} className="bg-gray-100 px-5 py-3 text-sm font-bold text-[#1c44e4] hover:bg-gray-200 border-l border-gray-300 disabled:opacity-50 transition-colors">
+                    <button type="button" onClick={() => handleSendOtp('EMAIL')} disabled={!watchEmail || isVerifyingEmail} className="bg-gray-50 px-5 py-3 text-sm font-bold text-[#1c44e4] hover:bg-gray-100 border-l border-gray-300 disabled:opacity-50 transition-colors">
                       {isVerifyingEmail ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : 'VERIFY'}
                     </button>
                   )}
@@ -279,7 +278,7 @@ export default function RegisterPage() {
                 {/* Email OTP Input */}
                 {emailOtpSent && !emailVerified && (
                   <div className="mt-3 flex items-center space-x-3 p-3 bg-blue-50 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                    <input type="text" placeholder="6-digit code" value={emailOtp} onChange={e => setEmailOtp(e.target.value)} className="block w-32 rounded-lg border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-3 py-2 border text-center tracking-widest font-mono" />
+                    <input type="text" placeholder="6-digit code" value={emailOtp} onChange={e => setEmailOtp(e.target.value)} className="block w-32 rounded-lg border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-3 py-2 border bg-white text-center tracking-widest font-mono" />
                     <button type="button" onClick={() => handleConfirmOtp('EMAIL')} disabled={isVerifyingEmail || !emailOtp} className="inline-flex items-center rounded-full bg-[#1c44e4] px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-800 transition-colors disabled:opacity-50">
                       {isVerifyingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Code'}
                     </button>
@@ -291,17 +290,17 @@ export default function RegisterPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                 <div className="flex rounded-xl shadow-sm border border-gray-300 overflow-hidden focus-within:border-[#1c44e4] focus-within:ring-1 focus-within:ring-[#1c44e4] transition-all">
-                  <span className={`inline-flex items-center px-4 border-r border-gray-300 text-gray-500 font-medium sm:text-sm ${phoneVerified ? 'bg-green-50' : 'bg-gray-100'}`}>
+                  <span className={`inline-flex items-center px-4 border-r border-gray-300 text-gray-500 font-medium sm:text-sm ${phoneVerified ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
                     {currentDialCode}
                   </span>
                   <input 
                     {...register('phoneNumber')} 
                     disabled={phoneVerified}
                     placeholder="801 234 5678"
-                    className={`block w-full border-none focus:ring-0 sm:text-sm px-4 py-3 ${phoneVerified ? 'bg-green-50 text-green-900' : 'bg-gray-50'}`} 
+                    className={`block w-full border-none focus:ring-0 sm:text-sm px-4 py-3 ${phoneVerified ? 'bg-green-50 text-green-900' : 'bg-white'}`} 
                   />
                   {!phoneVerified && !phoneOtpSent && (
-                    <button type="button" onClick={() => handleSendOtp('PHONE')} disabled={!watchPhone || isVerifyingPhone} className="bg-gray-100 px-5 py-3 text-sm font-bold text-[#1c44e4] hover:bg-gray-200 border-l border-gray-300 disabled:opacity-50 transition-colors">
+                    <button type="button" onClick={() => handleSendOtp('PHONE')} disabled={!watchPhone || isVerifyingPhone} className="bg-gray-50 px-5 py-3 text-sm font-bold text-[#1c44e4] hover:bg-gray-100 border-l border-gray-300 disabled:opacity-50 transition-colors">
                       {isVerifyingPhone ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : 'VERIFY'}
                     </button>
                   )}
@@ -317,7 +316,7 @@ export default function RegisterPage() {
                 {/* Phone OTP Input */}
                 {phoneOtpSent && !phoneVerified && (
                   <div className="mt-3 flex items-center space-x-3 p-3 bg-blue-50 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                    <input type="text" placeholder="SMS code" value={phoneOtp} onChange={e => setPhoneOtp(e.target.value)} className="block w-32 rounded-lg border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-3 py-2 border text-center tracking-widest font-mono" />
+                    <input type="text" placeholder="SMS code" value={phoneOtp} onChange={e => setPhoneOtp(e.target.value)} className="block w-32 rounded-lg border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-3 py-2 border bg-white text-center tracking-widest font-mono" />
                     <button type="button" onClick={() => handleConfirmOtp('PHONE')} disabled={isVerifyingPhone || !phoneOtp} className="inline-flex items-center rounded-full bg-[#1c44e4] px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-800 transition-colors disabled:opacity-50">
                       {isVerifyingPhone ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Code'}
                     </button>
@@ -332,7 +331,7 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                  <select {...register('country')} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-gray-50 transition-colors">
+                  <select {...register('country')} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-white transition-colors">
                     {COUNTRIES.map(c => <option key={c.code} value={c.name}>{c.flag} {c.name}</option>)}
                   </select>
                 </div>
@@ -341,7 +340,7 @@ export default function RegisterPage() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                      <select {...register('state')} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-gray-50 transition-colors">
+                      <select {...register('state')} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-white transition-colors">
                         <option value="">Select State</option>
                         {NIGERIAN_STATES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
                       </select>
@@ -349,7 +348,7 @@ export default function RegisterPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">LGA</label>
-                      <select {...register('lga')} disabled={!watchState} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-gray-50 disabled:opacity-50 transition-colors">
+                      <select {...register('lga')} disabled={!watchState} className="block w-full rounded-xl border-gray-300 py-3 pl-4 pr-10 text-base focus:border-[#1c44e4] focus:outline-none focus:ring-[#1c44e4] sm:text-sm border bg-white disabled:opacity-50 transition-colors">
                         <option value="">Select LGA</option>
                         {selectedStateData?.lgas.map(lga => <option key={lga} value={lga}>{lga}</option>)}
                       </select>
@@ -360,12 +359,12 @@ export default function RegisterPage() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">State / Province</label>
-                      <input {...register('state')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                      <input {...register('state')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                       {errors.state && <p className="mt-1 text-xs text-red-600">{errors.state.message}</p>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                      <input {...register('lga')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                      <input {...register('lga')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                       {errors.lga && <p className="mt-1 text-xs text-red-600">{errors.lga.message}</p>}
                     </div>
                   </>
@@ -379,7 +378,7 @@ export default function RegisterPage() {
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Business / Project Name</label>
-                  <input {...register('businessName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" />
+                  <input {...register('businessName')} className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" />
                   {errors.businessName && <p className="mt-1 text-xs text-red-600">{errors.businessName.message}</p>}
                 </div>
                 <div>
@@ -388,7 +387,7 @@ export default function RegisterPage() {
                     {...register('website')} 
                     onBlur={handleWebsiteBlur}
                     placeholder="website.com"
-                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" 
+                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" 
                   />
                   {errors.website && <p className="mt-1 text-xs text-red-600">{errors.website.message}</p>}
                 </div>
@@ -405,7 +404,7 @@ export default function RegisterPage() {
                     <input 
                       type={showPassword ? "text" : "password"}
                       {...register('password')} 
-                      className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 pr-10 transition-colors" 
+                      className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white pr-10 transition-colors" 
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-gray-600">
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -436,7 +435,7 @@ export default function RegisterPage() {
                   <input 
                     type={showPassword ? "text" : "password"}
                     {...register('confirmPassword')} 
-                    className={`block w-full rounded-xl shadow-sm focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border transition-colors ${watchConfirmPassword && watchPassword !== watchConfirmPassword ? 'border-red-300 focus:border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#1c44e4] bg-gray-50'}`} 
+                    className={`block w-full rounded-xl shadow-sm focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border transition-colors ${watchConfirmPassword && watchPassword !== watchConfirmPassword ? 'border-red-300 focus:border-red-500 bg-red-50' : 'border-gray-300 focus:border-[#1c44e4] bg-white'}`} 
                   />
                   
                   {/* Live Password Match UI */}
