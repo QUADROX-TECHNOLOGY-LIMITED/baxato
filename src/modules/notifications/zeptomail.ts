@@ -3,17 +3,26 @@
 import { EmailTemplates } from './templates';
 
 export async function sendEmailOtp(toEmail: string, code: string) {
-  // If your account is EU or IN, this might need to be .eu or .in
+  // 1. SAFETY SHIELD: Check env variables BEFORE sending
+  const apiKey = process.env.ZEPTO_API_KEY;
+  const senderEmail = process.env.ZEPTO_SENDER_EMAIL;
+  const senderName = process.env.ZEPTO_SENDER_NAME || 'BAXATO';
+  const bounceEmail = process.env.ZEPTO_BOUNCE_EMAIL || senderEmail;
+
+  if (!apiKey || !senderEmail) {
+    console.error('MISSING ENV VARS: API Key or Sender Email is missing.');
+    throw new Error('Server misconfiguration: Email provider keys missing.');
+  }
+
+  // 2. REGION CHECK: Change this to api.zeptomail.eu or api.zeptomail.in if your Zoho account is outside the US
   const url = 'https://api.zeptomail.com/v1.1/email'; 
   const htmlBody = EmailTemplates.verificationOtp(code);
 
-  const bounceAddress = process.env.ZEPTO_BOUNCE_EMAIL || process.env.ZEPTO_SENDER_EMAIL;
-
   const payload = {
-    bounce_address: bounceAddress,
+    bounce_address: bounceEmail,
     from: {
-      address: process.env.ZEPTO_SENDER_EMAIL,
-      name: process.env.ZEPTO_SENDER_NAME,
+      address: senderEmail,
+      name: senderName,
     },
     to: [
       { 
@@ -26,7 +35,7 @@ export async function sendEmailOtp(toEmail: string, code: string) {
     htmlbody: htmlBody,
   };
 
-  console.log(`[ZEPTOMAIL_ATTEMPT] Sending to: ${toEmail} from: ${process.env.ZEPTO_SENDER_EMAIL}`);
+  console.log(`[ZEPTOMAIL_ATTEMPT] Sending to: ${toEmail} from: ${senderEmail} with bounce: ${bounceEmail}`);
 
   try {
     const response = await fetch(url, {
@@ -34,22 +43,17 @@ export async function sendEmailOtp(toEmail: string, code: string) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Zoho-enczapikey ${process.env.ZEPTO_API_KEY}`,
+        'Authorization': `Zoho-enczapikey ${apiKey}`,
       },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      // 1. Await the exact string response from Zoho
       const errorText = await response.text();
-      
-      // 2. Log it massively so it's impossible to miss in Railway
       console.error('\n================ ZEPTOMAIL ERROR FATAL ================');
       console.error(`Status Code: ${response.status} ${response.statusText}`);
       console.error(`Response Body: ${errorText}`);
       console.error('========================================================\n');
-      
-      // 3. Throw the actual Zoho text so it bubbles up to route.ts
       throw new Error(`Zeptomail rejected payload: ${errorText}`);
     }
 
@@ -58,7 +62,6 @@ export async function sendEmailOtp(toEmail: string, code: string) {
     return data;
 
   } catch (error: any) {
-    // Catch fetch/network level errors (like wrong URL or DNS failure)
     console.error('\n================ ZEPTOMAIL CATCH BLOCK ================');
     console.error(error.message || error);
     console.error('=======================================================\n');
