@@ -1,0 +1,123 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- USER & AUTHENTICATION ---
+
+enum UserRole {
+  USER
+  PREMIUM
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          UserRole  @default(USER)
+  isVerified    Boolean   @default(false)
+  
+  // API Authentication
+  apiKeyHash    String?   @unique
+  webhookUrl    String?
+  webhookSecret String?
+  
+  // Relations
+  wallet        Wallet?
+  transactions  ServiceTransaction[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// --- FINANCIAL INFRASTRUCTURE ---
+
+model Wallet {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Stored in Kobo (NGN * 100) to prevent floating point math errors
+  balance     BigInt   @default(0) 
+  
+  // Relations
+  ledgers     WalletLedger[]
+
+  updatedAt   DateTime @updatedAt
+}
+
+enum LedgerType {
+  CREDIT
+  DEBIT
+}
+
+// Double-Entry Ledger: Every change to a wallet must be recorded here.
+// You never just update Wallet.balance without creating a Ledger entry.
+model WalletLedger {
+  id          String     @id @default(uuid())
+  walletId    String
+  wallet      Wallet     @relation(fields: [walletId], references: [id])
+  
+  amount      BigInt     // Amount in Kobo
+  type        LedgerType
+  balanceAfter BigInt    // Snapshot of balance after this transaction
+  
+  description String
+  reference   String     @unique // Links to a ServiceTransaction or manual funding ID
+  
+  createdAt   DateTime   @default(now())
+}
+
+// --- CORE TRANSACTIONS ---
+
+enum ServiceType {
+  AIRTIME
+  DATA
+  CABLE
+  ELECTRICITY
+  EXAM_PIN
+}
+
+enum TxStatus {
+  PENDING
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+// Records the actual API request to buy a service
+model ServiceTransaction {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  
+  serviceType     ServiceType
+  amount          BigInt      // Cost to the user in Kobo
+  providerCost    BigInt?     // What BAXATO paid the provider (for profit calc)
+  
+  status          TxStatus    @default(PENDING)
+  idempotencyKey  String?     @unique // Prevents double-charging on network retries
+  
+  // Provider details
+  provider        String      // e.g., "MONNIFY", "VTPASS"
+  providerRef     String?     @unique
+  
+  // Payload storage for debugging (JSON)
+  requestData     Json?       
+  responseData    Json?       
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
