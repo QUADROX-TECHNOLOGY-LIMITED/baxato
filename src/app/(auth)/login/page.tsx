@@ -11,7 +11,6 @@ import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 
 import { loginUser } from '@/modules/auth/actions';
 
-// --- ZOD VALIDATION SCHEMA ---
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
@@ -41,7 +40,6 @@ export default function LoginPage() {
     if (result?.error) {
       setServerError(result.error);
     } else if (result?.success) {
-      // Force a hard navigation to trigger the middleware check
       window.location.href = '/dashboard';
     }
   };
@@ -49,18 +47,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
       
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
-          <Image 
-            src="/baxato-logo.png" 
-            alt="BAXATO Logo" 
-            width={200} 
-            height={54} 
-            className="h-14 w-auto object-contain" 
-            priority
-          />
-        </div>
+      {/* Brand Header - Clean and transparent now */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center mb-8">
+        <Image 
+          src="/baxato-logo.png" 
+          alt="BAXATO Logo" 
+          width={220} 
+          height={60} 
+          className="h-16 w-auto object-contain mb-6" 
+          priority
+        />
         <h2 className="text-center text-3xl font-extrabold tracking-tight text-gray-900">
           Welcome back
         </h2>
@@ -69,8 +65,8 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-10 px-6 shadow-2xl sm:rounded-3xl sm:px-12 border border-gray-100">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-10 px-6 shadow-xl sm:rounded-3xl sm:px-12 border border-gray-100">
           
           {serverError && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded-r-md flex items-center gap-2 animate-in fade-in">
@@ -81,12 +77,13 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             
+            {/* Unified Inputs: Removed bg-gray-50, using bg-white/transparent */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
               <input 
                 {...register('email')} 
                 type="email"
-                className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 transition-colors" 
+                className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white transition-colors" 
               />
               {errors.email && <p className="mt-1 text-xs text-red-600 font-medium">{errors.email.message}</p>}
             </div>
@@ -102,12 +99,12 @@ export default function LoginPage() {
                 <input 
                   type={showPassword ? "text" : "password"}
                   {...register('password')} 
-                  className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-gray-50 pr-10 transition-colors" 
+                  className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#1c44e4] focus:ring-[#1c44e4] sm:text-sm px-4 py-3 border bg-white pr-10 transition-colors" 
                 />
                 <button 
                   type="button" 
                   onClick={() => setShowPassword(!showPassword)} 
-                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-gray-600"
+                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-[#1c44e4] transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -115,7 +112,7 @@ export default function LoginPage() {
               {errors.password && <p className="mt-1 text-xs text-red-600 font-medium">{errors.password.message}</p>}
             </div>
 
-            <div className="pt-2">
+            <div className="pt-4">
               <button 
                 type="submit" 
                 disabled={isSubmitting}
