@@ -3,31 +3,30 @@
 import { EmailTemplates } from './templates';
 
 export async function sendEmailOtp(toEmail: string, code: string) {
-  // 1. SAFETY SHIELD: Check env variables BEFORE sending
-  const apiKey = process.env.ZEPTO_API_KEY;
-  const senderEmail = process.env.ZEPTO_SENDER_EMAIL;
-  const senderName = process.env.ZEPTO_SENDER_NAME || 'BAXATO';
-  const bounceEmail = process.env.ZEPTO_BOUNCE_EMAIL || senderEmail;
-
-  if (!apiKey || !senderEmail) {
-    console.error('MISSING ENV VARS: API Key or Sender Email is missing.');
-    throw new Error('Server misconfiguration: Email provider keys missing.');
-  }
-
-  // 2. REGION CHECK: Change this to api.zeptomail.eu or api.zeptomail.in if your Zoho account is outside the US
   const url = 'https://api.zeptomail.com/v1.1/email'; 
+
+  // 1. Strict Environment Variable Validation
+  if (!process.env.ZEPTO_API_KEY) throw new Error("Missing ZEPTO_API_KEY");
+  if (!process.env.ZEPTO_SENDER_EMAIL) throw new Error("Missing ZEPTO_SENDER_EMAIL");
+
+  // 2. Clean the API key in case the user copied "Zoho-enczapikey " into the .env variable
+  const rawKey = process.env.ZEPTO_API_KEY.trim();
+  const cleanKey = rawKey.startsWith('Zoho-enczapikey ') 
+    ? rawKey.replace('Zoho-enczapikey ', '') 
+    : rawKey;
+
   const htmlBody = EmailTemplates.verificationOtp(code);
 
+  // 3. Simplified Payload (Removed bounce_address to rely on Zeptomail's default dashboard config)
   const payload = {
-    bounce_address: bounceEmail,
     from: {
-      address: senderEmail,
-      name: senderName,
+      address: process.env.ZEPTO_SENDER_EMAIL.trim(),
+      name: process.env.ZEPTO_SENDER_NAME?.trim() || 'BAXATO',
     },
     to: [
       { 
         email_address: { 
-          address: toEmail 
+          address: toEmail.trim() 
         } 
       }
     ],
@@ -35,7 +34,7 @@ export async function sendEmailOtp(toEmail: string, code: string) {
     htmlbody: htmlBody,
   };
 
-  console.log(`[ZEPTOMAIL_ATTEMPT] Sending to: ${toEmail} from: ${senderEmail} with bounce: ${bounceEmail}`);
+  console.log(`[ZEPTOMAIL_ATTEMPT] Sending email from ${payload.from.address} to ${toEmail}`);
 
   try {
     const response = await fetch(url, {
@@ -43,28 +42,23 @@ export async function sendEmailOtp(toEmail: string, code: string) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Zoho-enczapikey ${apiKey}`,
+        'Authorization': `Zoho-enczapikey ${cleanKey}`,
       },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('\n================ ZEPTOMAIL ERROR FATAL ================');
-      console.error(`Status Code: ${response.status} ${response.statusText}`);
-      console.error(`Response Body: ${errorText}`);
-      console.error('========================================================\n');
-      throw new Error(`Zeptomail rejected payload: ${errorText}`);
+      console.error(`[ZEPTOMAIL_HTTP_ERROR] Status: ${response.status} | Body: ${errorText}`);
+      throw new Error(`Zeptomail rejected payload (Status ${response.status})`);
     }
 
     const data = await response.json();
-    console.log('[ZEPTOMAIL_SUCCESS]', data);
+    console.log('[ZEPTOMAIL_SUCCESS]', data.message);
     return data;
 
   } catch (error: any) {
-    console.error('\n================ ZEPTOMAIL CATCH BLOCK ================');
-    console.error(error.message || error);
-    console.error('=======================================================\n');
+    console.error('[ZEPTOMAIL_CATCH_ERROR]', error.message || error);
     throw error;
   }
 }
