@@ -46,28 +46,29 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      
-      {/* Brand Header - Clean and transparent now */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center mb-8">
-        <Image 
-          src="/baxato-logo.png" 
-          alt="BAXATO Logo" 
-          width={220} 
-          height={60} 
-          className="h-16 w-auto object-contain mb-6" 
-          priority
-        />
-        <h2 className="text-center text-3xl font-extrabold tracking-tight text-gray-900">
-          Welcome back
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
-          Sign in to your dashboard
-        </p>
-      </div>
-
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-10 px-6 shadow-xl sm:rounded-3xl sm:px-12 border border-gray-100">
+        
+        {/* The Unified White Card starts here */}
+        <div className="bg-white py-12 px-6 shadow-xl sm:rounded-3xl sm:px-12 border border-gray-100">
           
+          {/* Brand Header is now INSIDE the white card */}
+          <div className="flex flex-col items-center mb-8">
+            <Image 
+              src="/baxato-logo.png" 
+              alt="BAXATO Logo" 
+              width={220} 
+              height={60} 
+              className="h-14 w-auto object-contain mb-6" 
+              priority
+            />
+            <h2 className="text-center text-3xl font-extrabold tracking-tight text-gray-900">
+              Welcome back
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-500">
+              Sign in to your dashboard
+            </p>
+          </div>
+
           {serverError && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded-r-md flex items-center gap-2 animate-in fade-in">
               <AlertCircle className="h-5 w-5" />
@@ -77,7 +78,6 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             
-            {/* Unified Inputs: Removed bg-gray-50, using bg-white/transparent */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
               <input 
