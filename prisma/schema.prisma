@@ -30,6 +30,19 @@ model User {
   phoneNumber     String    @unique
   isPhoneVerified Boolean   @default(false)
   
+  // --- NEW: IDENTITY & SETTLEMENT ---
+  isKycCompleted  Boolean   @default(false)
+  nin             String?   @unique
+  dob             String?   // Stored as YYYY-MM-DD
+  profilePicture  String?   // Cloudinary URL
+  
+  // Bank Details for Settlement/Withdrawals
+  bankName        String?
+  bankCode        String?
+  accountNumber   String?
+  accountName     String?
+  // ----------------------------------
+  
   // Location
   country         String    @default("Nigeria")
   state           String
