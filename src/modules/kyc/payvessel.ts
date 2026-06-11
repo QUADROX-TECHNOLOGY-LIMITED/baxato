@@ -12,7 +12,7 @@ export type PayvesselKycData = {
 };
 
 export async function verifyEnhancedNin(nin: string): Promise<PayvesselKycData> {
-  const url = process.env.PAYVESSEL_API_URL || 'https://sandbox.payvessel.com/kyc/api/v1/merchant/nin/enhanced';
+  const url = process.env.PAYVESSEL_API_URL || 'https://api.payvessel.com/kyc/api/v1/merchant/nin/enhanced';
 
   if (!process.env.PAYVESSEL_API_KEY || !process.env.PAYVESSEL_API_SECRET) {
     throw new Error('Missing Payvessel API credentials.');
