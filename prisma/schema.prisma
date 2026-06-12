@@ -58,6 +58,7 @@ model User {
   
   // API Authentication
   apiKeyHash      String?   @unique
+  apiKeys         ApiKey[]  // <-- Added relation to fix the build error
   webhookUrl      String?
   webhookSecret   String?
   
@@ -108,18 +109,18 @@ enum LedgerType {
 // Double-Entry Ledger: Every change to a wallet must be recorded here.
 // You never just update Wallet.balance without creating a Ledger entry.
 model WalletLedger {
-  id          String     @id @default(uuid())
-  walletId    String
-  wallet      Wallet     @relation(fields: [walletId], references: [id])
+  id           String     @id @default(uuid())
+  walletId     String
+  wallet       Wallet     @relation(fields: [walletId], references: [id])
   
-  amount      BigInt     // Amount in Kobo
-  type        LedgerType
-  balanceAfter BigInt    // Snapshot of balance after this transaction
+  amount       BigInt     // Amount in Kobo
+  type         LedgerType
+  balanceAfter BigInt     // Snapshot of balance after this transaction
   
-  description String
-  reference   String     @unique // Links to a ServiceTransaction or manual funding ID
+  description  String
+  reference    String     @unique // Links to a ServiceTransaction or manual funding ID
   
-  createdAt   DateTime   @default(now())
+  createdAt    DateTime   @default(now())
 }
 
 // --- CORE TRANSACTIONS ---
@@ -172,12 +173,29 @@ model ServiceTransaction {
 
 // Stateful session storage for secure dashboard authentication
 model Session {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  tokenHash    String   @unique // Argon2id hash of the refresh token
-  expiresAt    DateTime
+  tokenHash String   @unique // Argon2id hash of the refresh token
+  expiresAt DateTime
   
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+}
+
+// --- API MANAGEMENT ---
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  key       String   @unique 
+  type      String   @default("TEST") // 'TEST' or 'LIVE'
+  isActive  Boolean  @default(true)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
