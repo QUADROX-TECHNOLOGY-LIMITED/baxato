@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -66,7 +66,6 @@ export default function DashboardShell({
 
   const SidebarContent = () => (
     <>
-      {/* Brand Logo Area - Small Logo + Text */}
       <div className={cn("h-16 flex items-center shrink-0", isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-5")}>
         {isCollapsed && !isMobileOpen ? (
           <div className="h-7 w-7 bg-[#2563EB] rounded-lg flex items-center justify-center font-black text-white text-xs shadow-md">
@@ -164,11 +163,13 @@ export default function DashboardShell({
   );
 
   return (
-    <div className="min-h-[100dvh] bg-[#f8fafc] flex font-sans antialiased">
+    // THE FIX: Strict h-dvh and overflow-hidden on the absolute root
+    <div className="h-dvh w-full bg-[#f8fafc] flex font-sans antialiased overflow-hidden">
       
+      {/* DESKTOP SIDEBAR: Fill the exact height of the dvh root */}
       <aside 
         className={cn(
-          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-[100dvh] transition-all duration-300 z-20",
+          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 h-full transition-all duration-300 relative z-20",
           isCollapsed ? "w-20" : "w-60"
         )}
       >
@@ -182,6 +183,7 @@ export default function DashboardShell({
         <SidebarContent />
       </aside>
 
+      {/* MOBILE SIDEBAR & OVERLAY */}
       <div className="lg:hidden">
         {isMobileOpen && (
           <div 
@@ -191,7 +193,7 @@ export default function DashboardShell({
         )}
         <aside 
           className={cn(
-            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-[100dvh] transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
+            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-full transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
             isMobileOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -206,10 +208,12 @@ export default function DashboardShell({
         </aside>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 h-14 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden z-30">
+      {/* MAIN CONTENT AREA: Constrained exactly to the bounds of the h-dvh wrapper */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        
+        {/* Header: Static at the top */}
+        <header className="h-14 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden shrink-0 z-30">
           <div className="flex items-center gap-2">
-            {/* Massively increased the hit area for instant tap recognition */}
             <button
               type="button"
               onClick={() => setIsMobileOpen(true)}
@@ -236,7 +240,8 @@ export default function DashboardShell({
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
+        {/* Content Body: Only this specific section scrolls, giving that smooth native app feel */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 relative">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>
