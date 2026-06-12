@@ -36,6 +36,7 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login?clear_session=true');
 
+  // NOTICE: No <div> wrappers here at all. The Shell handles the entire layout.
   return (
     <DashboardShell user={user} apiLive={user.apiKeys.length > 0}>
       {children}
