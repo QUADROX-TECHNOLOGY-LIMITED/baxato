@@ -5,11 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/modules/auth/session';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const token = cookieStore.get('baxato_access')?.value;
 
@@ -27,16 +23,12 @@ export default async function DashboardLayout({
       profilePicture: true,
       isKycCompleted: true,
       businessName: true,
-      apiKeys: {
-        take: 1,
-        select: { id: true }
-      }
+      apiKeys: { take: 1, select: { id: true } }
     }
   });
 
   if (!user) redirect('/login?clear_session=true');
 
-  // NOTICE: No <div> wrappers here at all. The Shell handles the entire layout.
   return (
     <DashboardShell user={user} apiLive={user.apiKeys.length > 0}>
       {children}
