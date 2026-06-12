@@ -66,6 +66,7 @@ export default function DashboardShell({
 
   const SidebarContent = () => (
     <>
+      {/* Brand Logo Area - Small Logo + Text */}
       <div className={cn("h-16 flex items-center shrink-0", isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-5")}>
         {isCollapsed && !isMobileOpen ? (
           <div className="h-7 w-7 bg-[#2563EB] rounded-lg flex items-center justify-center font-black text-white text-xs shadow-md">
@@ -163,14 +164,16 @@ export default function DashboardShell({
   );
 
   return (
-    // BOSS'S FIX 1: min-h-dvh dynamically tracks the real viewport height
-    <div className="min-h-dvh bg-[#f8fafc] flex font-sans antialiased">
+    // FIX 1: Changed `min-h-dvh` back to `min-h-screen`. 
+    // This allows the page to grow naturally without snapping when Safari's URL bar shrinks.
+    <div className="min-h-screen bg-[#f8fafc] flex font-sans antialiased">
       
       {/* DESKTOP SIDEBAR */}
-      {/* BOSS'S FIX 2: h-dvh prevents the sidebar from clipping at the bottom */}
       <aside 
         className={cn(
-          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-dvh transition-all duration-300 z-20",
+          // FIX 2: Changed `h-dvh` to `h-screen`. 
+          // `sticky top-0 h-screen` perfectly locks it to the viewport without causing layout thrashing.
+          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-screen transition-all duration-300 z-20",
           isCollapsed ? "w-20" : "w-60"
         )}
       >
@@ -192,10 +195,11 @@ export default function DashboardShell({
             onClick={() => setIsMobileOpen(false)}
           />
         )}
-        {/* BOSS'S FIX 3: h-dvh strictly on the mobile drawer */}
         <aside 
           className={cn(
-            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-dvh transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
+            // FIX 3: Mobile drawer uses `h-[100dvh]` so it perfectly clears the keyboard if open, 
+            // but since it's `fixed`, it won't cause the main page to jump around.
+            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-[100dvh] transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
             isMobileOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
