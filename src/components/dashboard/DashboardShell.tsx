@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -10,6 +10,12 @@ import {
   BarChart3, Settings, HelpCircle, 
   LogOut, ChevronLeft, ChevronRight, Menu, X
 } from 'lucide-react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export default function DashboardShell({ 
   user, 
@@ -22,173 +28,202 @@ export default function DashboardShell({
 }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const handleNavClick = () => setIsMobileOpen(false);
 
   const NavItem = ({ href, icon: Icon, label }: any) => {
-    const isActive = pathname === href || pathname.startsWith(`${href}/`);
+    const isActive = pathname === href;
     return (
       <Link
         href={href}
-        onClick={() => setIsMobileMenuOpen(false)}
+        onClick={handleNavClick}
         title={isCollapsed ? label : undefined}
-        className={`
-          flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold tracking-tight transition-all duration-200 group
-          ${isCollapsed ? "justify-center lg:px-0" : ""}
-          ${isActive 
-            ? "bg-[#2563EB] text-white shadow-[0_4px_12px_rgba(37,99,235,0.3)]" 
+        className={cn(
+          "flex items-center gap-2.5 py-2 rounded-lg text-[12px] font-semibold tracking-tight transition-all duration-200 group",
+          isCollapsed ? "justify-center px-0 lg:px-0" : "px-3",
+          isActive 
+            ? "bg-[#2563EB] text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]" 
             : "text-slate-400 hover:bg-white/5 hover:text-white"
-          }
-        `}
+        )}
       >
-        <Icon className={`shrink-0 transition-colors ${isCollapsed ? "h-5 w-5" : "h-[18px] w-[18px]"} ${isActive ? "text-white" : "text-slate-400 group-hover:text-white"}`} />
-        {!isCollapsed && <span className="truncate">{label}</span>}
+        <Icon className={cn("shrink-0 transition-colors", isCollapsed ? "h-[18px] w-[18px]" : "h-4 w-4", isActive ? "text-white" : "text-slate-400 group-hover:text-white")} />
+        {(!isCollapsed || isMobileOpen) && <span className="truncate">{label}</span>}
       </Link>
     );
   };
 
   const NavGroup = ({ title, children }: any) => (
-    <div className="pt-4 space-y-1">
-      {!isCollapsed && (
-        <h3 className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+    <div className="pt-3 space-y-0.5">
+      {(!isCollapsed || isMobileOpen) && (
+        <p className="px-3 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
           {title}
-        </h3>
+        </p>
       )}
       {children}
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans antialiased text-slate-600">
-      
-      {/* MOBILE OVERLAY */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm transition-opacity cursor-pointer"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
+  const SidebarContent = () => (
+    <>
+      {/* Brand Logo Area - Small Logo + Text */}
+      <div className={cn("h-16 flex items-center shrink-0", isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-5")}>
+        {isCollapsed && !isMobileOpen ? (
+          <div className="h-7 w-7 bg-[#2563EB] rounded-lg flex items-center justify-center font-black text-white text-xs shadow-md">
+            B
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <img 
+              src="/baxato-logo.png" 
+              alt="Logo" 
+              className="h-6 w-6 object-contain" 
+              onError={(e) => (e.currentTarget.style.display = 'none')}
+            />
+            <span className="text-xl font-bold tracking-tight text-white">Baxato</span>
+          </div>
+        )}
+      </div>
 
-      {/* SIDEBAR (Fixed, handles own overflow) */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 bg-[#0B1120] border-r border-white/5 
-        transform transition-all duration-300 ease-in-out flex flex-col shadow-2xl lg:shadow-none
-        ${isMobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0"}
-        ${isCollapsed ? "lg:w-20" : "lg:w-64"}
-      `}>
-        
-        {/* Desktop Collapse Toggle */}
-        <button 
-          type="button"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute -right-3 top-7 hidden lg:flex items-center justify-center h-6 w-6 bg-[#0B1120] border border-white/10 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-50 shadow-lg cursor-pointer"
-        >
-          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-        </button>
-
-        {/* Brand Logo Area */}
-        <div className={`h-16 flex items-center shrink-0 border-b border-white/5 ${isCollapsed ? "justify-center" : "justify-between px-6"}`}>
-          {isCollapsed ? (
-            <div className="h-8 w-8 bg-[#2563EB] rounded-lg flex items-center justify-center font-black text-white text-sm shadow-md">
-              B
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5">
-              <img src="/baxato-logo.png" alt="Logo" className="h-6 w-6 object-contain" />
-              <span className="text-xl font-bold tracking-tight text-white">Baxato</span>
-            </div>
-          )}
-          
-          <button 
-            className="lg:hidden text-slate-400 hover:text-white transition-colors cursor-pointer"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
-        {/* Navigation Scroll Area */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+      <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-none">
+        <div className="space-y-0.5">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" />
           <NavItem href="/dashboard/wallet" icon={Wallet} label="Wallet" />
           <NavItem href="/dashboard/transactions" icon={List} label="Transactions" />
           <NavItem href="/dashboard/beneficiaries" icon={Users} label="Beneficiaries" />
+        </div>
 
-          <NavGroup title="Pay Bills">
-            <NavItem href="/dashboard/airtime" icon={Smartphone} label="Airtime" />
-            <NavItem href="/dashboard/data" icon={Wifi} label="Data Bundles" />
-            <NavItem href="/dashboard/electricity" icon={Zap} label="Electricity" />
-            <NavItem href="/dashboard/cable-tv" icon={Tv} label="TV Subscriptions" />
-            <NavItem href="/dashboard/exam-pins" icon={GraduationCap} label="Exam PINs" />
-          </NavGroup>
+        <NavGroup title="Pay Bills">
+          <NavItem href="/dashboard/airtime" icon={Smartphone} label="Airtime" />
+          <NavItem href="/dashboard/data" icon={Wifi} label="Data Bundles" />
+          <NavItem href="/dashboard/electricity" icon={Zap} label="Electricity" />
+          <NavItem href="/dashboard/cable-tv" icon={Tv} label="TV Subscriptions" />
+          <NavItem href="/dashboard/exam-pins" icon={GraduationCap} label="Exam PINs" />
+        </NavGroup>
 
-          <NavGroup title="API & Integration">
-            <NavItem href="/dashboard/api-keys" icon={Key} label="API Keys" />
-            <NavItem href="/dashboard/webhooks" icon={Webhook} label="Webhooks" />
-            <NavItem href="/dashboard/docs" icon={Book} label="Documentation" />
-          </NavGroup>
+        <NavGroup title="API & Integration">
+          <NavItem href="/dashboard/api-keys" icon={Key} label="API Keys" />
+          <NavItem href="/dashboard/webhooks" icon={Webhook} label="Webhooks" />
+          <NavItem href="/dashboard/docs" icon={Book} label="Documentation" />
+        </NavGroup>
 
-          <div className="pt-4 mt-2 border-t border-white/5 space-y-0.5">
-            <NavItem href="/dashboard/analytics" icon={BarChart3} label="Analytics" />
-            <NavItem href="/dashboard/settings" icon={Settings} label="Settings" />
-            <NavItem href="/dashboard/support" icon={HelpCircle} label="Support" />
-            
-            <button 
-              type="button"
-              title={isCollapsed ? "Log Out" : undefined}
-              className={`w-full flex items-center gap-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300 group cursor-pointer ${isCollapsed ? "justify-center lg:px-0" : "px-3"}`}
-            >
-              <LogOut className={`shrink-0 transition-colors ${isCollapsed ? "h-5 w-5" : "h-[18px] w-[18px]"}`} />
-              {!isCollapsed && <span className="truncate">Log Out</span>}
-            </button>
+        <div className="pt-3 mt-2 space-y-0.5 border-t border-white/5">
+          <NavItem href="/dashboard/analytics" icon={BarChart3} label="Analytics" />
+          <NavItem href="/dashboard/settings" icon={Settings} label="Settings" />
+          <NavItem href="/dashboard/support" icon={HelpCircle} label="Support" />
+          
+          <button 
+            type="button"
+            title={isCollapsed && !isMobileOpen ? "Log Out" : undefined}
+            className={cn(
+              "w-full flex items-center gap-2.5 py-2 rounded-lg text-[12px] font-semibold tracking-tight transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300 group",
+              isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-3"
+            )}
+          >
+            <LogOut className={cn("shrink-0 transition-colors", isCollapsed && !isMobileOpen ? "h-[18px] w-[18px]" : "h-4 w-4")} />
+            {(!isCollapsed || isMobileOpen) && <span className="truncate">Log Out</span>}
+          </button>
+        </div>
+      </nav>
+
+      <div className="p-3 shrink-0 bg-[#0B1120] border-t border-white/5">
+        {(!isCollapsed || isMobileOpen) && (
+          <div className="bg-[#0F172A] border border-white/5 rounded-lg p-2 mb-2">
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className={cn("h-1.5 w-1.5 rounded-full", apiLive ? "bg-green-500 shadow-[0_0_4px_#22c55e]" : "bg-amber-500 shadow-[0_0_4px_#f59e0b] animate-pulse")} />
+              <p className="text-[9px] font-bold text-white uppercase tracking-wider">
+                {apiLive ? 'API Live' : 'API Pending'}
+              </p>
+            </div>
+            <p className="text-[9px] text-slate-500 leading-tight">
+              {apiLive ? 'Systems operational' : 'Generate keys to start'}
+            </p>
           </div>
-        </nav>
+        )}
 
-        {/* Footer */}
-        <div className="p-3 border-t border-white/5 shrink-0">
-          {!isCollapsed && (
-            <div className="bg-[#0F172A] border border-white/5 rounded-lg p-2.5 mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${apiLive ? "bg-green-500 shadow-[0_0_6px_#22c55e]" : "bg-amber-500 shadow-[0_0_6px_#f59e0b] animate-pulse"}`} />
-                <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                  {apiLive ? 'API Active' : 'API Pending'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className={`flex items-center rounded-xl p-1.5 bg-white/5 ${isCollapsed ? "justify-center" : "gap-3"}`}>
-            <div className="h-8 w-8 rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0 ring-2 ring-[#0B1120]">
-              {user.profilePicture ? (
-                <img src={user.profilePicture} alt="Avatar" className="object-cover h-full w-full" crossOrigin="anonymous" />
-              ) : (
-                <span>{user.firstName?.[0]}{user.lastName?.[0]}</span>
-              )}
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-bold text-white truncate">{user.firstName} {user.lastName}</p>
-                <p className="text-[10px] text-slate-400 truncate">{user.businessName || "TechNova Ltd."}</p>
-              </div>
+        <div className={cn(
+          "flex items-center rounded-lg p-1.5 bg-white/5",
+          isCollapsed && !isMobileOpen ? "justify-center" : "justify-start gap-2.5"
+        )}>
+          <div className="h-7 w-7 rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-[10px] overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
+            {user.profilePicture ? (
+              <img src={user.profilePicture} alt="Avatar" className="object-cover h-full w-full" crossOrigin="anonymous" />
+            ) : (
+              <span>{user.firstName?.[0]}{user.lastName?.[0]}</span>
             )}
           </div>
+          {(!isCollapsed || isMobileOpen) && (
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-white truncate">{user.firstName} {user.lastName}</p>
+              <p className="text-[9px] text-slate-400 truncate">{user.businessName || "TechNova Ltd."}</p>
+            </div>
+          )}
         </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="min-h-[100dvh] bg-[#f8fafc] flex font-sans antialiased">
+      
+      <aside 
+        className={cn(
+          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-[100dvh] transition-all duration-300 z-20",
+          isCollapsed ? "w-20" : "w-60"
+        )}
+      >
+        <button 
+          type="button"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="absolute -right-3 top-6 bg-[#0B1120] border border-white/10 rounded-full p-1 text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-50 shadow-lg"
+        >
+          {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+        </button>
+        <SidebarContent />
       </aside>
 
-      {/* MAIN CONTENT AREA (Pushed right on desktop) */}
-      <div className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${isCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-        
-        {/* Mobile Header */}
-        <header className="sticky top-0 z-30 h-16 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 lg:hidden shrink-0">
-          <div className="flex items-center gap-3">
+      <div className="lg:hidden">
+        {isMobileOpen && (
+          <div 
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-40 transition-opacity"
+            onClick={() => setIsMobileOpen(false)}
+          />
+        )}
+        <aside 
+          className={cn(
+            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-[100dvh] transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
+            isMobileOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          <button 
+            type="button"
+            onClick={() => setIsMobileOpen(false)}
+            className="absolute right-4 top-4 p-2 text-slate-400 hover:text-white bg-white/5 rounded-full"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <SidebarContent />
+        </aside>
+      </div>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 h-14 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden z-30">
+          <div className="flex items-center gap-2">
+            {/* Massively increased the hit area for instant tap recognition */}
             <button
               type="button"
-              className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              onClick={() => setIsMobileMenuOpen(true)}
+              onClick={() => setIsMobileOpen(true)}
+              className="p-3 -ml-3 text-gray-600 active:bg-gray-100 rounded-xl transition-colors"
             >
               <Menu className="h-6 w-6" />
             </button>
             <div className="flex items-center gap-2">
-              <img src="/baxato-logo.png" alt="Logo" className="h-6 w-6 object-contain" />
+              <img 
+                src="/baxato-logo.png" 
+                alt="Logo" 
+                className="h-5 w-5 object-contain" 
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
               <span className="text-lg font-bold tracking-tight text-[#0B1120]">Baxato</span>
             </div>
           </div>
@@ -201,14 +236,13 @@ export default function DashboardShell({
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 relative z-10">
-          <div className="max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <main className="flex-1 p-4 md:p-6 lg:p-8">
+          <div className="max-w-[1600px] mx-auto">
             {children}
           </div>
         </main>
-
       </div>
+
     </div>
   );
 }
