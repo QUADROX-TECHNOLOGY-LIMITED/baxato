@@ -67,22 +67,18 @@ export default function Sidebar({ user, apiLive }: { user: any; apiLive: boolean
         {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
 
-      {/* Brand Logo Area */}
+      {/* Brand Logo Area (Filters removed to prevent white block issue) */}
       <div className={cn("h-20 flex items-center shrink-0", isCollapsed ? "justify-center px-0" : "px-6")}>
         {isCollapsed ? (
           <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center font-black text-white">
             B
           </div>
         ) : (
-          <div className="bg-white/5 p-1.5 rounded-lg">
+          <div className="bg-white/5 p-1.5 rounded-lg w-full flex justify-center">
              <img 
               src="/baxato-logo.png" 
               alt="BAXATO" 
-              className="h-6 w-auto object-contain brightness-0 invert" 
-              onError={(e) => {
-                // If standard logo invert fails, rely on the raw image
-                (e.target as HTMLImageElement).className = "h-6 w-auto object-contain bg-white/90 px-2 py-1 rounded";
-              }}
+              className="h-7 w-auto object-contain" 
             />
           </div>
         )}
@@ -92,13 +88,12 @@ export default function Sidebar({ user, apiLive }: { user: any; apiLive: boolean
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
         <div className="space-y-0.5">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem href="/dashboard/wallet" icon={Wallet} label="Wallet & Funding" />
+          <NavItem href="/dashboard/wallet" icon={Wallet} label="Wallet" />
           <NavItem href="/dashboard/transactions" icon={List} label="Transactions" />
           <NavItem href="/dashboard/beneficiaries" icon={Users} label="Beneficiaries" />
         </div>
 
         <NavGroup title="Pay Bills">
-          {/* Separated Airtime and Data */}
           <NavItem href="/dashboard/airtime" icon={Smartphone} label="Airtime" />
           <NavItem href="/dashboard/data" icon={Wifi} label="Data Bundles" />
           <NavItem href="/dashboard/electricity" icon={Zap} label="Electricity" />
@@ -116,6 +111,18 @@ export default function Sidebar({ user, apiLive }: { user: any; apiLive: boolean
           <NavItem href="/dashboard/analytics" icon={BarChart3} label="Analytics" />
           <NavItem href="/dashboard/settings" icon={Settings} label="Settings" />
           <NavItem href="/dashboard/support" icon={HelpCircle} label="Support" />
+          
+          {/* Dedicated Log Out Button */}
+          <button 
+            title={isCollapsed ? "Log Out" : undefined}
+            className={cn(
+              "w-full flex items-center gap-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300 group",
+              isCollapsed ? "justify-center px-0" : "px-3"
+            )}
+          >
+            <LogOut className={cn("shrink-0 transition-colors", isCollapsed ? "h-5 w-5" : "h-[18px] w-[18px]")} />
+            {!isCollapsed && <span className="truncate">Log Out</span>}
+          </button>
         </div>
       </nav>
 
@@ -139,41 +146,33 @@ export default function Sidebar({ user, apiLive }: { user: any; apiLive: boolean
           </div>
         )}
 
-        {/* User Profile Bar */}
+        {/* User Profile Bar (Logout removed from here) */}
         <div className={cn(
-          "flex items-center rounded-xl hover:bg-white/5 transition-colors cursor-pointer group",
-          isCollapsed ? "justify-center p-2" : "justify-between p-2"
+          "flex items-center rounded-xl p-2 bg-white/5",
+          isCollapsed ? "justify-center" : "justify-start gap-2.5"
         )}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-full bg-[#1c44e4] text-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
-              {user.profilePicture ? (
-                <img 
-                  src={user.profilePicture} 
-                  alt={user.firstName} 
-                  className="object-cover h-full w-full"
-                  crossOrigin="anonymous" 
-                />
-              ) : (
-                <span>{user.firstName?.[0]}{user.lastName?.[0]}</span>
-              )}
-            </div>
-            
-            {!isCollapsed && (
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-bold text-white truncate group-hover:text-blue-400 transition-colors">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-[10px] text-slate-400 truncate">
-                  {user.businessName || "TechNova Ltd."}
-                </p>
-              </div>
+          <div className="h-8 w-8 rounded-full bg-[#1c44e4] text-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0 ring-1 ring-white/10 shadow-md">
+            {user.profilePicture ? (
+              <img 
+                src={user.profilePicture} 
+                alt={user.firstName} 
+                className="object-cover h-full w-full"
+                crossOrigin="anonymous" 
+              />
+            ) : (
+              <span>{user.firstName?.[0]}{user.lastName?.[0]}</span>
             )}
           </div>
           
           {!isCollapsed && (
-            <button className="p-1.5 text-slate-500 hover:text-red-400 transition-colors">
-              <LogOut className="h-4 w-4" />
-            </button>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-bold text-white truncate">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {user.businessName || "TechNova Ltd."}
+              </p>
+            </div>
           )}
         </div>
       </div>
