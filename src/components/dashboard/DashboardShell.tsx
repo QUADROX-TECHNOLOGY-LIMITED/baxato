@@ -30,7 +30,6 @@ export default function DashboardShell({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Close mobile sidebar when a route changes
   const handleNavClick = () => setIsMobileOpen(false);
 
   const NavItem = ({ href, icon: Icon, label }: any) => {
@@ -67,18 +66,26 @@ export default function DashboardShell({
 
   const SidebarContent = () => (
     <>
-      {/* Brand Logo Area */}
+      {/* Brand Logo Area - Simplified and Clean */}
       <div className={cn("h-16 flex items-center shrink-0", isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-5")}>
         {isCollapsed && !isMobileOpen ? (
           <div className="h-7 w-7 bg-white/10 rounded-lg flex items-center justify-center font-black text-white text-xs">
             B
           </div>
         ) : (
-          <img src="/baxato-logo.png" alt="BAXATO" className="h-5 w-auto object-contain brightness-0 invert opacity-90" />
+          <img 
+            src="/baxato-logo-white.png" 
+            alt="BAXATO" 
+            className="h-6 w-auto object-contain" 
+            onError={(e) => {
+              // If you haven't uploaded a white logo yet, cleanly fall back to the normal one
+              (e.target as HTMLImageElement).src = "/baxato-logo.png";
+            }}
+          />
         )}
       </div>
 
-      {/* Navigation Links */}
+      {/* Navigation Links - Fills available space and scrolls internally */}
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-none">
         <div className="space-y-0.5">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" />
@@ -121,7 +128,6 @@ export default function DashboardShell({
 
       {/* Footer: API Status & User */}
       <div className="p-3 shrink-0 bg-[#0B1120] border-t border-white/5">
-        {/* Compact API Status */}
         {(!isCollapsed || isMobileOpen) && (
           <div className="bg-[#0F172A] border border-white/5 rounded-lg p-2 mb-2">
             <div className="flex items-center gap-2 mb-0.5">
@@ -136,7 +142,6 @@ export default function DashboardShell({
           </div>
         )}
 
-        {/* User Profile */}
         <div className={cn(
           "flex items-center rounded-lg p-1.5 bg-white/5",
           isCollapsed && !isMobileOpen ? "justify-center" : "justify-start gap-2.5"
@@ -160,12 +165,14 @@ export default function DashboardShell({
   );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex overflow-hidden font-sans antialiased">
+    // REMOVED: overflow-hidden and absolute locks. Let the page flow naturally!
+    <div className="min-h-[100dvh] bg-[#f8fafc] flex font-sans antialiased">
       
       {/* --- DESKTOP SIDEBAR --- */}
+      {/* ADDED: sticky top-0 and h-[100dvh] so it stays on screen while the main page scrolls */}
       <aside 
         className={cn(
-          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 h-screen transition-all duration-300 relative z-20",
+          "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-[100dvh] transition-all duration-300 z-20",
           isCollapsed ? "w-20" : "w-60"
         )}
       >
@@ -180,17 +187,16 @@ export default function DashboardShell({
 
       {/* --- MOBILE SIDEBAR & OVERLAY --- */}
       <div className="lg:hidden">
-        {/* Backdrop */}
         {isMobileOpen && (
           <div 
             className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-40 transition-opacity"
             onClick={() => setIsMobileOpen(false)}
           />
         )}
-        {/* Sliding Drawer */}
+        {/* ADDED: h-[100dvh] ensures it uses the exact available screen height on mobile */}
         <aside 
           className={cn(
-            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-screen transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
+            "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-[100dvh] transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
             isMobileOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -205,10 +211,11 @@ export default function DashboardShell({
       </div>
 
       {/* --- MAIN CONTENT AREA --- */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      {/* REMOVED: h-screen and overflow locks. This div now expands as long as the content requires. */}
+      <div className="flex-1 flex flex-col min-w-0">
         
-        {/* Mobile Header (Visible only on < lg screens) */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:hidden shrink-0 z-30">
+        {/* Mobile Header - Now 'sticky' so it stays at the top when you scroll down */}
+        <header className="sticky top-0 h-14 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileOpen(true)}
@@ -228,7 +235,8 @@ export default function DashboardShell({
         </header>
 
         {/* Page Content Injection */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        {/* The content simply dictates the height of the page now. Native scrollbars take over. */}
+        <main className="flex-1 p-4 md:p-6 lg:p-8">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>
