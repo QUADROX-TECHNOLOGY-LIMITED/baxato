@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -66,26 +66,25 @@ export default function DashboardShell({
 
   const SidebarContent = () => (
     <>
-      {/* Brand Logo Area - Simplified and Clean */}
+      {/* Brand Logo Area - Small Logo + Text */}
       <div className={cn("h-16 flex items-center shrink-0", isCollapsed && !isMobileOpen ? "justify-center px-0" : "px-5")}>
         {isCollapsed && !isMobileOpen ? (
-          <div className="h-7 w-7 bg-white/10 rounded-lg flex items-center justify-center font-black text-white text-xs">
+          <div className="h-7 w-7 bg-[#2563EB] rounded-lg flex items-center justify-center font-black text-white text-xs shadow-md">
             B
           </div>
         ) : (
-          <img 
-            src="/baxato-logo-white.png" 
-            alt="BAXATO" 
-            className="h-6 w-auto object-contain" 
-            onError={(e) => {
-              // If you haven't uploaded a white logo yet, cleanly fall back to the normal one
-              (e.target as HTMLImageElement).src = "/baxato-logo.png";
-            }}
-          />
+          <div className="flex items-center gap-2.5">
+            <img 
+              src="/baxato-logo.png" 
+              alt="Logo" 
+              className="h-6 w-6 object-contain" 
+              onError={(e) => (e.currentTarget.style.display = 'none')}
+            />
+            <span className="text-xl font-bold tracking-tight text-white">Baxato</span>
+          </div>
         )}
       </div>
 
-      {/* Navigation Links - Fills available space and scrolls internally */}
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-none">
         <div className="space-y-0.5">
           <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" />
@@ -114,6 +113,7 @@ export default function DashboardShell({
           <NavItem href="/dashboard/support" icon={HelpCircle} label="Support" />
           
           <button 
+            type="button"
             title={isCollapsed && !isMobileOpen ? "Log Out" : undefined}
             className={cn(
               "w-full flex items-center gap-2.5 py-2 rounded-lg text-[12px] font-semibold tracking-tight transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300 group",
@@ -126,7 +126,6 @@ export default function DashboardShell({
         </div>
       </nav>
 
-      {/* Footer: API Status & User */}
       <div className="p-3 shrink-0 bg-[#0B1120] border-t border-white/5">
         {(!isCollapsed || isMobileOpen) && (
           <div className="bg-[#0F172A] border border-white/5 rounded-lg p-2 mb-2">
@@ -165,11 +164,8 @@ export default function DashboardShell({
   );
 
   return (
-    // REMOVED: overflow-hidden and absolute locks. Let the page flow naturally!
     <div className="min-h-[100dvh] bg-[#f8fafc] flex font-sans antialiased">
       
-      {/* --- DESKTOP SIDEBAR --- */}
-      {/* ADDED: sticky top-0 and h-[100dvh] so it stays on screen while the main page scrolls */}
       <aside 
         className={cn(
           "bg-[#0B1120] border-r border-white/5 hidden lg:flex flex-col shrink-0 sticky top-0 h-[100dvh] transition-all duration-300 z-20",
@@ -177,6 +173,7 @@ export default function DashboardShell({
         )}
       >
         <button 
+          type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-6 bg-[#0B1120] border border-white/10 rounded-full p-1 text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-50 shadow-lg"
         >
@@ -185,7 +182,6 @@ export default function DashboardShell({
         <SidebarContent />
       </aside>
 
-      {/* --- MOBILE SIDEBAR & OVERLAY --- */}
       <div className="lg:hidden">
         {isMobileOpen && (
           <div 
@@ -193,7 +189,6 @@ export default function DashboardShell({
             onClick={() => setIsMobileOpen(false)}
           />
         )}
-        {/* ADDED: h-[100dvh] ensures it uses the exact available screen height on mobile */}
         <aside 
           className={cn(
             "fixed inset-y-0 left-0 w-64 bg-[#0B1120] border-r border-white/5 flex flex-col h-[100dvh] transform transition-transform duration-300 ease-in-out z-50 shadow-2xl",
@@ -201,8 +196,9 @@ export default function DashboardShell({
           )}
         >
           <button 
+            type="button"
             onClick={() => setIsMobileOpen(false)}
-            className="absolute right-4 top-4 p-1.5 text-slate-400 hover:text-white bg-white/5 rounded-full"
+            className="absolute right-4 top-4 p-2 text-slate-400 hover:text-white bg-white/5 rounded-full"
           >
             <X className="h-5 w-5" />
           </button>
@@ -210,22 +206,28 @@ export default function DashboardShell({
         </aside>
       </div>
 
-      {/* --- MAIN CONTENT AREA --- */}
-      {/* REMOVED: h-screen and overflow locks. This div now expands as long as the content requires. */}
       <div className="flex-1 flex flex-col min-w-0">
-        
-        {/* Mobile Header - Now 'sticky' so it stays at the top when you scroll down */}
-        <header className="sticky top-0 h-14 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden z-30">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 h-14 bg-white/90 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 lg:hidden z-30">
+          <div className="flex items-center gap-2">
+            {/* Massively increased the hit area for instant tap recognition */}
             <button
+              type="button"
               onClick={() => setIsMobileOpen(true)}
-              className="p-1.5 -ml-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-3 -ml-3 text-gray-600 active:bg-gray-100 rounded-xl transition-colors"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-6 w-6" />
             </button>
-            <img src="/baxato-logo.png" alt="BAXATO" className="h-5 w-auto object-contain" />
+            <div className="flex items-center gap-2">
+              <img 
+                src="/baxato-logo.png" 
+                alt="Logo" 
+                className="h-5 w-5 object-contain" 
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+              <span className="text-lg font-bold tracking-tight text-[#0B1120]">Baxato</span>
+            </div>
           </div>
-          <div className="h-7 w-7 rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-[10px] overflow-hidden shadow-sm">
+          <div className="h-8 w-8 rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-xs overflow-hidden shadow-sm">
             {user.profilePicture ? (
               <img src={user.profilePicture} alt="Avatar" className="object-cover h-full w-full" crossOrigin="anonymous" />
             ) : (
@@ -234,8 +236,6 @@ export default function DashboardShell({
           </div>
         </header>
 
-        {/* Page Content Injection */}
-        {/* The content simply dictates the height of the page now. Native scrollbars take over. */}
         <main className="flex-1 p-4 md:p-6 lg:p-8">
           <div className="max-w-[1600px] mx-auto">
             {children}
