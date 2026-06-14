@@ -5,7 +5,6 @@ import { verifyAccessToken } from '@/modules/auth/session';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { 
   Plus, 
-  ArrowUpRight, 
   Smartphone, 
   Wifi, 
   Zap, 
@@ -20,7 +19,8 @@ import {
   Webhook,
   TrendingUp,
   Settings2,
-  Key
+  Key,
+  Tag
 } from 'lucide-react';
 
 const RECENT_TRANSACTIONS = [
@@ -91,9 +91,9 @@ export default async function DashboardOverview() {
             <button className="flex items-center gap-2 bg-white text-primary hover:bg-white/90 px-5 py-2 rounded-xl font-bold text-[13px] transition-all shadow-sm active:scale-95">
               <Plus className="h-4 w-4 stroke-[3]" /> Fund Wallet
             </button>
-            <button className="flex items-center gap-2 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 border border-primary-foreground/10 px-5 py-2 rounded-xl font-semibold text-[13px] transition-all active:scale-95 backdrop-blur-md">
-              <ArrowUpRight className="h-4 w-4" /> Transfer
-            </button>
+            <Link href="/dashboard/pricing" className="flex items-center gap-2 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 border border-primary-foreground/10 px-5 py-2 rounded-xl font-semibold text-[13px] transition-all active:scale-95 backdrop-blur-md">
+              <Tag className="h-4 w-4" /> Pricing
+            </Link>
           </div>
         </div>
 
@@ -122,7 +122,7 @@ export default async function DashboardOverview() {
         </div>
       </div>
 
-      {/* COMPACT API BANNER (Moved below the wallet) */}
+      {/* COMPACT API BANNER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="relative flex h-2 w-2 shrink-0">
