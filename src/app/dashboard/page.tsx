@@ -19,7 +19,8 @@ import {
   CreditCard,
   Webhook,
   TrendingUp,
-  Settings2
+  Settings2,
+  Key // <-- Added the missing import here
 } from 'lucide-react';
 
 const RECENT_TRANSACTIONS = [
@@ -66,9 +67,6 @@ export default async function DashboardOverview() {
           <ThemeToggle />
         </div>
 
-        {/* NEW: Ultra-slim API Status Banner. 
-          Takes up 80% less vertical space than the old card.
-        */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="relative flex h-3 w-3">
@@ -90,7 +88,6 @@ export default async function DashboardOverview() {
         
         {/* THE BAXATO PREMIUM WALLET CARD */}
         <div className="lg:col-span-2 bg-gradient-to-br from-primary to-blue-800 rounded-3xl p-8 relative overflow-hidden shadow-lg shadow-primary/20 flex flex-col justify-between min-h-[220px] text-white border border-primary/50">
-          {/* Subtle overlay design */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
           
           <div className="relative z-10 flex items-start justify-between">
@@ -114,7 +111,7 @@ export default async function DashboardOverview() {
           </div>
         </div>
 
-        {/* QUICK STATS MINI-GRID (Value-adding space replacement) */}
+        {/* QUICK STATS MINI-GRID */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-card border border-border rounded-2xl p-4 flex flex-col justify-center shadow-sm">
             <Activity className="h-5 w-5 text-muted-foreground mb-3" />
