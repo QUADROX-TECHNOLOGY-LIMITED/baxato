@@ -13,7 +13,8 @@ import {
   Code2,
   Cpu,
   Globe2,
-  Smartphone
+  Smartphone,
+  Tv
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
