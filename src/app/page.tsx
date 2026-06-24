@@ -1,291 +1,346 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { 
-  ChevronRight, 
+  ArrowRight, 
   Terminal, 
-  Zap, 
   ShieldCheck, 
-  Webhook, 
-  ArrowRight,
+  Zap, 
+  Activity, 
+  ServerCrash,
+  ChevronRight,
   Code2,
-  ServerCog,
-  Activity
+  Cpu,
+  Globe2
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-// --- CUSTOM HOOK FOR AUTO-COUNTING NUMBERS ---
-function useAnimatedCounter(end: number, duration: number = 2000, startOnView: boolean = true) {
+// --- AUTO-COUNTING NUMBER COMPONENT ---
+function AnimatedCounter({ end, duration = 2000, suffix = "", decimals = 0 }: { end: number, duration?: number, suffix?: string, decimals?: number }) {
   const [count, setCount] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    let startTime: number | null = null;
-    let animationFrame: number;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setIsVisible(true);
+    }, { threshold: 0.1 });
+    
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
 
-    const animate = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = timestamp - startTime;
-      const percentage = Math.min(progress / duration, 1);
-      
-      // Easing function (easeOutQuart) for a premium slow-down-at-the-end feel
-      const easeOut = 1 - Math.pow(1 - percentage, 4);
-      
-      setCount(Math.floor(end * easeOut));
-
-      if (percentage < 1) {
-        animationFrame = requestAnimationFrame(animate);
+  useEffect(() => {
+    if (!isVisible) return;
+    let startTimestamp: number | null = null;
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      // Ease out quad
+      const easeProgress = progress * (2 - progress);
+      setCount(easeProgress * end);
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setCount(end);
       }
     };
+    window.requestAnimationFrame(step);
+  }, [isVisible, end, duration]);
 
-    animationFrame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationFrame);
-  }, [end, duration]);
-
-  return count;
+  return (
+    <span ref={ref}>
+      {count.toFixed(decimals)}{suffix}
+    </span>
+  );
 }
 
-const AnimatedNumber = ({ value, suffix = '', prefix = '' }: { value: number, suffix?: string, prefix?: string }) => {
-  const count = useAnimatedCounter(value);
-  return <span className="font-bold tabular-nums tracking-tight">{prefix}{count}{suffix}</span>;
-};
-
+// --- MAIN LANDING PAGE ---
 export default function LandingPage() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary font-sans">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30 selection:text-primary">
       
-      {/* --- NAVIGATION BAR --- */}
-      <nav className="fixed top-0 inset-x-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      {/* --- NAVIGATION --- */}
+      <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'bg-background/80 backdrop-blur-md border-b border-border shadow-sm py-3' : 'bg-transparent py-5'}`}>
+        <div className="max-w-[1400px] mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center font-black text-white text-sm shadow-md">
+            <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center font-black text-primary-foreground text-sm shadow-md">
               B
             </div>
-            <span className="text-xl font-bold tracking-tight text-foreground">Baxato</span>
+            <span className="text-xl font-bold tracking-tight text-foreground">BAXATO</span>
           </div>
           
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <Link href="#products" className="hover:text-primary transition-colors">Products</Link>
-            <Link href="#developers" className="hover:text-primary transition-colors">Developers</Link>
-            <Link href="#pricing" className="hover:text-primary transition-colors">Pricing</Link>
-            <Link href="#company" className="hover:text-primary transition-colors">Company</Link>
-          </div>
+          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted-foreground">
+            <Link href="#products" className="hover:text-foreground transition-colors">Products</Link>
+            <Link href="#developers" className="hover:text-foreground transition-colors">Developers</Link>
+            <Link href="#infrastructure" className="hover:text-foreground transition-colors">Infrastructure</Link>
+            <Link href="#company" className="hover:text-foreground transition-colors">Company</Link>
+          </nav>
 
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <Link href="/login" className="hidden md:block text-sm font-semibold text-foreground hover:text-primary transition-colors">
+            <Link href="/login" className="hidden sm:block text-sm font-semibold text-foreground hover:text-primary transition-colors">
               Sign In
             </Link>
-            <Link href="/register" className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm active:scale-95">
-              Create Account
+            <Link href="/login" className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-primary/20 active:scale-95">
+              Get API Keys
             </Link>
           </div>
         </div>
-      </nav>
+      </header>
 
       {/* --- HERO SECTION --- */}
-      <section className="relative pt-40 pb-20 md:pt-52 md:pb-32 overflow-hidden">
-        {/* Subtle Background Gradients */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-[120px] -z-10 pointer-events-none" />
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
+        {/* Background Architectural Gradients */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-primary/20 blur-[120px] rounded-[100%] opacity-50 pointer-events-none" />
         
-        <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <Activity className="h-3.5 w-3.5" />
-            V2.0 API is now live
-          </div>
-          
-          <h1 className="text-5xl md:text-7xl lg:text-[5rem] font-extrabold tracking-tight text-foreground leading-[1.1] mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
-            Enterprise API for <br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400">
-              African Utility Payments
-            </span>
-          </h1>
-          
-          <p className="max-w-2xl mx-auto text-lg md:text-xl text-muted-foreground leading-relaxed mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            Build, scale, and automate Airtime, Data, Electricity, and Cable TV provisioning with Nigeria's most robust and developer-centric infrastructure.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-300">
-            <Link href="/register" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-4 rounded-2xl text-base font-bold transition-all shadow-lg shadow-primary/25 active:scale-95">
-              Start Building for Free <ArrowRight className="h-5 w-5" />
-            </Link>
-            <Link href="#docs" className="w-full sm:w-auto flex items-center justify-center gap-2 bg-card border border-border text-foreground hover:bg-muted px-8 py-4 rounded-2xl text-base font-bold transition-all active:scale-95">
-              <Terminal className="h-5 w-5 text-muted-foreground" /> Read API Docs
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* --- TELECOM PARTNERS SECTION --- */}
-      <section className="py-12 border-y border-border/50 bg-muted/20">
-        <div className="max-w-7xl mx-auto px-6 text-center">
-          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-8">
-            Direct integrations with leading providers
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
-             {/* Using high-quality SVG/PNG links for Telcos. If they break, the alt text remains clean. */}
-            <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/New-mtn-logo.jpg" alt="MTN" className="h-10 md:h-14 object-contain rounded-full bg-white px-2 py-1" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f4/Airtel_Logo.svg" alt="Airtel" className="h-8 md:h-12 object-contain" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/8/86/Globacom_Limited_Logo.svg" alt="Glo" className="h-10 md:h-14 object-contain" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f6/9mobile_Logo.png" alt="9Mobile" className="h-8 md:h-12 object-contain" />
-          </div>
-        </div>
-      </section>
-
-      {/* --- AUTO-COUNTING STATS --- */}
-      <section className="py-24 bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-border/50">
-            <div className="flex flex-col items-center text-center pt-8 md:pt-0">
-              <div className="text-5xl md:text-6xl font-extrabold text-foreground tracking-tighter mb-2">
-                <AnimatedNumber value={99} suffix=".99%" />
-              </div>
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">Uptime SLA Guarantee</p>
+        <div className="max-w-[1400px] mx-auto px-6 relative z-10 grid lg:grid-cols-2 gap-12 items-center">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest mb-6">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+              v2.0 API is Live
             </div>
-            <div className="flex flex-col items-center text-center pt-8 md:pt-0">
-              <div className="text-5xl md:text-6xl font-extrabold text-foreground tracking-tighter mb-2">
-                <AnimatedNumber value={150} prefix="<" suffix="ms" />
-              </div>
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">Average API Latency</p>
-            </div>
-            <div className="flex flex-col items-center text-center pt-8 md:pt-0">
-              <div className="text-5xl md:text-6xl font-extrabold text-foreground tracking-tighter mb-2">
-                <AnimatedNumber value={10} suffix="M+" />
-              </div>
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">Monthly Transactions</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- FEATURES BENTO GRID --- */}
-      <section className="py-24 bg-muted/30 border-t border-border/50">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-4">Engineered for Scale.</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl">
-              We built Baxato because we were tired of dropped connections, failed vends, and poor documentation. This is the infrastructure your engineering team actually wants to use.
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground leading-[1.1] mb-6">
+              Enterprise API Infrastructure for <span className="text-primary">Africa.</span>
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">
+              Scalable, secure, and lightning-fast APIs for Airtime, Data, Electricity, and Cable TV. Built by <strong className="text-foreground">XATO Technologies Limited</strong> to power the next generation of fintechs and enterprise businesses.
             </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Link href="/login" className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-xl shadow-primary/20 active:scale-95">
+                Start Building <ArrowRight className="h-5 w-5" />
+              </Link>
+              <Link href="#developers" className="flex items-center gap-2 bg-muted text-foreground hover:bg-accent border border-border px-8 py-4 rounded-2xl font-bold text-base transition-all active:scale-95">
+                <Terminal className="h-5 w-5" /> Read the Docs
+              </Link>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 bg-card border border-border/60 rounded-[2rem] p-8 md:p-10 shadow-sm hover:shadow-md transition-all">
-              <Webhook className="h-10 w-10 text-primary mb-6" />
-              <h3 className="text-2xl font-bold text-foreground mb-3">Real-time Webhooks & Idempotency</h3>
-              <p className="text-muted-foreground leading-relaxed max-w-xl">
-                Never double-charge a customer. Use our strict idempotency keys to ensure transactions are processed exactly once. Receive instant webhook notifications the millisecond a vend succeeds or fails.
-              </p>
+          {/* Abstract Hero Tech Image / Code Visualization */}
+          <div className="relative mx-auto w-full max-w-[600px] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
+              <div className="h-3 w-3 rounded-full bg-red-500" />
+              <div className="h-3 w-3 rounded-full bg-amber-500" />
+              <div className="h-3 w-3 rounded-full bg-green-500" />
+              <span className="ml-2 text-xs font-mono text-muted-foreground">POST /v1/transactions/vend</span>
+            </div>
+            <div className="p-6 bg-[#0B1120] font-mono text-sm overflow-x-auto text-slate-300 leading-relaxed">
+              <p><span className="text-purple-400">const</span> <span className="text-blue-400">response</span> = <span className="text-purple-400">await</span> <span className="text-amber-300">fetch</span>(<span className="text-green-300">'https://api.baxato.com/v1/vend'</span>, {'{'}</p>
+              <p className="pl-4">method: <span className="text-green-300">'POST'</span>,</p>
+              <p className="pl-4">headers: {'{'}</p>
+              <p className="pl-8"><span className="text-green-300">'Authorization'</span>: <span className="text-green-300">'Bearer pk_live_xato_...'</span>,</p>
+              <p className="pl-8"><span className="text-green-300">'Content-Type'</span>: <span className="text-green-300">'application/json'</span></p>
+              <p className="pl-4">{'}'},</p>
+              <p className="pl-4">body: <span className="text-blue-400">JSON</span>.<span className="text-amber-300">stringify</span>({'{'}</p>
+              <p className="pl-8">service_type: <span className="text-green-300">'MTN_DATA'</span>,</p>
+              <p className="pl-8">account_ref: <span className="text-green-300">'08030000000'</span>,</p>
+              <p className="pl-8">amount: <span className="text-orange-400">5000</span></p>
+              <p className="pl-4">{'}'})</p>
+              <p>{'}'});</p>
+              <br/>
+              <p className="text-slate-500">// Returns instantly with status 200 OK</p>
+              <p><span className="text-blue-400">console</span>.<span className="text-amber-300">log</span>(await response.json());</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- TRUSTED PROVIDERS LOGOS --- */}
+      <section className="py-10 border-y border-border bg-muted/20">
+        <div className="max-w-[1400px] mx-auto px-6">
+          <p className="text-center text-sm font-bold text-muted-foreground uppercase tracking-widest mb-8">Direct Integration with Tier-1 Providers</p>
+          <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/New-mtn-logo.jpg" alt="MTN" className="h-12 object-contain rounded-full bg-white p-1" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Airtel_logo_2010.svg/512px-Airtel_logo_2010.svg.png" alt="Airtel" className="h-10 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Globacom_logo.svg/512px-Globacom_logo.svg.png" alt="Glo" className="h-12 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/0/07/9mobile_logo.svg/512px-9mobile_logo.svg.png" alt="9mobile" className="h-10 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/DStv_logo_2020.svg/512px-DStv_logo_2020.svg.png" alt="DSTV" className="h-10 object-contain" />
+          </div>
+        </div>
+      </section>
+
+      {/* --- ANIMATED METRICS --- */}
+      <section className="py-24 max-w-[1400px] mx-auto px-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="border border-border bg-card rounded-[2rem] p-10 text-center shadow-sm">
+            <h3 className="text-5xl md:text-6xl font-extrabold text-foreground tracking-tighter mb-4">
+              <AnimatedCounter end={99.99} decimals={2} suffix="%" />
+            </h3>
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Guaranteed Uptime SLA</p>
+          </div>
+          <div className="border border-border bg-card rounded-[2rem] p-10 text-center shadow-sm">
+            <h3 className="text-5xl md:text-6xl font-extrabold text-primary tracking-tighter mb-4">
+              <AnimatedCounter end={150} suffix="ms+" />
+            </h3>
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Average API Latency</p>
+          </div>
+          <div className="border border-border bg-card rounded-[2rem] p-10 text-center shadow-sm">
+            <h3 className="text-5xl md:text-6xl font-extrabold text-foreground tracking-tighter mb-4">
+              <AnimatedCounter end={10} suffix="M+" />
+            </h3>
+            <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Monthly Transactions</p>
+          </div>
+        </div>
+      </section>
+
+      {/* --- ENTERPRISE FEATURES --- */}
+      <section id="infrastructure" className="py-24 bg-muted/30 border-y border-border">
+        <div className="max-w-[1400px] mx-auto px-6">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-6">Built for scale. Designed for reliability.</h2>
+            <p className="text-lg text-muted-foreground">We bypass aggregators and connect directly to telecom switches to ensure your transactions never fail during peak traffic.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-card border border-border p-8 rounded-[2rem] shadow-sm hover:shadow-md transition-shadow">
+              <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
+                <ShieldCheck className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold text-foreground mb-3">Bank-Grade Security</h3>
+              <p className="text-muted-foreground leading-relaxed">End-to-end encryption, IP whitelisting, and rotating API keys ensure your financial data and operations remain completely secure.</p>
             </div>
             
-            <div className="bg-card border border-border/60 rounded-[2rem] p-8 md:p-10 shadow-sm hover:shadow-md transition-all">
-              <Zap className="h-10 w-10 text-amber-500 mb-6" />
-              <h3 className="text-2xl font-bold text-foreground mb-3">Instant Routing</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Smart traffic routing ensures that if one upstream provider is degraded, your traffic is seamlessly routed to the next best node without you lifting a finger.
-              </p>
-            </div>
-
-            <div className="bg-card border border-border/60 rounded-[2rem] p-8 md:p-10 shadow-sm hover:shadow-md transition-all">
-              <ShieldCheck className="h-10 w-10 text-emerald-500 mb-6" />
-              <h3 className="text-2xl font-bold text-foreground mb-3">Bank-Grade Security</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                All API endpoints are protected by robust HMAC signature verification. Your ledger is mathematically secured and audited hourly.
-              </p>
-            </div>
-
-            <div className="md:col-span-2 bg-card border border-border/60 rounded-[2rem] p-8 md:p-10 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-center gap-8 overflow-hidden">
-              <div className="flex-1">
-                <Code2 className="h-10 w-10 text-primary mb-6" />
-                <h3 className="text-2xl font-bold text-foreground mb-3">Developer First</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Beautiful RESTful architecture, predictable JSON responses, clear HTTP status codes, and comprehensive SDKs for Node.js, PHP, and Python.
-                </p>
+            <div className="bg-card border border-border p-8 rounded-[2rem] shadow-sm hover:shadow-md transition-shadow">
+              <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
+                <Zap className="h-7 w-7 text-primary" />
               </div>
-              
-              {/* Fake Code Editor snippet */}
-              <div className="flex-1 w-full bg-[#0F111A] rounded-2xl p-6 border border-white/10 shadow-2xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-3 w-3 rounded-full bg-red-500/80"></div>
-                  <div className="h-3 w-3 rounded-full bg-amber-500/80"></div>
-                  <div className="h-3 w-3 rounded-full bg-green-500/80"></div>
-                  <span className="text-xs font-mono text-white/40 ml-2">POST /v1/vend/airtime</span>
+              <h3 className="text-xl font-bold text-foreground mb-3">Lightning Fast Routing</h3>
+              <p className="text-muted-foreground leading-relaxed">Our proprietary routing algorithm automatically switches pathways to guarantee sub-second delivery for airtime and data vends.</p>
+            </div>
+
+            <div className="bg-card border border-border p-8 rounded-[2rem] shadow-sm hover:shadow-md transition-shadow">
+              <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
+                <Activity className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold text-foreground mb-3">Real-time Webhooks</h3>
+              <p className="text-muted-foreground leading-relaxed">Stop polling our servers. We push instant, payload-rich webhook notifications to your endpoints the millisecond a transaction settles.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- COMPREHENSIVE SERVICES --- */}
+      <section id="products" className="py-24 max-w-[1400px] mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-6">One integration.<br/>Every utility service.</h2>
+            <p className="text-lg text-muted-foreground mb-8">Access the entire spectrum of Nigerian utility services through a single, unified REST API architecture. No need to manage multiple vendor contracts.</p>
+            
+            <div className="space-y-6">
+              {[
+                { icon: Smartphone, title: 'Airtime & Data VTU', desc: 'Instant top-ups for MTN, Airtel, Glo, and 9mobile.' },
+                { icon: Zap, title: 'Electricity Tokens', desc: 'Prepaid meter token generation for all DisCos (IKEDC, EKEDC, etc).' },
+                { icon: Tv, title: 'Cable TV Subscriptions', desc: 'Automated renewals for DSTV, GOTV, and Startimes.' },
+                { icon: GraduationCap, title: 'Educational PINs', desc: 'WAEC, NECO, and JAMB result checking PIN generation.' }
+              ].map((item, idx) => (
+                <div key={idx} className="flex gap-4">
+                  <div className="mt-1 h-10 w-10 shrink-0 bg-muted border border-border rounded-xl flex items-center justify-center">
+                    <item.icon className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-foreground">{item.title}</h4>
+                    <p className="text-sm text-muted-foreground mt-1">{item.desc}</p>
+                  </div>
                 </div>
-                <pre className="text-sm font-mono text-white/80 overflow-x-auto">
-                  <code>
-<span className="text-pink-400">const</span> response = <span className="text-pink-400">await</span> baxato.<span className="text-blue-300">airtime</span>.<span className="text-green-300">vend</span>({'{'}<br/>
-{'  '}network: <span className="text-amber-300">'MTN'</span>,<br/>
-{'  '}amount: <span className="text-purple-300">5000</span>,<br/>
-{'  '}phone: <span className="text-amber-300">'08030000000'</span>,<br/>
-{'  '}reference: <span className="text-amber-300">'trx_891283'</span><br/>
-{'})'};<br/>
-<br/>
-<span className="text-white/40">// Response: 200 OK</span><br/>
-<span className="text-blue-300">console</span>.<span className="text-green-300">log</span>(response.status); <span className="text-white/40">// "SUCCESSFUL"</span>
-                  </code>
-                </pre>
-              </div>
+              ))}
             </div>
+          </div>
+          
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary to-blue-400 rounded-[2rem] blur-2xl opacity-20" />
+            <img 
+              src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1000" 
+              alt="Data Infrastructure" 
+              className="relative z-10 rounded-[2rem] border border-border shadow-2xl object-cover h-[600px] w-full"
+            />
           </div>
         </div>
       </section>
 
       {/* --- CTA SECTION --- */}
-      <section className="py-32 relative overflow-hidden bg-primary text-primary-foreground">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-        <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-          <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6">Ready to upgrade your infrastructure?</h2>
-          <p className="text-lg md:text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
-            Join thousands of businesses relying on XATO Technologies Limited for their utility and airtime distribution.
-          </p>
-          <Link href="/register" className="inline-flex items-center justify-center gap-2 bg-white text-primary hover:bg-white/90 px-10 py-5 rounded-2xl text-lg font-bold transition-all shadow-xl active:scale-95">
-            Create your free account <ChevronRight className="h-5 w-5" />
-          </Link>
+      <section className="py-24 border-t border-border">
+        <div className="max-w-[1000px] mx-auto px-6">
+          <div className="bg-primary rounded-[3rem] p-12 md:p-20 text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+            <h2 className="relative z-10 text-4xl md:text-5xl font-extrabold tracking-tight text-primary-foreground mb-6">Ready to scale your business?</h2>
+            <p className="relative z-10 text-lg md:text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
+              Join hundreds of fintechs and enterprise businesses relying on XATO Technologies for their core utility infrastructure.
+            </p>
+            <div className="relative z-10 flex flex-wrap justify-center items-center gap-4">
+              <Link href="/login" className="bg-white text-primary hover:bg-white/90 px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-xl active:scale-95">
+                Create Free Account
+              </Link>
+              <Link href="/contact" className="bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 border border-primary-foreground/20 px-8 py-4 rounded-2xl font-bold text-lg transition-all backdrop-blur-md active:scale-95">
+                Contact Sales
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* --- FOOTER --- */}
-      <footer className="bg-background border-t border-border/50 pt-16 pb-8">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
-            <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center font-black text-white text-sm">
-                  B
-                </div>
-                <span className="text-xl font-bold tracking-tight text-foreground">Baxato</span>
+      <footer id="company" className="bg-muted/50 border-t border-border pt-20 pb-10">
+        <div className="max-w-[1400px] mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+          <div className="md:col-span-2">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center font-black text-primary-foreground text-sm shadow-md">
+                B
               </div>
-              <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
-                Enterprise-grade API infrastructure for utility payments, airtime, and data distribution in Africa.
-              </p>
+              <span className="text-xl font-bold tracking-tight text-foreground">BAXATO</span>
             </div>
-            <div>
-              <h4 className="font-bold text-foreground mb-4">Developers</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link href="#" className="hover:text-primary transition-colors">Documentation</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">API Reference</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Status Page</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-foreground mb-4">Company</h4>
-              <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link href="#" className="hover:text-primary transition-colors">About XATO</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Contact Support</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Terms of Service</Link></li>
-              </ul>
+            <p className="text-muted-foreground max-w-sm leading-relaxed">
+              Baxato provides enterprise-grade API infrastructure for digital utility payments across Africa.
+            </p>
+            <div className="mt-8">
+              <p className="text-sm font-bold text-foreground">A product of</p>
+              <p className="text-lg font-black text-primary uppercase tracking-wide mt-1">XATO Technologies Limited</p>
+              <p className="text-xs text-muted-foreground mt-1">RC Number: 1234567 • Lagos, Nigeria</p>
             </div>
           </div>
-          <div className="pt-8 border-t border-border/50 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} XATO Technologies Limited. All rights reserved. RC: 1234567
-            </p>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ServerCog className="h-4 w-4" /> Systems Operational
-            </div>
+
+          <div>
+            <h4 className="font-bold text-foreground mb-6">Developers</h4>
+            <ul className="space-y-4 text-sm text-muted-foreground">
+              <li><Link href="/docs" className="hover:text-primary transition-colors">API Documentation</Link></li>
+              <li><Link href="/status" className="hover:text-primary transition-colors">System Status</Link></li>
+              <li><Link href="/webhooks" className="hover:text-primary transition-colors">Webhooks Guide</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-foreground mb-6">Company</h4>
+            <ul className="space-y-4 text-sm text-muted-foreground">
+              <li><Link href="/about" className="hover:text-primary transition-colors">About Us</Link></li>
+              <li><Link href="/contact" className="hover:text-primary transition-colors">Contact Sales</Link></li>
+              <li><Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="max-w-[1400px] mx-auto px-6 pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} XATO Technologies Limited. All rights reserved.
+          </p>
+          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <ShieldCheck className="h-5 w-5" title="Secure Encryption" />
+            <ServerCrash className="h-5 w-5" title="Redundant Infrastructure" />
+            <Globe2 className="h-5 w-5" title="African Coverage" />
           </div>
         </div>
       </footer>
-      
     </div>
   );
 }
