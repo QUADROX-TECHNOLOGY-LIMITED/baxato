@@ -338,9 +338,9 @@ export default function LandingPage() {
             © {new Date().getFullYear()} XATO Technologies Limited. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <ShieldCheck className="h-5 w-5" title="Secure Encryption" />
-            <ServerCrash className="h-5 w-5" title="Redundant Infrastructure" />
-            <Globe2 className="h-5 w-5" title="African Coverage" />
+            <span title="Secure Encryption"><ShieldCheck className="h-5 w-5" /></span>
+            <span title="Redundant Infrastructure"><ServerCrash className="h-5 w-5" /></span>
+            <span title="African Coverage"><Globe2 className="h-5 w-5" /></span>
           </div>
         </div>
       </footer>
