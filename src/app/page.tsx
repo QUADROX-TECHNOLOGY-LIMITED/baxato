@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Code2,
   Cpu,
-  Globe2
+  Globe2,
+  Smartphone
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
