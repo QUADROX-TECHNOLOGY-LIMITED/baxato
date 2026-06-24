@@ -14,7 +14,8 @@ import {
   Cpu,
   Globe2,
   Smartphone,
-  Tv
+  Tv,
+  GraduationCap
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
