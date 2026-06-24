@@ -166,10 +166,10 @@ export default function LandingPage() {
           <p className="text-center text-sm font-bold text-muted-foreground uppercase tracking-widest mb-8">Direct Integration with Tier-1 Providers</p>
           <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
             <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/New-mtn-logo.jpg" alt="MTN" className="h-12 object-contain rounded-full bg-white p-1" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Airtel_logo_2010.svg/512px-Airtel_logo_2010.svg.png" alt="Airtel" className="h-10 object-contain" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Globacom_logo.svg/512px-Globacom_logo.svg.png" alt="Glo" className="h-12 object-contain" />
-            <img src="https://upload.wikimedia.org/wikipedia/en/thumb/0/07/9mobile_logo.svg/512px-9mobile_logo.svg.png" alt="9mobile" className="h-10 object-contain" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/DStv_logo_2020.svg/512px-DStv_logo_2020.svg.png" alt="DSTV" className="h-10 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/d/da/Airtel_Africa_logo.svg" alt="Airtel" className="h-10 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/8/86/Glo_button.png" alt="Glo" className="h-12 object-contain" />
+            <img src="https://logos.fandom.com/wiki/9mobile?file=9mobile_Logo.svg" alt="9mobile" className="h-10 object-contain" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/DSTV.png" alt="DSTV" className="h-10 object-contain" />
           </div>
         </div>
       </section>
@@ -309,7 +309,7 @@ export default function LandingPage() {
             <div className="mt-8">
               <p className="text-sm font-bold text-foreground">A product of</p>
               <p className="text-lg font-black text-primary uppercase tracking-wide mt-1">XATO Technologies Limited</p>
-              <p className="text-xs text-muted-foreground mt-1">RC Number: 1234567 • Lagos, Nigeria</p>
+              <p className="text-xs text-muted-foreground mt-1">RC Number: 9629133 • Yobe, Nigeria</p>
             </div>
           </div>
 
