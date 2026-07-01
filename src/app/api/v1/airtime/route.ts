@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { redis } from '@/lib/redis'; // FIX: Named import applied here
+import { redis } from '@/lib/redis';
 import { verifyAccessToken } from '@/modules/auth/session';
 import { getMonnifyToken } from '@/modules/monnify/monnify.service';
 import crypto from 'crypto';
@@ -44,7 +44,8 @@ export async function POST(req: Request) {
 
     // IDEMPOTENCY LOCK
     const idemKey = `idem:airtime:${idempotencyKey}`;
-    const isLocked = await redis.setnx(idemKey, 'LOCKED');
+    // FIX: Using correct setNX method for Redis v4
+    const isLocked = await redis.setNX(idemKey, 'LOCKED');
     if (!isLocked) {
       return NextResponse.json({ error: 'Transaction already processing.' }, { status: 409 });
     }
@@ -112,7 +113,8 @@ export async function POST(req: Request) {
           data: { status: 'SUCCESSFUL', externalReference: monnifyData.responseBody.vendReference }
         });
 
-        await redis.set(idemKey, JSON.stringify({ status: 'SUCCESS', reference: trxRef }), 'EX', 86400);
+        // FIX: Using the v4 options object { EX: 86400 } instead of separate strings
+        await redis.set(idemKey, JSON.stringify({ status: 'SUCCESS', reference: trxRef }), { EX: 86400 });
 
         return NextResponse.json({
           success: true,
@@ -124,7 +126,7 @@ export async function POST(req: Request) {
       }
 
     } catch (monnifyError: any) {
-      // ATOMIC SAFETynet REFUND
+      // ATOMIC SAFETYNET REFUND
       await prisma.$transaction(async (tx) => {
         await tx.transaction.update({
           where: { id: transactionLog.id },
