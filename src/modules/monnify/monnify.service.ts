@@ -36,7 +36,8 @@ export async function getMonnifyToken(): Promise<string> {
       const { accessToken, expiresIn = 3600 } = data.responseBody;
       const safeExpiry = Math.max(0, expiresIn - 60);
       
-      await redis.set(REDIS_TOKEN_KEY, accessToken, 'EX', safeExpiry);
+      // FIX: Using the v4 options object { EX: safeExpiry }
+      await redis.set(REDIS_TOKEN_KEY, accessToken, { EX: safeExpiry });
       return accessToken;
     }
 
