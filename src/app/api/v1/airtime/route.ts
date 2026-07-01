@@ -5,7 +5,7 @@ import { redis } from '@/lib/redis';
 import { verifyAccessToken } from '@/modules/auth/session';
 import { getMonnifyToken } from '@/modules/monnify/monnify.service';
 import crypto from 'crypto';
-import { Transaction } from '@prisma/client'; // FIX: Imported the Prisma type
+import { ServiceTransaction } from '@prisma/client'; // FIX: Correct model imported
 
 const MONNIFY_BASE_URL = process.env.MONNIFY_BASE_URL || 'https://sandbox.monnify.com';
 
@@ -52,33 +52,52 @@ export async function POST(req: Request) {
     await redis.expire(idemKey, 60);
 
     const trxRef = `BAX-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
-    const amountInKobo = amount * 100;
+    // Math.round ensures no decimals ever sneak in before BigInt conversion
+    const amountInKobo = Math.round(amount * 100); 
 
-    // FIX: Strictly typed the variable so TS knows it's a Prisma model
-    let transactionLog: Transaction; 
+    // FIX: Using your exact Prisma model type
+    let transactionLog: ServiceTransaction; 
     
     try {
       await prisma.$transaction(async (tx) => {
+        // 1. Fetch wallet to get the ID for the Ledger
+        const userWallet = await tx.wallet.findUnique({ where: { userId } });
+        if (!userWallet || userWallet.balance < BigInt(amountInKobo)) {
+          throw new Error("INSUFFICIENT_FUNDS");
+        }
+
+        // 2. Safely deduct the balance
         const updateResult = await tx.$executeRaw`
           UPDATE "Wallet" 
           SET balance = balance - ${amountInKobo}, "updatedAt" = NOW()
           WHERE "userId" = ${userId} AND balance >= ${amountInKobo}
         `;
 
-        if (updateResult === 0) {
-          throw new Error("INSUFFICIENT_FUNDS");
-        }
+        if (updateResult === 0) throw new Error("INSUFFICIENT_FUNDS");
 
-        // TypeScript now knows this assigns a valid Transaction object
-        transactionLog = await tx.transaction.create({
+        // 3. Create the Double-Entry Ledger record (Enforcing your schema rule)
+        await tx.walletLedger.create({
           data: {
+            walletId: userWallet.id,
+            amount: BigInt(amountInKobo),
+            type: 'DEBIT',
+            balanceAfter: userWallet.balance - BigInt(amountInKobo),
+            description: `Airtime Topup: ${phoneNumber}`,
+            reference: trxRef
+          }
+        });
+
+        // 4. Create the Service Transaction log exactly matching your schema fields
+        transactionLog = await tx.serviceTransaction.create({
+          data: {
+            id: trxRef, // We use the BAX- ref as the primary ID
             userId,
-            reference: trxRef,
-            type: 'AIRTIME',
-            amount: amountInKobo,
+            serviceType: 'AIRTIME',
+            amount: BigInt(amountInKobo),
             status: 'PENDING',
-            description: `Airtime Topup to ${phoneNumber}`,
-            metadata: { phoneNumber, productCode }
+            provider: 'MONNIFY',
+            idempotencyKey,
+            requestData: { phoneNumber, productCode, requestedAmount: amount }
           }
         });
       });
@@ -111,10 +130,15 @@ export async function POST(req: Request) {
       const monnifyData = await monnifyResponse.json();
 
       if (monnifyData.requestSuccessful && monnifyData.responseBody?.vendStatus === 'SUCCESS') {
-        await prisma.transaction.update({
-          // Notice: TS no longer complains about `transactionLog.id` being undefined
+        
+        // MARK SUCCESS
+        await prisma.serviceTransaction.update({
           where: { id: transactionLog!.id }, 
-          data: { status: 'SUCCESSFUL', externalReference: monnifyData.responseBody.vendReference }
+          data: { 
+            status: 'SUCCESSFUL', 
+            providerRef: monnifyData.responseBody.vendReference,
+            responseData: monnifyData
+          }
         });
 
         await redis.set(idemKey, JSON.stringify({ status: 'SUCCESS', reference: trxRef }), { EX: 86400 });
@@ -131,19 +155,37 @@ export async function POST(req: Request) {
     } catch (monnifyError: any) {
       // ATOMIC SAFETYNET REFUND
       await prisma.$transaction(async (tx) => {
-        await tx.transaction.update({
-          where: { id: transactionLog!.id },
-          data: { 
-            status: 'FAILED', 
-            metadata: { error: monnifyError.message, phoneNumber, productCode } 
-          }
-        });
-
+        const refundWallet = await tx.wallet.findUnique({ where: { userId } });
+        
+        // 1. Refund the Wallet
         await tx.$executeRaw`
           UPDATE "Wallet" 
           SET balance = balance + ${amountInKobo}, "updatedAt" = NOW()
           WHERE "userId" = ${userId}
         `;
+
+        // 2. Log the Refund Ledger
+        if (refundWallet) {
+          await tx.walletLedger.create({
+            data: {
+              walletId: refundWallet.id,
+              amount: BigInt(amountInKobo),
+              type: 'CREDIT',
+              balanceAfter: refundWallet.balance + BigInt(amountInKobo),
+              description: `Refund: Airtime Failed`,
+              reference: `${trxRef}-REFUND`
+            }
+          });
+        }
+
+        // 3. Update Transaction Status
+        await tx.serviceTransaction.update({
+          where: { id: transactionLog!.id },
+          data: { 
+            status: 'FAILED', 
+            responseData: { error: monnifyError.message } 
+          }
+        });
       });
 
       await redis.del(idemKey);
