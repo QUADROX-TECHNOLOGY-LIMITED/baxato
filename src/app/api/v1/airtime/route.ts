@@ -5,6 +5,7 @@ import { redis } from '@/lib/redis';
 import { verifyAccessToken } from '@/modules/auth/session';
 import { getMonnifyToken } from '@/modules/monnify/monnify.service';
 import crypto from 'crypto';
+import { Transaction } from '@prisma/client'; // FIX: Imported the Prisma type
 
 const MONNIFY_BASE_URL = process.env.MONNIFY_BASE_URL || 'https://sandbox.monnify.com';
 
@@ -44,7 +45,6 @@ export async function POST(req: Request) {
 
     // IDEMPOTENCY LOCK
     const idemKey = `idem:airtime:${idempotencyKey}`;
-    // FIX: Using correct setNX method for Redis v4
     const isLocked = await redis.setNX(idemKey, 'LOCKED');
     if (!isLocked) {
       return NextResponse.json({ error: 'Transaction already processing.' }, { status: 409 });
@@ -54,7 +54,9 @@ export async function POST(req: Request) {
     const trxRef = `BAX-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
     const amountInKobo = amount * 100;
 
-    let transactionLog;
+    // FIX: Strictly typed the variable so TS knows it's a Prisma model
+    let transactionLog: Transaction; 
+    
     try {
       await prisma.$transaction(async (tx) => {
         const updateResult = await tx.$executeRaw`
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
           throw new Error("INSUFFICIENT_FUNDS");
         }
 
+        // TypeScript now knows this assigns a valid Transaction object
         transactionLog = await tx.transaction.create({
           data: {
             userId,
@@ -109,11 +112,11 @@ export async function POST(req: Request) {
 
       if (monnifyData.requestSuccessful && monnifyData.responseBody?.vendStatus === 'SUCCESS') {
         await prisma.transaction.update({
-          where: { id: transactionLog.id },
+          // Notice: TS no longer complains about `transactionLog.id` being undefined
+          where: { id: transactionLog!.id }, 
           data: { status: 'SUCCESSFUL', externalReference: monnifyData.responseBody.vendReference }
         });
 
-        // FIX: Using the v4 options object { EX: 86400 } instead of separate strings
         await redis.set(idemKey, JSON.stringify({ status: 'SUCCESS', reference: trxRef }), { EX: 86400 });
 
         return NextResponse.json({
@@ -129,7 +132,7 @@ export async function POST(req: Request) {
       // ATOMIC SAFETYNET REFUND
       await prisma.$transaction(async (tx) => {
         await tx.transaction.update({
-          where: { id: transactionLog.id },
+          where: { id: transactionLog!.id },
           data: { 
             status: 'FAILED', 
             metadata: { error: monnifyError.message, phoneNumber, productCode } 
