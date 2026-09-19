@@ -3,6 +3,11 @@
 // Real-Time Airtime, Data Bundles & Cable TV Subscription Domain
 // ==========================================================================
 
+export const API_BASE_URL: string =
+  (typeof window !== 'undefined' && (window as any).__BAXATO_API_URL__) ||
+  (import.meta as any).env?.VITE_API_URL ||
+  '';
+
 export interface NetworkConfig {
   network: string;
   name: string;
@@ -1483,7 +1488,7 @@ class DashboardClient {
 
     try {
       // Attempt API call to backend /services/cable/validate
-      const res = await fetch('/services/cable/validate', {
+      const res = await fetch(`${API_BASE_URL}/services/cable/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1820,7 +1825,7 @@ class DashboardClient {
     this.electricityValidationFeedback.style.display = 'none';
 
     try {
-      const res = await fetch('/services/electricity/validate', {
+      const res = await fetch(`${API_BASE_URL}/services/electricity/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2057,7 +2062,7 @@ class DashboardClient {
     this.educationValidationFeedback.style.display = 'none';
 
     try {
-      const res = await fetch('/services/education/validate', {
+      const res = await fetch(`${API_BASE_URL}/services/education/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
