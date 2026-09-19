@@ -1,0 +1,9 @@
+dist
+build
+node_modules
+.next
+.turbo
+coverage
+*.log
+sva_*.json
+options_*.json

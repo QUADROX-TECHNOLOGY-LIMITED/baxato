@@ -1,0 +1,113 @@
+# ==============================================================================
+# BAXATO Monorepo — Full-Stack Docker Compose Orchestration
+# ==============================================================================
+
+services:
+  # 1. PostgreSQL 16 Relational Store
+  postgres:
+    image: postgres:16-alpine
+    container_name: baxato-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-baxato_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-baxato_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-baxato_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-baxato_user} -d ${POSTGRES_DB:-baxato_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - baxato-network
+
+  # 2. Redis 7 In-Memory Cache, Rate Limiter & Idempotency Store
+  redis:
+    image: redis:7-alpine
+    container_name: baxato-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - baxato-network
+
+  # 3. Fastify REST API Gateway
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: baxato-api:latest
+    container_name: baxato-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://${POSTGRES_USER:-baxato_user}:${POSTGRES_PASSWORD:-baxato_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-baxato_db}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-baxato_jwt_super_secret_production_key_32c}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-https://sandbox.monnify.com}
+      INTERSWITCH_CLIENT_ID: ${INTERSWITCH_CLIENT_ID:-}
+      INTERSWITCH_SECRET_KEY: ${INTERSWITCH_SECRET_KEY:-}
+      INTERSWITCH_BASE_URL: ${INTERSWITCH_BASE_URL:-https://qa.interswitchng.com}
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:4000/v1/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - baxato-network
+
+  # 4. Merchant Dashboard Web Application
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: baxato-dashboard:latest
+    container_name: baxato-dashboard
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - baxato-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  baxato-network:
+    driver: bridge

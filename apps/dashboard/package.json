@@ -1,0 +1,19 @@
+{
+  "name": "@baxato/dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BAXATO — High-Performance VTU & Bill Payments Interactive Dashboard",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@baxato/common": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}

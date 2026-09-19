@@ -1,0 +1,14 @@
+.git
+.github
+.env*
+node_modules
+dist
+build
+.turbo
+*.log
+coverage
+.nyc_output
+.vitest
+*.md
+docs
+scratch
