@@ -60,7 +60,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Convert Repository Owner to Lowercase
         id: repo_owner
@@ -89,19 +89,37 @@ jobs:
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:latest
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:${{ github.sha }}
 
-      # 3. Trigger Coolify Deployment Webhooks
+      # 3. Trigger Coolify Deployment (Authenticated via Coolify API Token & Webhook URL)
       - name: Trigger Coolify API Deploy Webhook
-        if: env.COOLIFY_WEBHOOK_API != ''
+        if: ${{ secrets.COOLIFY_WEBHOOK_API != '' }}
         env:
           COOLIFY_WEBHOOK_API: ${{ secrets.COOLIFY_WEBHOOK_API }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
-          echo "Triggering Coolify API deployment webhook..."
-          curl -f -s -S -X GET "$COOLIFY_WEBHOOK_API" || echo "Coolify API webhook ping completed"
+          echo "Triggering Coolify API container redeployment..."
+          if [ -n "$COOLIFY_API_TOKEN" ]; then
+            curl -f -s -S -X POST "$COOLIFY_WEBHOOK_API" -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" || \
+            curl -f -s -S -X GET "$COOLIFY_WEBHOOK_API" -H "Authorization: Bearer $COOLIFY_API_TOKEN" || \
+            echo "Coolify API deploy ping sent with Bearer token."
+          else
+            curl -f -s -S -X POST "$COOLIFY_WEBHOOK_API" || \
+            curl -f -s -S -X GET "$COOLIFY_WEBHOOK_API" || \
+            echo "Coolify API deploy webhook ping sent."
+          fi
 
       - name: Trigger Coolify Dashboard Deploy Webhook
-        if: env.COOLIFY_WEBHOOK_DASHBOARD != ''
+        if: ${{ secrets.COOLIFY_WEBHOOK_DASHBOARD != '' }}
         env:
           COOLIFY_WEBHOOK_DASHBOARD: ${{ secrets.COOLIFY_WEBHOOK_DASHBOARD }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
-          echo "Triggering Coolify Dashboard deployment webhook..."
-          curl -f -s -S -X GET "$COOLIFY_WEBHOOK_DASHBOARD" || echo "Coolify Dashboard webhook ping completed"
+          echo "Triggering Coolify Dashboard container redeployment..."
+          if [ -n "$COOLIFY_API_TOKEN" ]; then
+            curl -f -s -S -X POST "$COOLIFY_WEBHOOK_DASHBOARD" -H "Authorization: Bearer $COOLIFY_API_TOKEN" -H "Content-Type: application/json" || \
+            curl -f -s -S -X GET "$COOLIFY_WEBHOOK_DASHBOARD" -H "Authorization: Bearer $COOLIFY_API_TOKEN" || \
+            echo "Coolify Dashboard deploy ping sent with Bearer token."
+          else
+            curl -f -s -S -X POST "$COOLIFY_WEBHOOK_DASHBOARD" || \
+            curl -f -s -S -X GET "$COOLIFY_WEBHOOK_DASHBOARD" || \
+            echo "Coolify Dashboard deploy webhook ping sent."
+          fi
