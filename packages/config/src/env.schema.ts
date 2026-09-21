@@ -35,10 +35,10 @@ export const envSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().default('123456789012345'),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().default('987654321098765'),
 
-  // Identity & KYC Provider (NIMC / NIN Verification)
-  IDENTITY_API_KEY: z.string().default('identity_pass_test_api_key'),
-  IDENTITY_API_BASE_URL: z.string().url().default('https://api.myidentitypass.com/api/v2'),
-  IDENTITY_APP_ID: z.string().default('baxato_identity_app_id'),
+  // Identity & KYC Provider (NIMC / NIN Verification via Monnify / Optional)
+  IDENTITY_API_KEY: z.string().default('identity_pass_test_api_key').optional(),
+  IDENTITY_API_BASE_URL: z.string().url().default('https://api.myidentitypass.com/api/v2').optional(),
+  IDENTITY_APP_ID: z.string().default('baxato_identity_app_id').optional(),
 
   // Interswitch Orion SVA v5
   INTERSWITCH_CLIENT_ID: z.string().default('IKIA_DUMMY_CLIENT_ID'),
@@ -62,7 +62,7 @@ export const envSchema = z.object({
     .url()
     .default('https://sandbox.monnify.com'),
   MONNIFY_CONTRACT_CODE: z.string().default('0000000000'),
-  MONNIFY_WALLET_ACCOUNT_NUMBER: z.string().default('0000000000'),
+  MONNIFY_WALLET_ACCOUNT_NUMBER: z.string().default('0000000000').optional(),
 
   // Webhooks & Security
   WEBHOOK_SIGNING_SECRET: z.string().default('baxato_whsec_dummy_local_secret_key_32bytes'),

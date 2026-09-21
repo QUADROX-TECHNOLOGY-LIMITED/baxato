@@ -73,8 +73,8 @@ export class KycService {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'x-api-key': env.IDENTITY_API_KEY,
-          'app-id': env.IDENTITY_APP_ID,
+          'x-api-key': env.IDENTITY_API_KEY || '',
+          'app-id': env.IDENTITY_APP_ID || '',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
