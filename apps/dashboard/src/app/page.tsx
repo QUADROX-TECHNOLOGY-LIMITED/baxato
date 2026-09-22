@@ -51,14 +51,14 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] text-stone-900 flex flex-col justify-between selection:bg-amber-200 selection:text-stone-900 relative overflow-x-hidden font-sans">
-      {/* Warm Ambient Glow Aura */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-amber-500/5 rounded-[100%] blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-white text-[#0B1220] flex flex-col justify-between selection:bg-blue-100 selection:text-[#126BEB] relative overflow-x-hidden font-sans">
+      {/* Soft Ambient Blue Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-[#126BEB]/5 rounded-[100%] blur-[120px] pointer-events-none" />
 
       {/* Navigation */}
-      <header className="w-full border-b border-stone-200 bg-white/95 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+      <header className="w-full border-b border-slate-200 bg-white/95 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-stone-200 shadow-sm">
+          <div className="relative w-8 h-8 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
             <Image
               src="/baxato-logo.jpg"
               alt="BAXATO Logo"
@@ -68,7 +68,7 @@ export default function HomePage() {
             />
           </div>
           <div>
-            <span className="font-black text-lg uppercase tracking-[0.2em] text-stone-900">
+            <span className="font-extrabold text-lg tracking-tight text-[#0B1220]">
               BAXATO
             </span>
           </div>
@@ -82,25 +82,25 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50 border-2 border-amber-200 text-xs font-black uppercase tracking-widest text-amber-700 mb-6 shadow-sm"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-[#126BEB] mb-6 shadow-sm"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <Sparkles className="w-3.5 h-3.5 text-[#126BEB]" />
             <span>Coming Soon</span>
           </motion.div>
 
-          <h1 className="text-3xl sm:text-5xl font-black uppercase tracking-[0.1em] text-stone-900 mb-4 leading-tight">
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-[#0B1220] mb-4 leading-tight">
             We&apos;re Launching Soon
           </h1>
 
-          <p className="text-xs sm:text-sm text-stone-500 uppercase tracking-widest font-bold max-w-lg mx-auto mb-8">
-            BAXATO by XATO TECHNOLOGIES LIMITED
+          <p className="text-sm text-slate-500 max-w-lg mx-auto mb-8 leading-relaxed">
+            BAXATO by <strong className="text-[#0B1220] font-semibold">XATO TECHNOLOGIES LIMITED</strong>.
           </p>
 
           {/* Waitlist Form Card */}
-          <div className="bg-white border-2 border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xl shadow-stone-900/5 mb-8">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8 mb-8">
             {subscribed ? (
-              <div className="flex items-center justify-center gap-2 text-stone-900 font-bold text-sm py-2">
-                <CheckCircle2 className="w-5 h-5 text-amber-600" />
+              <div className="flex items-center justify-center gap-2 text-emerald-600 font-semibold text-sm py-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 <span>Thank you! We will notify you as soon as we launch.</span>
               </div>
             ) : (
@@ -111,11 +111,11 @@ export default function HomePage() {
                   placeholder="Enter your work email address..."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="flex-1 px-4 py-3.5 rounded-xl border-2 border-stone-200 bg-white text-stone-900 text-sm font-medium placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                  className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/10 transition-colors"
                 />
                 <button
                   type="submit"
-                  className="px-8 py-3.5 rounded-full bg-stone-900 hover:bg-amber-600 text-white font-bold uppercase tracking-[0.15em] text-xs transition-all duration-300 shadow-md shadow-stone-900/10 active:scale-[0.98]"
+                  className="px-6 py-3 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-sm shadow-blue-500/20 active:scale-[0.98]"
                 >
                   Notify Me
                 </button>
@@ -125,28 +125,28 @@ export default function HomePage() {
 
           {/* Countdown Clock */}
           <div className="inline-grid grid-cols-4 gap-3 text-center">
-            <div className="bg-white border-2 border-stone-200 rounded-2xl px-4 py-3 shadow-sm min-w-[70px]">
-              <span className="block text-2xl font-black text-stone-900 font-mono">{timeLeft.days}</span>
-              <span className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mt-1">DAYS</span>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-[70px]">
+              <span className="block text-2xl font-bold text-[#0B1220] font-mono">{timeLeft.days}</span>
+              <span className="block text-[10px] font-semibold text-slate-400 tracking-wider mt-0.5">DAYS</span>
             </div>
-            <div className="bg-white border-2 border-stone-200 rounded-2xl px-4 py-3 shadow-sm min-w-[70px]">
-              <span className="block text-2xl font-black text-stone-900 font-mono">{timeLeft.hours}</span>
-              <span className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mt-1">HOURS</span>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-[70px]">
+              <span className="block text-2xl font-bold text-[#0B1220] font-mono">{timeLeft.hours}</span>
+              <span className="block text-[10px] font-semibold text-slate-400 tracking-wider mt-0.5">HOURS</span>
             </div>
-            <div className="bg-white border-2 border-stone-200 rounded-2xl px-4 py-3 shadow-sm min-w-[70px]">
-              <span className="block text-2xl font-black text-stone-900 font-mono">{timeLeft.mins}</span>
-              <span className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mt-1">MINS</span>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-[70px]">
+              <span className="block text-2xl font-bold text-[#0B1220] font-mono">{timeLeft.mins}</span>
+              <span className="block text-[10px] font-semibold text-slate-400 tracking-wider mt-0.5">MINS</span>
             </div>
-            <div className="bg-white border-2 border-stone-200 rounded-2xl px-4 py-3 shadow-sm min-w-[70px]">
-              <span className="block text-2xl font-black text-stone-900 font-mono">{timeLeft.secs}</span>
-              <span className="block text-[9px] font-black text-stone-400 uppercase tracking-widest mt-1">SECS</span>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-[70px]">
+              <span className="block text-2xl font-bold text-[#0B1220] font-mono">{timeLeft.secs}</span>
+              <span className="block text-[10px] font-semibold text-slate-400 tracking-wider mt-0.5">SECS</span>
             </div>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="w-full py-6 text-center text-xs font-medium text-stone-500 border-t border-stone-200 bg-white">
+      <footer className="w-full py-6 text-center text-xs font-medium text-slate-500 border-t border-slate-200 bg-white">
         <p>&copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
       </footer>
     </div>

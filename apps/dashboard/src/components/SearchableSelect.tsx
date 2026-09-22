@@ -65,15 +65,15 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 text-sm font-medium text-left transition-colors duration-150 outline-none ${
+        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-sm font-medium text-left transition-colors duration-150 outline-none ${
           disabled
-            ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
+            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
             : isOpen
-            ? 'bg-white border-amber-500 ring-2 ring-amber-500/10 text-stone-900'
-            : 'bg-white border-stone-200 hover:border-amber-500 text-stone-900'
+            ? 'bg-white border-[#126BEB] ring-2 ring-[#126BEB]/10 text-slate-900'
+            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-900'
         }`}
       >
-        <span className={value ? 'text-stone-900 font-medium' : 'text-stone-400'}>
+        <span className={value ? 'text-slate-900 font-medium' : 'text-slate-400'}>
           {value || placeholder}
         </span>
         <svg
@@ -82,8 +82,8 @@ export default function SearchableSelect({
           viewBox="0 0 24 24"
           strokeWidth={2}
           stroke="currentColor"
-          className={`w-4 h-4 text-stone-500 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-amber-600' : ''
+          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-[#126BEB]' : ''
           }`}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -93,24 +93,24 @@ export default function SearchableSelect({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute z-[100] w-full mt-2 bg-white border-2 border-stone-200 rounded-xl shadow-2xl overflow-hidden"
+            className="absolute z-[100] w-full mt-1.5 bg-white border-2 border-slate-200 rounded-xl shadow-xl overflow-hidden"
           >
-            <div className="p-2 border-b border-stone-100 bg-stone-50">
+            <div className="p-2 border-b border-slate-100 bg-slate-50/70">
               <input
                 ref={searchInputRef}
                 type="text"
                 placeholder="Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB]"
               />
             </div>
 
-            <ul className="max-h-48 overflow-y-auto divide-y divide-stone-50">
+            <ul className="max-h-48 overflow-y-auto divide-y divide-slate-50">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt) => {
                   const isSelected = opt === value;
@@ -122,10 +122,10 @@ export default function SearchableSelect({
                         setSearch('');
                         setIsOpen(false);
                       }}
-                      className={`px-4 py-3 text-sm font-medium cursor-pointer flex items-center justify-between transition-colors ${
+                      className={`px-4 py-2.5 text-sm font-medium cursor-pointer flex items-center justify-between transition-colors ${
                         isSelected
-                          ? 'bg-amber-50 text-amber-900 font-bold'
-                          : 'text-stone-700 hover:bg-amber-50/70 hover:text-stone-900'
+                          ? 'bg-blue-50 text-[#126BEB] font-bold'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
                       <span>{opt}</span>
@@ -134,7 +134,7 @@ export default function SearchableSelect({
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 20 20"
                           fill="currentColor"
-                          className="w-4 h-4 text-amber-600"
+                          className="w-4 h-4 text-[#126BEB]"
                         >
                           <path
                             fillRule="evenodd"
@@ -147,7 +147,7 @@ export default function SearchableSelect({
                   );
                 })
               ) : (
-                <li className="px-4 py-3 text-sm text-stone-400 italic text-center">
+                <li className="px-4 py-3 text-sm text-slate-400 italic text-center">
                   No matching results
                 </li>
               )}

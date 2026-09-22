@@ -4,11 +4,28 @@ import { useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  ShieldCheck,
+  Check,
+  Zap,
+  RefreshCw,
+  Wallet,
+  Server,
+} from 'lucide-react';
 import { nigeriaStates, nigeriaStatesList } from '@baxato/common';
 import SearchableSelect from '@/components/SearchableSelect';
+import { SignUp } from '@clerk/nextjs';
 
 export default function RegisterPage() {
+  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured =
+    clerkPubKey && !clerkPubKey.includes('dummy') && clerkPubKey.startsWith('pk_');
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -49,7 +66,7 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
   };
 
-  // Password Strength Calculation
+  // Compact password strength evaluation
   const passwordStrength = useMemo(() => {
     const pwd = formData.password;
     if (!pwd) return { score: 0, label: '', percent: 0, color: '' };
@@ -59,13 +76,18 @@ export default function RegisterPage() {
     if (/\d/.test(pwd) || /[^A-Za-z0-9]/.test(pwd)) score += 1;
 
     if (score === 1) return { score: 1, label: 'Weak', percent: 33, color: 'bg-red-500' };
-    if (score === 2) return { score: 2, label: 'Moderate', percent: 66, color: 'bg-amber-500' };
-    return { score: 3, label: 'Strong', percent: 100, color: 'bg-emerald-600' };
+    if (score === 2) return { score: 2, label: 'Fair', percent: 66, color: 'bg-amber-500' };
+    return { score: 3, label: 'Strong', percent: 100, color: 'bg-emerald-500' };
   }, [formData.password]);
 
   const isValidEmail = useMemo(() => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
   }, [formData.email]);
+
+  const passwordsMatch = useMemo(() => {
+    if (!formData.confirmPassword) return null;
+    return formData.password === formData.confirmPassword;
+  }, [formData.password, formData.confirmPassword]);
 
   const isFormValid = useMemo(() => {
     return (
@@ -85,9 +107,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setErrorMessage(null);
 
-    // Form validations
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      setErrorMessage('Please provide both first and last name.');
+      setErrorMessage('Please provide both your first and last name.');
       return;
     }
     if (!formData.email.trim() || !isValidEmail) {
@@ -95,11 +116,11 @@ export default function RegisterPage() {
       return;
     }
     if (formData.phoneNumber.length < 10) {
-      setErrorMessage('Please enter a valid WhatsApp phone number (at least 10 digits).');
+      setErrorMessage('Please enter an 11-digit WhatsApp phone number.');
       return;
     }
     if (!formData.businessName.trim()) {
-      setErrorMessage('Please provide your registered business or enterprise name.');
+      setErrorMessage('Please provide your business or enterprise name.');
       return;
     }
     if (!formData.state) {
@@ -141,31 +162,34 @@ export default function RegisterPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error?.message || result.message || 'Registration failed. Please check your details.');
+        throw new Error(
+          result.error?.message || result.message || 'Registration failed. Please check your details.'
+        );
       }
 
       setIsRegistered(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to complete registration. Please try again.';
+      const msg = err instanceof Error ? err.message : 'Unable to complete registration.';
       setErrorMessage(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const inputStyle =
-    'w-full bg-white border-2 border-stone-200 rounded-xl px-4 py-3.5 text-stone-900 font-medium placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors text-sm';
-
   return (
-    <main className="min-h-screen selection:bg-amber-200 selection:text-stone-900 relative overflow-x-hidden font-sans bg-[#FAFAF9] text-stone-900 flex flex-col justify-between">
-      {/* Warm Ambient Glow Aura */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-amber-500/5 rounded-[100%] blur-[120px] pointer-events-none" />
+    <div className="min-h-screen flex flex-col lg:flex-row bg-white">
+      {/* ======================================================== */}
+      {/* LEFT SIDE: Brand Showcase & Value Proposition (Desktop)   */}
+      {/* ======================================================== */}
+      <section className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#071328] via-[#091D3E] to-[#040A15] text-white p-12 xl:p-16 flex-col justify-between relative overflow-hidden">
+        {/* Soft Ambient Radial Glows */}
+        <div className="w-[30rem] h-[30rem] bg-[#126BEB]/20 rounded-full blur-[130px] absolute -top-24 -left-24 pointer-events-none" />
+        <div className="w-[26rem] h-[26rem] bg-[#1677FF]/15 rounded-full blur-[120px] absolute -bottom-24 -right-24 pointer-events-none" />
 
-      {/* Slim Top Navigation Header */}
-      <header className="sticky top-0 inset-x-0 z-40 border-b border-stone-200 bg-white/95 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-stone-200">
+        {/* Top Logo */}
+        <div className="relative z-10">
+          <Link href="/" className="inline-flex items-center gap-3 group">
+            <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg border border-white/10 group-hover:scale-105 transition-transform">
               <Image
                 src="/baxato-logo.jpg"
                 alt="BAXATO Logo"
@@ -174,174 +198,275 @@ export default function RegisterPage() {
                 className="object-contain"
               />
             </div>
-            <span className="font-black text-stone-900 text-lg uppercase tracking-[0.2em]">
+            <span className="font-extrabold text-2xl tracking-tight text-white">
               BAXATO
             </span>
           </Link>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline text-xs font-bold text-stone-500 uppercase tracking-wider">
-              Already registered?
-            </span>
-            <Link
-              href="/login"
-              className="text-[11px] uppercase tracking-[0.15em] font-bold text-stone-900 border-2 border-stone-900 px-5 py-2 rounded-full hover:bg-stone-900 hover:text-white transition-colors"
-            >
-              Sign In
-            </Link>
+        {/* Center: Showcase Content / Value Propositions */}
+        <div className="relative z-10 max-w-lg my-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-400/25 text-blue-300 text-xs font-semibold uppercase tracking-wider mb-6">
+            <span>Enterprise Infrastructure</span>
+          </div>
+
+          <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
+            Nigeria&apos;s High-Speed Telecom &amp; Bill Payment Platform
+          </h2>
+
+          <p className="text-slate-300 text-sm leading-relaxed mt-4">
+            Engineered for high-throughput telecom vending, automated virtual accounts, and instant STS utility token generation.
+          </p>
+
+          {/* 4 Feature Highlights */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
+            <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 backdrop-blur-sm">
+              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/20 text-[#38BDF8] flex items-center justify-center mb-2.5">
+                <Zap className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-white">Sub-Second STS Vending</h4>
+              <p className="text-xs text-slate-400 mt-1 leading-normal">
+                Direct DISCO token generation with automated retrieval.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 backdrop-blur-sm">
+              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/20 text-[#38BDF8] flex items-center justify-center mb-2.5">
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-white">Dual Provider Failover</h4>
+              <p className="text-xs text-slate-400 mt-1 leading-normal">
+                Smart routing between Interswitch and Monnify.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 backdrop-blur-sm">
+              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/20 text-[#38BDF8] flex items-center justify-center mb-2.5">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-white">Multi-Tenant Wallets</h4>
+              <p className="text-xs text-slate-400 mt-1 leading-normal">
+                Auto-provisioned main and commission wallets.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white/[0.04] border border-white/10 backdrop-blur-sm">
+              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/20 text-[#38BDF8] flex items-center justify-center mb-2.5">
+                <Server className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-white">99.99% Uptime SLA</h4>
+              <p className="text-xs text-slate-400 mt-1 leading-normal">
+                Cryptographic audit trails and instant webhooks.
+              </p>
+            </div>
           </div>
         </div>
-      </header>
 
-      {/* Main Registration Content */}
-      <section className="flex-1 flex items-center justify-center px-4 py-12 sm:px-6 z-10">
-        <div className="w-full max-w-xl mx-auto">
+        {/* Bottom Legal Notice */}
+        <div className="relative z-10 pt-6 border-t border-white/10 text-xs text-slate-400">
+          <p>© 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
+        </div>
+      </section>
+
+      {/* ======================================================== */}
+      {/* RIGHT SIDE: Authentication / Registration Form           */}
+      {/* ======================================================== */}
+      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-12 xl:p-16 bg-white overflow-y-auto min-h-screen">
+        <div className="w-full max-w-md mx-auto">
+          {/* Mobile Top Branding */}
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className="relative w-9 h-9 rounded-xl overflow-hidden shadow-sm border border-slate-200">
+              <Image
+                src="/baxato-logo.jpg"
+                alt="BAXATO Logo"
+                fill
+                priority
+                className="object-contain"
+              />
+            </div>
+            <span className="font-extrabold text-xl tracking-tight text-[#0B1220]">
+              BAXATO
+            </span>
+          </div>
+
           <AnimatePresence mode="wait">
-            {isRegistered ? (
-              /* Success Confirmation Card */
+            {isClerkConfigured ? (
+              /* ==================================================== */
+              /* CLERK AUTH COMPONENT (Customized with BAXATO tokens) */
+              /* ==================================================== */
               <motion.div
-                key="success-card"
+                key="clerk-signup"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full"
+              >
+                <div className="mb-6">
+                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B1220]">
+                    Create your account
+                  </h1>
+                  <p className="text-sm text-slate-500 mt-1.5">
+                    Start vending telecom and utility services with BAXATO.
+                  </p>
+                </div>
+
+                <SignUp
+                  appearance={{
+                    variables: {
+                      colorPrimary: '#126BEB',
+                      borderRadius: '0.75rem',
+                    },
+                    elements: {
+                      card: 'shadow-none border-0 p-0 bg-transparent w-full',
+                      rootBox: 'w-full',
+                      headerTitle: 'hidden',
+                      headerSubtitle: 'hidden',
+                      formButtonPrimary:
+                        'bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-blue-500/15 text-sm',
+                      formFieldInput:
+                        'border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-[#126BEB] focus:ring-0',
+                      footerActionLink: 'text-[#126BEB] hover:text-[#0B5CC7] font-semibold',
+                    },
+                  }}
+                  routing="hash"
+                  signInUrl="/login"
+                />
+              </motion.div>
+            ) : isRegistered ? (
+              /* ==================================================== */
+              /* SUCCESS PROVISIONED STATE                            */
+              /* ==================================================== */
+              <motion.div
+                key="success-screen"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                className="bg-white border-2 border-stone-200 rounded-3xl p-8 sm:p-12 shadow-xl shadow-stone-900/5 text-center"
+                className="text-center py-6"
               >
-                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-amber-200 shadow-sm">
+                <div className="w-16 h-16 bg-blue-50 text-[#126BEB] rounded-2xl flex items-center justify-center mx-auto mb-6 border border-blue-100 shadow-sm">
                   <CheckCircle2 className="w-9 h-9" />
                 </div>
 
-                <p className="text-[10px] text-stone-500 uppercase tracking-[0.2em] font-black mb-2">
+                <h2 className="text-2xl sm:text-3xl font-bold text-[#0B1220] tracking-tight mb-2">
                   Account Provisioned
-                </p>
-                <h2 className="text-2xl sm:text-3xl font-black text-stone-900 uppercase tracking-[0.1em] mb-3">
-                  Registration Complete
                 </h2>
 
-                <p className="text-sm text-stone-600 mb-8 leading-relaxed max-w-md mx-auto">
+                <p className="text-sm text-slate-600 mb-6 leading-relaxed">
                   Your merchant enterprise account for{' '}
-                  <strong className="text-stone-900 font-bold">{formData.businessName}</strong> has
-                  been initialized.
+                  <strong className="text-[#0B1220]">{formData.businessName}</strong> has been
+                  initialized successfully.
                 </p>
 
-                <div className="bg-amber-50/70 border-l-4 border-amber-500 rounded-r-xl p-4 text-xs text-stone-700 mb-8 text-left flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 mb-8 text-left flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-[#126BEB] shrink-0 mt-0.5" />
                   <span>
-                    Your secure merchant wallet has been initialized. You may now proceed directly
-                    to sign in to your merchant dashboard.
+                    Your settlement wallet and commission ledger have been initialized. You can now proceed to log in to your merchant console.
                   </span>
                 </div>
 
                 <Link
                   href="/login"
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-stone-900 text-white font-bold py-4 px-8 uppercase tracking-[0.15em] text-sm hover:bg-amber-600 transition-all duration-300 shadow-lg shadow-stone-900/10 active:scale-[0.98]"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-[0.99]"
                 >
                   Proceed to Sign In
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </motion.div>
             ) : (
-              /* Registration Form Card */
+              /* ==================================================== */
+              /* SEAMLESS REGISTRATION FORM (NO CARD ON CARD)         */
+              /* ==================================================== */
               <motion.div
-                key="register-card"
-                initial={{ opacity: 0, y: 20 }}
+                key="form-screen"
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-white border-2 border-stone-200 rounded-3xl p-6 sm:p-10 shadow-xl shadow-stone-900/5"
+                exit={{ opacity: 0, y: -10 }}
+                className="w-full"
               >
-                {/* Brand Header */}
-                <div className="text-center mb-8">
-                  <div className="w-14 h-14 mx-auto rounded-full border-2 border-stone-200 p-2.5 bg-white flex items-center justify-center mb-4 shadow-sm">
-                    <div className="relative w-full h-full">
-                      <Image
-                        src="/baxato-logo.jpg"
-                        alt="BAXATO Logo"
-                        fill
-                        priority
-                        className="object-contain"
-                      />
-                    </div>
-                  </div>
-                  <h1 className="text-2xl sm:text-3xl font-black text-stone-900 uppercase tracking-[0.1em]">
-                    Merchant Registration
+                {/* Header */}
+                <div className="mb-8">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1220]">
+                    Create your account
                   </h1>
-                  <p className="text-[11px] text-stone-500 uppercase tracking-[0.2em] font-bold mt-2">
-                    Create your enterprise BAXATO account
+                  <p className="text-sm text-slate-500 mt-1.5">
+                    Start vending telecom and utility services with BAXATO.
                   </p>
                 </div>
 
                 {/* Error Banner */}
                 {errorMessage && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 text-xs font-semibold flex items-center gap-3 mb-6"
+                    className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2.5 mb-6"
                   >
-                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                     <span>{errorMessage}</span>
                   </motion.div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Name Fields: First Name & Last Name */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Name Fields: First & Last Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        First Name <span className="text-amber-600">*</span>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        First Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. John"
+                        placeholder="John"
                         value={formData.firstName}
                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        className={inputStyle}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] transition-colors"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        Last Name <span className="text-amber-600">*</span>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        Last Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Doe"
+                        placeholder="Doe"
                         value={formData.lastName}
                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        className={inputStyle}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] transition-colors"
                       />
                     </div>
                   </div>
 
-                  {/* Work Email Address */}
+                  {/* Work Email */}
                   <div>
-                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                      Work / Business Email <span className="text-amber-600">*</span>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                      Work / Business Email <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
                       required
-                      placeholder="e.g. alex@example.com"
+                      placeholder="alex@example.com"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className={`${inputStyle} ${
-                        formData.email && !isValidEmail ? 'border-red-300 focus:border-red-500' : ''
+                      className={`w-full px-4 py-3 rounded-xl border-2 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none transition-colors ${
+                        formData.email && !isValidEmail
+                          ? 'border-red-300 focus:border-red-500'
+                          : 'border-slate-200 focus:border-[#126BEB]'
                       }`}
                     />
                     {formData.email && !isValidEmail && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1.5 uppercase tracking-wider">
-                        Please enter a valid email format.
+                      <p className="text-[11px] text-red-500 font-medium mt-1">
+                        Please enter a valid email address.
                       </p>
                     )}
                   </div>
 
                   {/* WhatsApp Phone Number */}
                   <div>
-                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                      WhatsApp Phone Number <span className="text-amber-600">*</span>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                      WhatsApp Phone Number <span className="text-red-500">*</span>
                     </label>
                     <div className="relative flex items-center">
-                      <div className="absolute left-4 pointer-events-none text-stone-500 text-sm font-bold flex items-center gap-1.5 border-r border-stone-200 pr-3">
+                      <div className="absolute left-3.5 pointer-events-none text-slate-500 text-sm font-medium flex items-center gap-1.5 border-r border-slate-200 pr-2.5">
                         <span>🇳🇬</span>
                         <span>+234</span>
                       </div>
@@ -352,82 +477,61 @@ export default function RegisterPage() {
                         placeholder="08012345678"
                         value={formData.phoneNumber}
                         onChange={handlePhoneChange}
-                        className={`${inputStyle} pl-24`}
+                        className="w-full pl-24 pr-4 py-3 rounded-xl border-2 border-slate-200 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] transition-colors"
                       />
                     </div>
-                    <p className="text-[10px] text-stone-400 font-medium mt-1.5">
-                      11-digit WhatsApp-enabled mobile number for alerts.
-                    </p>
                   </div>
 
                   {/* Business Name */}
                   <div>
-                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                      Business or Enterprise Name <span className="text-amber-600">*</span>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                      Business or Enterprise Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Apex Telecom Services"
+                      placeholder="e.g. Apex Telecom Limited"
                       value={formData.businessName}
                       onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                      className={inputStyle}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] transition-colors"
                     />
                   </div>
 
-                  {/* Country & State */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* State & LGA */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        Country
-                      </label>
-                      <div className="w-full bg-stone-100 border-2 border-stone-200 rounded-xl px-4 py-3.5 text-stone-700 font-medium flex items-center gap-2 cursor-not-allowed text-sm">
-                        <span>🇳🇬</span>
-                        <span>Nigeria</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        State <span className="text-amber-600">*</span>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        State <span className="text-red-500">*</span>
                       </label>
                       <SearchableSelect
                         id="state-select"
                         options={nigeriaStatesList}
-                        placeholder="Select State..."
+                        placeholder="Select State"
                         value={formData.state}
                         onChange={handleStateChange}
                       />
                     </div>
-                  </div>
 
-                  {/* LGA / City Cascading Selector */}
-                  <div>
-                    <div className="flex justify-between items-end mb-2">
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest">
-                        LGA / City <span className="text-amber-600">*</span>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        LGA / City <span className="text-red-500">*</span>
                       </label>
-                      {!formData.state && (
-                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
-                          Select State first
-                        </span>
-                      )}
+                      <SearchableSelect
+                        id="lga-select"
+                        options={availableLgas}
+                        placeholder={formData.state ? 'Select LGA' : 'Select State first'}
+                        value={formData.lga}
+                        onChange={(lga) => setFormData({ ...formData, lga })}
+                        disabled={!formData.state}
+                      />
                     </div>
-                    <SearchableSelect
-                      id="lga-select"
-                      options={availableLgas}
-                      placeholder={formData.state ? 'Select LGA...' : 'Select State first...'}
-                      value={formData.lga}
-                      onChange={(lga) => setFormData({ ...formData, lga })}
-                      disabled={!formData.state}
-                    />
                   </div>
 
                   {/* Password & Confirm Password */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        Password <span className="text-amber-600">*</span>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        Password <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -436,21 +540,36 @@ export default function RegisterPage() {
                           placeholder="Min 8 characters"
                           value={formData.password}
                           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className={`${inputStyle} pr-12`}
+                          className="w-full px-4 py-3 pr-10 rounded-xl border-2 border-slate-200 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#126BEB] transition-colors"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+
+                      {/* Compact password meter directly under input */}
+                      {formData.password && (
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                              style={{ width: `${passwordStrength.percent}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            {passwordStrength.label}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
-                        Confirm Password <span className="text-amber-600">*</span>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                        Confirm Password <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -461,17 +580,16 @@ export default function RegisterPage() {
                           onChange={(e) =>
                             setFormData({ ...formData, confirmPassword: e.target.value })
                           }
-                          className={`${inputStyle} pr-12 ${
-                            formData.confirmPassword &&
-                            formData.password !== formData.confirmPassword
+                          className={`w-full px-4 py-3 pr-10 rounded-xl border-2 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none transition-colors ${
+                            passwordsMatch === false
                               ? 'border-red-300 focus:border-red-500'
-                              : ''
+                              : 'border-slate-200 focus:border-[#126BEB]'
                           }`}
                         />
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 transition-colors"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
                           {showConfirmPassword ? (
                             <EyeOff className="w-4 h-4" />
@@ -480,56 +598,44 @@ export default function RegisterPage() {
                           )}
                         </button>
                       </div>
+
+                      {/* Direct inline match feedback */}
+                      {passwordsMatch === true && (
+                        <p className="text-[11px] font-medium text-emerald-600 flex items-center gap-1 mt-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Passwords match</span>
+                        </p>
+                      )}
+                      {passwordsMatch === false && (
+                        <p className="text-[11px] font-medium text-red-500 flex items-center gap-1 mt-1">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Passwords do not match</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  {/* Password Strength Indicator */}
-                  {formData.password && (
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                        <span>Password Strength</span>
-                        <span
-                          className={
-                            passwordStrength.score === 1
-                              ? 'text-red-500'
-                              : passwordStrength.score === 2
-                              ? 'text-amber-600'
-                              : 'text-emerald-600'
-                          }
-                        >
-                          {passwordStrength.label}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-300 ${passwordStrength.color}`}
-                          style={{ width: `${passwordStrength.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Submit CTA Button */}
-                  <div className="pt-4">
+                  {/* Submit Button */}
+                  <div className="pt-3">
                     <button
                       type="submit"
                       disabled={isSubmitting || !isFormValid}
-                      className="w-full rounded-full bg-stone-900 text-white font-bold py-4 px-8 uppercase tracking-[0.15em] text-sm transition-all duration-300 hover:bg-amber-600 hover:shadow-[0_10px_25px_rgba(217,119,6,0.3)] active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-stone-900 disabled:cursor-not-allowed"
+                      className="w-full py-3.5 px-6 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? 'Creating Account...' : 'Create Account'}
                     </button>
                   </div>
                 </form>
 
-                {/* Footer Switcher */}
-                <div className="mt-8 pt-6 border-t border-stone-100 text-center">
-                  <p className="text-xs font-bold text-stone-500">
+                {/* Bottom Sign-In Link (NOT IN THE HEADER!) */}
+                <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                  <p className="text-xs text-slate-500">
                     Already have a BAXATO merchant account?{' '}
                     <Link
                       href="/login"
-                      className="text-stone-900 hover:text-amber-600 uppercase tracking-wider underline transition-colors"
+                      className="text-[#126BEB] font-semibold hover:underline"
                     >
-                      Sign in here
+                      Sign In
                     </Link>
                   </p>
                 </div>
@@ -538,11 +644,6 @@ export default function RegisterPage() {
           </AnimatePresence>
         </div>
       </section>
-
-      {/* Corporate Legal Footer */}
-      <footer className="border-t border-stone-200 bg-white py-6 text-center text-xs font-medium text-stone-500">
-        <p>© 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
-      </footer>
-    </main>
+    </div>
   );
 }
