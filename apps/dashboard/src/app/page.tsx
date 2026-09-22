@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
+import { CheckCircle2, Sparkles } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
 export default function HomePage() {
@@ -70,19 +69,10 @@ export default function HomePage() {
             <span className="font-extrabold text-lg tracking-tight text-[#0B1220] dark:text-[#F8FAFC]">
               BAXATO
             </span>
-            <span className="block text-[10px] font-semibold text-slate-400 tracking-wider uppercase -mt-1">
-              Infrastructure
-            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/register"
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] dark:bg-[#1677FF] dark:hover:bg-[#0B63CE] text-white transition-colors shadow-sm"
-          >
-            Create Account
-          </Link>
           <ThemeToggle />
         </div>
       </header>
@@ -97,7 +87,7 @@ export default function HomePage() {
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/60 text-xs font-semibold text-[#126BEB] dark:text-[#1677FF] mb-6"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>COMING SOON &bull; EARLY ACCESS ONBOARDING</span>
+            <span>COMING SOON</span>
           </motion.div>
 
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#0B1220] dark:text-[#F8FAFC] mb-4">
@@ -105,9 +95,7 @@ export default function HomePage() {
           </h1>
 
           <p className="text-sm sm:text-base text-[#526173] dark:text-[#A8B5C7] max-w-lg mx-auto mb-8 leading-relaxed">
-            Enterprise multi-tenant VTU and telecom infrastructure engineered by{' '}
-            <strong className="text-[#0B1220] dark:text-[#F8FAFC]">XATO TECHNOLOGIES LIMITED</strong>.
-            High-speed bill payments, automated reconciliations, and real-time ledger management.
+            BAXATO by <strong className="text-[#0B1220] dark:text-[#F8FAFC]">XATO TECHNOLOGIES LIMITED</strong>.
           </p>
 
           {/* Waitlist Form Card */}
@@ -115,7 +103,7 @@ export default function HomePage() {
             {subscribed ? (
               <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm py-2">
                 <CheckCircle2 className="w-5 h-5" />
-                <span>Thank you! We will notify you as soon as public vending opens.</span>
+                <span>Thank you! We will notify you as soon as we launch.</span>
               </div>
             ) : (
               <form onSubmit={handleNotifyMe} className="flex flex-col sm:flex-row gap-2.5">
@@ -135,19 +123,6 @@ export default function HomePage() {
                 </button>
               </form>
             )}
-
-            <div className="mt-5 pt-4 border-t border-[#E2E8F0] dark:border-[#1D3048] flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Want to setup your merchant account now?
-              </span>
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#126BEB] dark:text-[#1677FF] hover:underline"
-              >
-                <span>Register here</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
           </div>
 
           {/* Countdown Clock */}

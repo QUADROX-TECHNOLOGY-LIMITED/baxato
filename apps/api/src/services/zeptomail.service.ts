@@ -7,6 +7,7 @@ export interface EmailRecipient {
 
 export class ZeptoMailService {
   private readonly apiUrl = 'https://api.zeptomail.com/v1.1/email';
+  private otpStore = new Map<string, { code: string; expiresAt: number }>();
 
   /**
    * Dispatches a transactional email via ZeptoMail API v1.1.
@@ -65,6 +66,65 @@ export class ZeptoMailService {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: message };
     }
+  }
+
+  /**
+   * Generates a 6-digit numeric OTP and caches with 10 minutes expiry.
+   */
+  public generateOtp(email: string): string {
+    const normalized = email.toLowerCase().trim();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    this.otpStore.set(normalized, { code, expiresAt });
+    return code;
+  }
+
+  /**
+   * Validates email OTP code.
+   */
+  public verifyOtp(email: string, code: string): { valid: boolean; reason?: string } {
+    const normalized = email.toLowerCase().trim();
+    const record = this.otpStore.get(normalized);
+    if (!record) {
+      return { valid: false, reason: 'No verification code requested for this email.' };
+    }
+    if (Date.now() > record.expiresAt) {
+      this.otpStore.delete(normalized);
+      return { valid: false, reason: 'Verification code has expired. Please request a new one.' };
+    }
+    if (record.code !== code.trim()) {
+      return { valid: false, reason: 'Invalid verification code.' };
+    }
+    this.otpStore.delete(normalized);
+    return { valid: true };
+  }
+
+  /**
+   * Dispatches email OTP code.
+   */
+  public async sendOtp(email: string, name?: string): Promise<{ success: boolean; error?: string }> {
+    const code = this.generateOtp(email);
+    const subject = `${code} is your BAXATO verification code`;
+    const recipientName = name || 'Merchant';
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>${subject}</title></head>
+<body style="font-family: Arial, sans-serif; background-color: #F8FAFC; padding: 24px; color: #0B1220;">
+  <div style="max-width: 500px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 32px; text-align: center;">
+    <h2 style="color: #126BEB; margin-top: 0;">BAXATO</h2>
+    <p style="font-size: 14px; color: #526173;">Use the verification code below to confirm your email address.</p>
+    <div style="margin: 24px 0; background: #F1F5F9; border-radius: 8px; padding: 16px; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0B1220;">
+      ${code}
+    </div>
+    <p style="font-size: 12px; color: #94A3B8;">This code is valid for 10 minutes. If you did not request this, please ignore.</p>
+    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />
+    <p style="font-size: 10px; color: #94A3B8; margin-bottom: 0;">&copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
+  </div>
+</body>
+</html>
+    `;
+    return this.sendEmail([{ email: email.toLowerCase().trim(), name: recipientName }], subject, html);
   }
 
   /**

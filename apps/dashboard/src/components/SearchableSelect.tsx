@@ -36,11 +36,24 @@ export default function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
+  // When opening, gently ensure the component is visible in viewport without causing jarring jumps
+  const handleToggle = () => {
+    if (disabled) return;
+    const nextState = !isOpen;
+    setIsOpen(nextState);
+    setSearch('');
+
+    if (nextState) {
+      setTimeout(() => {
+        wrapperRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Only auto-focus on desktop devices with physical keyboards (not mobile touch screens)
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (!isTouch && searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, 50);
     }
-  }, [isOpen]);
+  };
 
   const filteredOptions = options.filter((opt) =>
     opt.toLowerCase().includes(search.toLowerCase())
@@ -51,15 +64,10 @@ export default function SearchableSelect({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => {
-          if (!disabled) {
-            setIsOpen(!isOpen);
-            setSearch('');
-          }
-        }}
+        onClick={handleToggle}
         className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border text-sm font-normal text-left transition-all duration-150 outline-none ${
           disabled
-            ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed'
+            ? 'bg-slate-100 dark:bg-[#07111F]/50 border-slate-200 dark:border-[#1D3048]/50 text-slate-400 cursor-not-allowed'
             : isOpen
             ? 'bg-white dark:bg-[#101F33] border-[#126BEB] dark:border-[#1677FF] ring-2 ring-[#126BEB]/10 text-[#0B1220] dark:text-[#F8FAFC]'
             : 'bg-white dark:bg-[#101F33] border-[#E2E8F0] dark:border-[#1D3048] hover:border-slate-400 dark:hover:border-slate-600 text-[#0B1220] dark:text-[#F8FAFC]'
@@ -91,7 +99,7 @@ export default function SearchableSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute z-50 w-full mt-1.5 bg-white dark:bg-[#101F33] border border-[#E2E8F0] dark:border-[#1D3048] rounded-xl shadow-xl overflow-hidden"
+            className="absolute z-[100] w-full mt-1.5 bg-white dark:bg-[#101F33] border border-[#E2E8F0] dark:border-[#1D3048] rounded-xl shadow-2xl overflow-hidden"
           >
             <div className="p-2 border-b border-[#E2E8F0] dark:border-[#1D3048] bg-slate-50/50 dark:bg-[#0B1728]/50">
               <div className="relative flex items-center">
@@ -120,7 +128,7 @@ export default function SearchableSelect({
               </div>
             </div>
 
-            <ul className="max-h-52 overflow-y-auto py-1">
+            <ul className="max-h-52 overflow-y-auto py-1 touch-pan-y overscroll-contain">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt) => {
                   const isSelected = opt === value;

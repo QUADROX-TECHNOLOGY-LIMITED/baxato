@@ -221,6 +221,54 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
+   * POST /auth/send-email-otp
+   */
+  fastify.post('/send-email-otp', async (request, reply) => {
+    const body = request.body as { email?: string; name?: string };
+    if (!body?.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+      throw new ValidationError('A valid email address is required.');
+    }
+
+    const result = await zeptoMailService.sendOtp(body.email, body.name);
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          sent: result.success,
+          message: result.success
+            ? 'Verification code sent to your email.'
+            : 'Could not dispatch email. Please check your address.',
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
+   * POST /auth/verify-email-otp
+   */
+  fastify.post('/verify-email-otp', async (request, reply) => {
+    const body = request.body as { email?: string; otp?: string };
+    if (!body?.email || !body?.otp) {
+      throw new ValidationError('Email and 6-digit OTP code are required.');
+    }
+
+    const verification = zeptoMailService.verifyOtp(body.email, body.otp);
+    if (!verification.valid) {
+      throw new ValidationError(verification.reason || 'Invalid verification code.');
+    }
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          verified: true,
+          message: 'Email address verified successfully.',
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
    * POST /auth/login
    */
   fastify.post('/login', async (request, reply) => {
