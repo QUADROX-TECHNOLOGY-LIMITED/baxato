@@ -10,3 +10,4 @@ export * from './utils/currency';
 export * from './utils/reference';
 export * from './utils/crypto';
 export * from './types/webhook';
+export * from './data/nigeriaData';

@@ -15,6 +15,7 @@ import {
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { whatsAppService } from '../services/whatsapp.service';
+import { zeptoMailService } from '../services/zeptomail.service';
 import { generateToken } from '../plugins/auth.plugin';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -103,10 +104,24 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       ]);
     }
 
-    // 4. Dispatch WhatsApp OTP for phone verification
+    // 4. Dispatch Email Verification via ZeptoMail
+    const emailVerificationToken = generateToken({
+      id: newUser.id,
+      email: newUser.email,
+      role: newUser.role as UserRole,
+      businessId: newBusiness?.id,
+      kycStatus: newUser.kycStatus as KycStatus,
+    });
+    await zeptoMailService.sendVerificationEmail(
+      newUser.email,
+      `${newUser.firstName} ${newUser.lastName}`,
+      emailVerificationToken,
+    );
+
+    // 5. Dispatch WhatsApp OTP for phone verification
     await whatsAppService.sendOtp(normalizedPhone);
 
-    // 5. Generate Session Token
+    // 6. Generate Session Token
     const token = generateToken({
       id: newUser.id,
       email: newUser.email,

@@ -67,6 +67,12 @@ export const envSchema = z.object({
   // Webhooks & Security
   WEBHOOK_SIGNING_SECRET: z.string().default('baxato_whsec_dummy_local_secret_key_32bytes'),
   ENCRYPTION_MASTER_KEY: z.string().default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+
+  // ZeptoMail Email Infrastructure
+  ZEPTOMAIL_API_KEY: z.string().default(''),
+  ZEPTOMAIL_BOUNCE_ADDRESS: z.string().default('bounce@bounce-zem.quadroxtech.cloud'),
+  ZEPTOMAIL_FROM_ADDRESS: z.string().default('dev@quadroxtech.cloud'),
+  ZEPTOMAIL_FROM_NAME: z.string().default('BAXATO'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -97,5 +103,6 @@ export function getSanitizedEnv(env: Env): Record<string, unknown> {
     MONNIFY_SECRET_KEY: '****',
     WEBHOOK_SIGNING_SECRET: '****',
     ENCRYPTION_MASTER_KEY: '****',
+    ZEPTOMAIL_API_KEY: '****',
   };
 }

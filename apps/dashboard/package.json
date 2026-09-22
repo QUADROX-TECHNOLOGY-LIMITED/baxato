@@ -3,17 +3,27 @@
   "version": "1.0.0",
   "private": true,
   "description": "BAXATO — High-Performance VTU & Bill Payments Interactive Dashboard",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@baxato/common": "workspace:*"
+    "@baxato/common": "workspace:*",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.344.0",
+    "next": "^14.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "vite": "^6.0.0"
+    "@types/node": "^22.13.4",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.7.3"
   }
 }

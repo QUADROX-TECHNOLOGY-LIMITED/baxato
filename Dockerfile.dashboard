@@ -1,5 +1,5 @@
 # ==============================================================================
-# BAXATO Merchant Dashboard — Production Nginx Multi-Stage Dockerfile
+# BAXATO Merchant Dashboard — Production Next.js Multi-Stage Dockerfile
 # ==============================================================================
 
 FROM node:22-alpine AS base
@@ -15,6 +15,7 @@ WORKDIR /app
 # Copy workspace configuration & manifests
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/common/package.json ./packages/common/
+COPY packages/config/package.json ./packages/config/
 COPY apps/dashboard/package.json ./apps/dashboard/
 
 # Install dependencies
@@ -22,22 +23,37 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source files
 COPY packages/common ./packages/common
+COPY packages/config ./packages/config
 COPY apps/dashboard ./apps/dashboard
 
-# Compile TypeScript common package & Vite dashboard bundle
+# Compile TypeScript common package & Next.js standalone build
 RUN pnpm --filter @baxato/common build
+ENV NEXT_STANDALONE="true"
+ENV NODE_ENV="production"
 RUN pnpm --filter @baxato/dashboard build
 
-# Stage 2: Production Nginx Server
-FROM nginx:1.27-alpine AS runner
+# Stage 2: Production Node Runner
+FROM node:22-alpine AS runner
+WORKDIR /app
 
-# Copy customized Nginx configuration & compiled static assets
-COPY apps/dashboard/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/apps/dashboard/dist /usr/share/nginx/html
+ENV NODE_ENV="production"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-EXPOSE 80
+# Create unprivileged user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:80/health || exit 1
+# Copy standalone output and public static files
+COPY --from=builder /app/apps/dashboard/public ./apps/dashboard/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
 
-CMD ["nginx", "-g", "daemon off;"]
+USER nextjs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1
+
+CMD ["node", "apps/dashboard/server.js"]

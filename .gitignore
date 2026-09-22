@@ -18,6 +18,7 @@ node_modules/
 # TypeScript & Build Outputs
 dist/
 build/
+.next/
 .turbo/
 *.tsbuildinfo
 tsconfig.tsbuildinfo
