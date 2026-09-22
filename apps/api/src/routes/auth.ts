@@ -14,6 +14,7 @@ import {
   KycStatus,
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
+import { env } from '@baxato/config';
 import { whatsAppService } from '../services/whatsapp.service';
 import { zeptoMailService } from '../services/zeptomail.service';
 import { generateToken } from '../plugins/auth.plugin';
