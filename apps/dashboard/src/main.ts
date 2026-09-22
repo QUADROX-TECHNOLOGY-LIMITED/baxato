@@ -3136,7 +3136,179 @@ class DashboardClient {
   }
 }
 
+function initComingSoon(): void {
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const themeToggleIcon = document.getElementById('theme-toggle-icon');
+
+  const savedTheme =
+    localStorage.getItem('baxato_theme') ||
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light');
+
+  const setTheme = (theme: 'light' | 'dark') => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('baxato_theme', theme);
+    if (themeToggleIcon) {
+      if (theme === 'dark') {
+        themeToggleIcon.classList.remove('fa-moon');
+        themeToggleIcon.classList.add('fa-sun');
+      } else {
+        themeToggleIcon.classList.remove('fa-sun');
+        themeToggleIcon.classList.add('fa-moon');
+      }
+    }
+  };
+
+  setTheme(savedTheme === 'dark' ? 'dark' : 'light');
+
+  themeToggleBtn?.addEventListener('click', () => {
+    const currentTheme =
+      document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    setTheme(currentTheme);
+  });
+
+  const countDays = document.getElementById('count-days');
+  const countHours = document.getElementById('count-hours');
+  const countMins = document.getElementById('count-mins');
+  const countSecs = document.getElementById('count-secs');
+
+  let targetTime = parseInt(localStorage.getItem('baxato_launch_target') || '0', 10);
+  if (!targetTime || targetTime < Date.now()) {
+    targetTime =
+      Date.now() + 14 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000 + 35 * 60 * 1000;
+    localStorage.setItem('baxato_launch_target', String(targetTime));
+  }
+
+  const updateCountdown = () => {
+    const now = Date.now();
+    const diff = Math.max(0, targetTime - now);
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+    if (countDays) countDays.innerText = String(days).padStart(2, '0');
+    if (countHours) countHours.innerText = String(hours).padStart(2, '0');
+    if (countMins) countMins.innerText = String(mins).padStart(2, '0');
+    if (countSecs) countSecs.innerText = String(secs).padStart(2, '0');
+  };
+
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+
+  const waitlistForm = document.getElementById('waitlist-form') as HTMLFormElement | null;
+  const waitlistEmail = document.getElementById('waitlist-email') as HTMLInputElement | null;
+  const waitlistFeedback = document.getElementById('waitlist-feedback');
+  const waitlistSubmitBtn = document.getElementById('waitlist-submit-btn');
+
+  const existingEmail = localStorage.getItem('baxato_whitelist_email');
+  if (existingEmail && waitlistFeedback) {
+    waitlistFeedback.style.display = 'inline-flex';
+    const feedbackText = document.getElementById('waitlist-feedback-text');
+    if (feedbackText) {
+      feedbackText.innerText = `You're on the priority early-access whitelist as ${existingEmail}!`;
+    }
+  }
+
+  waitlistForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!waitlistEmail?.value) return;
+
+    const email = waitlistEmail.value.trim();
+    localStorage.setItem('baxato_whitelist_email', email);
+
+    if (waitlistSubmitBtn) {
+      waitlistSubmitBtn.setAttribute('disabled', 'true');
+      waitlistSubmitBtn.innerHTML = `<span>Securing Spot...</span> <i class="fa-solid fa-spinner fa-spin"></i>`;
+    }
+
+    setTimeout(() => {
+      if (waitlistSubmitBtn) {
+        waitlistSubmitBtn.removeAttribute('disabled');
+        waitlistSubmitBtn.innerHTML = `<span>Spot Confirmed</span> <i class="fa-solid fa-check"></i>`;
+      }
+      if (waitlistFeedback) {
+        waitlistFeedback.style.display = 'inline-flex';
+        const feedbackText = document.getElementById('waitlist-feedback-text');
+        if (feedbackText) {
+          feedbackText.innerText = `You're on the priority early-access whitelist as ${email}! We will reach out shortly.`;
+        }
+      }
+    }, 600);
+  });
+
+  const comingSoonView = document.getElementById('coming-soon-view');
+  const consoleView = document.getElementById('merchant-console-view');
+  const enterConsoleBtn = document.getElementById('enter-console-btn');
+  const backToHomeBtn = document.getElementById('back-to-home-btn');
+
+  enterConsoleBtn?.addEventListener('click', () => {
+    if (comingSoonView) comingSoonView.style.display = 'none';
+    if (consoleView) consoleView.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  backToHomeBtn?.addEventListener('click', () => {
+    if (consoleView) consoleView.style.display = 'none';
+    if (comingSoonView) comingSoonView.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  const termTabs = document.querySelectorAll<HTMLButtonElement>('.cs-term-tab');
+  const codeCurl = document.getElementById('code-curl');
+  const codeTs = document.getElementById('code-typescript');
+  const codePy = document.getElementById('code-python');
+
+  termTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      termTabs.forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const lang = tab.getAttribute('data-lang');
+      if (codeCurl) codeCurl.style.display = lang === 'curl' ? 'block' : 'none';
+      if (codeTs) codeTs.style.display = lang === 'typescript' ? 'block' : 'none';
+      if (codePy) codePy.style.display = lang === 'python' ? 'block' : 'none';
+    });
+  });
+
+  const copyCodeBtn = document.getElementById('cs-copy-code-btn');
+  const copyText = document.getElementById('cs-copy-text');
+
+  copyCodeBtn?.addEventListener('click', async () => {
+    const activeCodeEl = document.querySelector<HTMLElement>(
+      '.cs-code-block[style*="display: block"], .cs-code-block.active'
+    );
+    const textToCopy = activeCodeEl?.innerText || '';
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      if (copyText) copyText.innerText = 'Copied!';
+      copyCodeBtn.classList.add('copied');
+      setTimeout(() => {
+        if (copyText) copyText.innerText = 'Copy';
+        copyCodeBtn.classList.remove('copied');
+      }, 2000);
+    } catch {
+      if (copyText) copyText.innerText = 'Copied!';
+      setTimeout(() => {
+        if (copyText) copyText.innerText = 'Copy';
+      }, 2000);
+    }
+  });
+
+  const faqQuestions = document.querySelectorAll<HTMLButtonElement>('.cs-faq-question');
+  faqQuestions.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.cs-faq-item');
+      item?.classList.toggle('open');
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initComingSoon();
   new DashboardClient();
 });
 

@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BAXATO | VTU Airtime & Data Vending Engine</title>
+    <title>BAXATO | Next-Gen Telecom & Bill Infrastructure | XATO TECHNOLOGIES LIMITED</title>
     <meta
       name="description"
-      content="BAXATO High-Performance Multi-Tenant Telecom Airtime & Data Bundle Vending Platform"
+      content="BAXATO — High-Performance VTU & Bill Payments Platform by XATO TECHNOLOGIES LIMITED"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -22,17 +22,401 @@
   </head>
   <body>
     <div id="app">
-      <!-- TOP NAVIGATION BAR -->
-      <header class="app-header">
-        <div class="header-container">
-          <div class="brand-group">
-            <div class="brand-logo">
-              <span class="brand-icon"><i class="fa-solid fa-bolt"></i></span>
-              <span class="brand-name">BAXATO</span>
+      <!-- COMING SOON HOMEPAGE VIEW -->
+      <div id="coming-soon-view">
+        <header class="cs-header">
+          <div class="cs-nav-inner">
+            <div class="cs-brand">
+              <span class="cs-brand-mark">BX</span>
+              <div class="cs-brand-meta">
+                <span class="cs-brand-name">BAXATO</span>
+                <span class="cs-brand-sub">BY XATO TECHNOLOGIES LIMITED</span>
+              </div>
             </div>
-            <div class="pilot-badge">
-              <span class="pulse-dot"></span>
-              <span>ORION SVA v5 & MONNIFY PILOT</span>
+
+            <nav class="cs-nav-links">
+              <a href="#services" class="cs-nav-link">Services</a>
+              <a href="#developer" class="cs-nav-link">Developer API</a>
+              <a href="#architecture" class="cs-nav-link">Architecture</a>
+              <a href="#faq" class="cs-nav-link">FAQ</a>
+            </nav>
+
+            <div class="cs-nav-right">
+              <div class="cs-status-indicator">
+                <span class="cs-pulse-dot"></span>
+                <span>SYSTEM ONLINE • V1 LAUNCHING SOON</span>
+              </div>
+              <button class="cs-theme-toggle-btn" id="theme-toggle-btn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+                <i class="fa-solid fa-moon" id="theme-toggle-icon"></i>
+              </button>
+              <button class="cs-console-btn" id="enter-console-btn">
+                <span>Console Preview</span>
+                <i class="fa-solid fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main class="cs-hero-section">
+          <div class="cs-hero-container">
+            <div class="cs-pill-badge">
+              <span class="cs-badge-dot"></span>
+              <span>ENTERPRISE TELECOM &amp; BILL PAYMENTS ENGINE</span>
+            </div>
+
+            <h1 class="cs-hero-title">
+              The Infrastructure Powering <br />
+              <span class="cs-gradient-text">Next-Gen Digital Vending.</span>
+            </h1>
+
+            <p class="cs-hero-desc">
+              Engineered by <strong>XATO TECHNOLOGIES LIMITED</strong> for high-volume enterprises, merchants, and fintech platforms. Sub-second API routing for Airtime, High-Speed Data, Prepaid STS Electricity Tokens, Cable TV, and Examination e-PINs.
+            </p>
+
+            <div class="cs-action-card">
+              <form class="cs-waitlist-form" id="waitlist-form">
+                <div class="cs-input-group">
+                  <i class="fa-solid fa-envelope cs-input-icon"></i>
+                  <input
+                    type="email"
+                    id="waitlist-email"
+                    class="cs-input"
+                    placeholder="Enter your corporate or merchant email..."
+                    required
+                  />
+                </div>
+                <button type="submit" class="cs-submit-btn" id="waitlist-submit-btn">
+                  <span>Get Early Access</span>
+                  <i class="fa-solid fa-bolt"></i>
+                </button>
+              </form>
+              <div class="cs-waitlist-feedback" id="waitlist-feedback" style="display: none;">
+                <i class="fa-solid fa-circle-check"></i>
+                <span id="waitlist-feedback-text">You're on the priority early-access whitelist! We will reach out shortly.</span>
+              </div>
+              <div class="cs-whitelist-proof">
+                <div class="cs-avatar-group">
+                  <span class="cs-avatar" style="background: #126BEB;">XT</span>
+                  <span class="cs-avatar" style="background: #10B981;">AT</span>
+                  <span class="cs-avatar" style="background: #8B5CF6;">VT</span>
+                  <span class="cs-avatar" style="background: #F59E0B;">PL</span>
+                </div>
+                <span class="cs-whitelist-text">Join <strong>1,480+</strong> enterprise aggregators awaiting launch</span>
+              </div>
+            </div>
+
+            <div class="cs-countdown-wrap">
+              <p class="cs-countdown-label">OFFICIAL PRODUCTION LAUNCH COUNTDOWN</p>
+              <div class="cs-countdown-grid">
+                <div class="cs-count-card">
+                  <span class="cs-count-num" id="count-days">00</span>
+                  <span class="cs-count-unit">DAYS</span>
+                </div>
+                <span class="cs-count-colon">:</span>
+                <div class="cs-count-card">
+                  <span class="cs-count-num" id="count-hours">00</span>
+                  <span class="cs-count-unit">HOURS</span>
+                </div>
+                <span class="cs-count-colon">:</span>
+                <div class="cs-count-card">
+                  <span class="cs-count-num" id="count-mins">00</span>
+                  <span class="cs-count-unit">MINS</span>
+                </div>
+                <span class="cs-count-colon">:</span>
+                <div class="cs-count-card">
+                  <span class="cs-count-num" id="count-secs">00</span>
+                  <span class="cs-count-unit">SECS</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="cs-sla-strip">
+              <div class="cs-sla-item">
+                <span class="cs-sla-val">99.99%</span>
+                <span class="cs-sla-lbl">Uptime SLA Architecture</span>
+              </div>
+              <div class="cs-sla-divider"></div>
+              <div class="cs-sla-item">
+                <span class="cs-sla-val">&lt; 850ms</span>
+                <span class="cs-sla-lbl">Transaction Latency</span>
+              </div>
+              <div class="cs-sla-divider"></div>
+              <div class="cs-sla-item">
+                <span class="cs-sla-val">Dual Failover</span>
+                <span class="cs-sla-lbl">Interswitch &amp; Monnify</span>
+              </div>
+              <div class="cs-sla-divider"></div>
+              <div class="cs-sla-item">
+                <span class="cs-sla-val">Integer-Kobo</span>
+                <span class="cs-sla-lbl">Zero-Drift Ledger</span>
+              </div>
+            </div>
+
+            <div class="cs-domains-section" id="services">
+              <div class="cs-section-header">
+                <span class="cs-section-tag">SERVICES CATALOG</span>
+                <h2 class="cs-section-title">Institutional Multi-Service Portfolio</h2>
+                <p class="cs-section-desc">Unified integer-kobo settlements with dual-provider automated failover routing.</p>
+              </div>
+
+              <div class="cs-cards-grid">
+                <div class="cs-feature-card">
+                  <div class="cs-feature-icon" style="color: #FFCC00;"><i class="fa-solid fa-mobile-screen-button"></i></div>
+                  <h3>Airtime &amp; Data Bundles</h3>
+                  <p>Real-time operator routing across MTN, Airtel, Glo, and 9mobile with intelligent phone prefix detection.</p>
+                  <div class="cs-card-badge">Instant Dispense</div>
+                </div>
+
+                <div class="cs-feature-card">
+                  <div class="cs-feature-icon" style="color: #10B981;"><i class="fa-solid fa-bolt-lightning"></i></div>
+                  <h3>Electricity STS Tokens</h3>
+                  <p>Direct DISCO integration dispensing 20-digit STS tokens and postpaid meter settlements in under 3 seconds.</p>
+                  <div class="cs-card-badge">12 DISCOs Live</div>
+                </div>
+
+                <div class="cs-feature-card">
+                  <div class="cs-feature-icon" style="color: #126BEB;"><i class="fa-solid fa-tv"></i></div>
+                  <h3>Cable TV Renewals</h3>
+                  <p>Real-time smartcard customer validation and instant bouquet provisioning for DStv, GOtv, and StarTimes.</p>
+                  <div class="cs-card-badge">Zero Lag</div>
+                </div>
+
+                <div class="cs-feature-card">
+                  <div class="cs-feature-icon" style="color: #8B5CF6;"><i class="fa-solid fa-graduation-cap"></i></div>
+                  <h3>Examination e-PINs</h3>
+                  <p>Wholesale distribution and candidate profile validation for JAMB UTME/DE, WAEC, NECO, and NABTEB.</p>
+                  <div class="cs-card-badge">Wholesale Catalog</div>
+                </div>
+
+                <div class="cs-feature-card cs-card-highlight">
+                  <div class="cs-feature-icon" style="color: #126BEB;"><i class="fa-solid fa-code"></i></div>
+                  <h3>Developer API &amp; Webhooks</h3>
+                  <p>HMAC-SHA256 signed webhooks, replay attack protection, idempotency locks, and sub-50ms roundtrip response.</p>
+                  <div class="cs-card-badge">Scalar API Spec</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DEVELOPER API SANDBOX QUICKSTART -->
+            <div class="cs-developer-section" id="developer">
+              <div class="cs-section-header">
+                <span class="cs-section-tag">DEVELOPER FIRST</span>
+                <h2 class="cs-section-title">Integrate in Minutes with Sub-Second Latency</h2>
+                <p class="cs-section-desc">Standardized RESTful JSON contracts with integer-kobo amounts, idempotency protection, and cryptographic HMAC signatures.</p>
+              </div>
+
+              <div class="cs-terminal-card">
+                <div class="cs-terminal-header">
+                  <div class="cs-terminal-dots">
+                    <span class="cs-dot red"></span>
+                    <span class="cs-dot yellow"></span>
+                    <span class="cs-dot green"></span>
+                  </div>
+                  <div class="cs-terminal-tabs">
+                    <button type="button" class="cs-term-tab active" data-lang="curl">cURL</button>
+                    <button type="button" class="cs-term-tab" data-lang="typescript">TypeScript</button>
+                    <button type="button" class="cs-term-tab" data-lang="python">Python</button>
+                  </div>
+                  <button type="button" class="cs-copy-code-btn" id="cs-copy-code-btn" title="Copy code snippet">
+                    <i class="fa-regular fa-copy"></i>
+                    <span id="cs-copy-text">Copy</span>
+                  </button>
+                </div>
+                <div class="cs-terminal-body">
+                  <pre class="cs-code-block active" id="code-curl"><code><span class="tok-comment"># 1. Vend instant mobile airtime with idempotency lock</span>
+<span class="tok-cmd">curl</span> -X POST https://api.baxato.com/api/v1/vas/airtime/vend \
+  -H <span class="tok-str">"Authorization: Bearer bx_live_9f83a2..."</span> \
+  -H <span class="tok-str">"Idempotency-Key: idem_9182374619"</span> \
+  -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{
+    "network": "MTN",
+    "phone": "08161437292",
+    "amountKobo": 100000
+  }'</span>
+
+<span class="tok-comment"># Response: 200 OK (824ms)</span>
+<span class="tok-comment"># {"status": "SUCCESSFUL", "transactionRef": "BX-AIR-0816-921", "balanceAfterKobo": 9900000}</span></code></pre>
+                  <pre class="cs-code-block" id="code-typescript" style="display: none;"><code><span class="tok-keyword">import</span> { BaxatoClient } <span class="tok-keyword">from</span> <span class="tok-str">'@baxato/sdk'</span>;
+
+<span class="tok-keyword">const</span> baxato = <span class="tok-keyword">new</span> <span class="tok-func">BaxatoClient</span>({
+  apiKey: process.env.BAXATO_API_KEY, <span class="tok-comment">// bx_live_...</span>
+});
+
+<span class="tok-comment">// Instant Airtime Vending with Integer-Kobo Precision</span>
+<span class="tok-keyword">const</span> receipt = <span class="tok-keyword">await</span> baxato.airtime.<span class="tok-func">vend</span>({
+  network: <span class="tok-str">'MTN'</span>,
+  phone: <span class="tok-str">'08161437292'</span>,
+  amountKobo: <span class="tok-num">100000</span>, <span class="tok-comment">// ₦1,000.00</span>
+  idempotencyKey: <span class="tok-str">'order_ref_817263'</span>,
+});
+
+console.<span class="tok-func">log</span>(<span class="tok-str">'Vended Successfully:'</span>, receipt.transactionRef);</code></pre>
+                  <pre class="cs-code-block" id="code-python" style="display: none;"><code><span class="tok-keyword">import</span> os
+<span class="tok-keyword">import</span> requests
+
+response = requests.<span class="tok-func">post</span>(
+    <span class="tok-str">"https://api.baxato.com/api/v1/vas/airtime/vend"</span>,
+    headers={
+        <span class="tok-str">"Authorization"</span>: f<span class="tok-str">"Bearer {os.getenv('BAXATO_API_KEY')}"</span>,
+        <span class="tok-str">"Idempotency-Key"</span>: <span class="tok-str">"order_py_91283"</span>,
+        <span class="tok-str">"Content-Type"</span>: <span class="tok-str">"application/json"</span>,
+    },
+    json={
+        <span class="tok-str">"network"</span>: <span class="tok-str">"MTN"</span>,
+        <span class="tok-str">"phone"</span>: <span class="tok-str">"08161437292"</span>,
+        <span class="tok-str">"amountKobo"</span>: <span class="tok-num">100000</span>,
+    }
+)
+print(response.json())</code></pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- CORE ARCHITECTURE HIGHLIGHTS -->
+            <div class="cs-architecture-section" id="architecture">
+              <div class="cs-section-header">
+                <span class="cs-section-tag">CORE ARCHITECTURE</span>
+                <h2 class="cs-section-title">Built For Industrial Reliability</h2>
+                <p class="cs-section-desc">Engineered from the ground up by XATO TECHNOLOGIES LIMITED for zero balance drift and uninterrupted service continuity.</p>
+              </div>
+
+              <div class="cs-arch-grid">
+                <div class="cs-arch-card">
+                  <div class="cs-arch-icon-wrap" style="color: #126BEB; background: rgba(18, 107, 235, 0.1);">
+                    <i class="fa-solid fa-arrows-split-up-and-left"></i>
+                  </div>
+                  <h3>Automated Dual Failover</h3>
+                  <p>Continuous dynamic latency and error rate telemetry between Interswitch and Monnify. If an upstream gateway degrades, requests shift in under 250ms with zero vendor disruption.</p>
+                  <ul class="cs-arch-list">
+                    <li><i class="fa-solid fa-check"></i> Sub-second heartbeat healthchecks</li>
+                    <li><i class="fa-solid fa-check"></i> Automatic circuit breaker trip &amp; recovery</li>
+                  </ul>
+                </div>
+
+                <div class="cs-arch-card">
+                  <div class="cs-arch-icon-wrap" style="color: #10B981; background: rgba(16, 185, 129, 0.1);">
+                    <i class="fa-solid fa-calculator"></i>
+                  </div>
+                  <h3>Integer-Kobo Zero-Sum Ledger</h3>
+                  <p>All monetary calculations are performed strictly in integer kobo using atomic database row locks. Zero floating-point rounding drifts, fully auditable double-entry accounting.</p>
+                  <ul class="cs-arch-list">
+                    <li><i class="fa-solid fa-check"></i> Zero float precision loss (₦1 = 100 kobo)</li>
+                    <li><i class="fa-solid fa-check"></i> ACID compliant row-level locking</li>
+                  </ul>
+                </div>
+
+                <div class="cs-arch-card">
+                  <div class="cs-arch-icon-wrap" style="color: #8B5CF6; background: rgba(139, 92, 246, 0.1);">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <h3>Cryptographic Security &amp; Webhooks</h3>
+                  <p>HMAC-SHA256 request signatures, strict 5-minute replay attack timestamp verification, AES-256 field-level token encryption, and automated exponential webhook retries.</p>
+                  <ul class="cs-arch-list">
+                    <li><i class="fa-solid fa-check"></i> Timing-safe HMAC signature verification</li>
+                    <li><i class="fa-solid fa-check"></i> Up to 5 exponential retry attempts</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- FAQ ACCORDION -->
+            <div class="cs-faq-section" id="faq">
+              <div class="cs-section-header">
+                <span class="cs-section-tag">FREQUENTLY ASKED QUESTIONS</span>
+                <h2 class="cs-section-title">Everything You Need to Know</h2>
+                <p class="cs-section-desc">Common questions regarding BAXATO V1 rollout, integration, and platform capabilities.</p>
+              </div>
+
+              <div class="cs-faq-container">
+                <div class="cs-faq-item">
+                  <button type="button" class="cs-faq-question">
+                    <span>When is BAXATO V1 launching into full production?</span>
+                    <i class="fa-solid fa-chevron-down cs-faq-chevron"></i>
+                  </button>
+                  <div class="cs-faq-answer">
+                    <p>BAXATO V1 is scheduled for general production launch as indicated by the live countdown clock. Early access whitelist merchants will be granted sandbox API credentials and discounted wholesale pilot pricing ahead of the public rollout.</p>
+                  </div>
+                </div>
+
+                <div class="cs-faq-item">
+                  <button type="button" class="cs-faq-question">
+                    <span>Who is the entity behind BAXATO?</span>
+                    <i class="fa-solid fa-chevron-down cs-faq-chevron"></i>
+                  </button>
+                  <div class="cs-faq-answer">
+                    <p>BAXATO is developed, owned, and operated exclusively by <strong>XATO TECHNOLOGIES LIMITED</strong>, a premier Nigerian enterprise technology and financial software firm.</p>
+                  </div>
+                </div>
+
+                <div class="cs-faq-item">
+                  <button type="button" class="cs-faq-question">
+                    <span>What services are available on BAXATO API?</span>
+                    <i class="fa-solid fa-chevron-down cs-faq-chevron"></i>
+                  </button>
+                  <div class="cs-faq-answer">
+                    <p>The platform supports 5 core domains: Mobile Airtime (MTN, Airtel, Glo, 9mobile), Mobile Data Bundles, Prepaid &amp; Postpaid Electricity STS Tokens across 12 DISCOs, Cable TV Renewals (DStv, GOtv, StarTimes), and Examination e-PINs (WAEC, NECO, JAMB, NABTEB).</p>
+                  </div>
+                </div>
+
+                <div class="cs-faq-item">
+                  <button type="button" class="cs-faq-question">
+                    <span>How can I test the API or explore the platform right now?</span>
+                    <i class="fa-solid fa-chevron-down cs-faq-chevron"></i>
+                  </button>
+                  <div class="cs-faq-answer">
+                    <p>You can click the <strong>"Console Preview"</strong> button at the top right of this page to launch the interactive live Sandbox Simulator, explore real-time airtime and data vending, generate test API keys, and test outbound webhook delivery simulations.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="cs-footer">
+          <div class="cs-footer-inner">
+            <div class="cs-footer-brand">
+              <span class="cs-brand-mark small">BX</span>
+              <div class="cs-footer-brand-text">
+                <span class="cs-footer-name">BAXATO</span>
+                <span class="cs-footer-tagline">An Enterprise Telecom &amp; Bill Platform by <strong>XATO TECHNOLOGIES LIMITED</strong></span>
+              </div>
+            </div>
+            <div class="cs-footer-links">
+              <a href="#services">Services</a>
+              <a href="#developer">Developer API</a>
+              <a href="#architecture">Architecture</a>
+              <a href="#faq">FAQ</a>
+              <a href="https://api.baxato.com/docs" target="_blank" rel="noopener noreferrer">Scalar API Docs</a>
+            </div>
+            <div class="cs-footer-right">
+              <span>&copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+
+      <!-- MERCHANT CONSOLE VIEW -->
+      <div id="merchant-console-view" style="display: none;">
+        <div class="console-back-banner">
+          <button id="back-to-home-btn" class="back-home-btn">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span>Return to Coming Soon Homepage</span>
+          </button>
+          <span class="preview-mode-tag">SANDBOX SIMULATOR &amp; DEVELOPER PREVIEW</span>
+        </div>
+
+        <!-- TOP NAVIGATION BAR -->
+        <header class="app-header">
+          <div class="header-container">
+            <div class="brand-group">
+              <div class="brand-logo">
+                <span class="brand-icon"><i class="fa-solid fa-bolt"></i></span>
+                <span class="brand-name">BAXATO</span>
+              </div>
+              <div class="pilot-badge">
+                <span class="pulse-dot"></span>
+                <span>XATO TECHNOLOGIES LIMITED</span>
+              </div>
             </div>
           </div>
 
@@ -1552,6 +1936,7 @@ if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) { /* 
         </div>
       </div>
     </div>
+  </div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
