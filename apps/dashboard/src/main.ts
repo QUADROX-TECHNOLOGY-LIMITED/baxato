@@ -3242,6 +3242,8 @@ function initComingSoon(): void {
 
 document.addEventListener('DOMContentLoaded', () => {
   initComingSoon();
-  new DashboardClient();
+  if (document.getElementById('merchant-console-view')) {
+    new DashboardClient();
+  }
 });
 
