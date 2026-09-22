@@ -3221,89 +3221,22 @@ function initComingSoon(): void {
 
     if (waitlistSubmitBtn) {
       waitlistSubmitBtn.setAttribute('disabled', 'true');
-      waitlistSubmitBtn.innerHTML = `<span>Securing Spot...</span> <i class="fa-solid fa-spinner fa-spin"></i>`;
+      waitlistSubmitBtn.innerText = 'Submitting...';
     }
 
     setTimeout(() => {
       if (waitlistSubmitBtn) {
         waitlistSubmitBtn.removeAttribute('disabled');
-        waitlistSubmitBtn.innerHTML = `<span>Spot Confirmed</span> <i class="fa-solid fa-check"></i>`;
+        waitlistSubmitBtn.innerText = 'Submitted';
       }
       if (waitlistFeedback) {
         waitlistFeedback.style.display = 'inline-flex';
         const feedbackText = document.getElementById('waitlist-feedback-text');
         if (feedbackText) {
-          feedbackText.innerText = `You're on the priority early-access whitelist as ${email}! We will reach out shortly.`;
+          feedbackText.innerText = "Thank you! We'll notify you as soon as we launch.";
         }
       }
-    }, 600);
-  });
-
-  const comingSoonView = document.getElementById('coming-soon-view');
-  const consoleView = document.getElementById('merchant-console-view');
-  const enterConsoleBtn = document.getElementById('enter-console-btn');
-  const backToHomeBtn = document.getElementById('back-to-home-btn');
-
-  enterConsoleBtn?.addEventListener('click', () => {
-    if (comingSoonView) comingSoonView.style.display = 'none';
-    if (consoleView) consoleView.style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  backToHomeBtn?.addEventListener('click', () => {
-    if (consoleView) consoleView.style.display = 'none';
-    if (comingSoonView) comingSoonView.style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  const termTabs = document.querySelectorAll<HTMLButtonElement>('.cs-term-tab');
-  const codeCurl = document.getElementById('code-curl');
-  const codeTs = document.getElementById('code-typescript');
-  const codePy = document.getElementById('code-python');
-
-  termTabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      termTabs.forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-
-      const lang = tab.getAttribute('data-lang');
-      if (codeCurl) codeCurl.style.display = lang === 'curl' ? 'block' : 'none';
-      if (codeTs) codeTs.style.display = lang === 'typescript' ? 'block' : 'none';
-      if (codePy) codePy.style.display = lang === 'python' ? 'block' : 'none';
-    });
-  });
-
-  const copyCodeBtn = document.getElementById('cs-copy-code-btn');
-  const copyText = document.getElementById('cs-copy-text');
-
-  copyCodeBtn?.addEventListener('click', async () => {
-    const activeCodeEl = document.querySelector<HTMLElement>(
-      '.cs-code-block[style*="display: block"], .cs-code-block.active'
-    );
-    const textToCopy = activeCodeEl?.innerText || '';
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      if (copyText) copyText.innerText = 'Copied!';
-      copyCodeBtn.classList.add('copied');
-      setTimeout(() => {
-        if (copyText) copyText.innerText = 'Copy';
-        copyCodeBtn.classList.remove('copied');
-      }, 2000);
-    } catch {
-      if (copyText) copyText.innerText = 'Copied!';
-      setTimeout(() => {
-        if (copyText) copyText.innerText = 'Copy';
-      }, 2000);
-    }
-  });
-
-  const faqQuestions = document.querySelectorAll<HTMLButtonElement>('.cs-faq-question');
-  faqQuestions.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const item = btn.closest('.cs-faq-item');
-      item?.classList.toggle('open');
-    });
+    }, 400);
   });
 }
 
