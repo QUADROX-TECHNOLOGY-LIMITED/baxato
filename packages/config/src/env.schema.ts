@@ -9,6 +9,7 @@ export const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   API_PREFIX: z.string().default('/v1'),
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:4000'),
+  DASHBOARD_URL: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),

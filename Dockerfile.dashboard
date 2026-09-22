@@ -26,8 +26,9 @@ COPY packages/common ./packages/common
 COPY packages/config ./packages/config
 COPY apps/dashboard ./apps/dashboard
 
-# Compile TypeScript common package & Next.js standalone build
+# Compile packages and Next.js standalone build
 RUN pnpm --filter @baxato/common build
+RUN pnpm --filter @baxato/config build
 ENV NEXT_STANDALONE="true"
 ENV NODE_ENV="production"
 RUN pnpm --filter @baxato/dashboard build
@@ -44,16 +45,18 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy standalone output and public static files
-COPY --from=builder /app/apps/dashboard/public ./apps/dashboard/public
+# Copy standalone output, static assets, and public files with proper ownership
+COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/public ./apps/dashboard/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/dashboard/.next/static ./.next/static
 
 USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1
 
 CMD ["node", "apps/dashboard/server.js"]
