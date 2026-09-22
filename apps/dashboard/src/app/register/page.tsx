@@ -54,7 +54,6 @@ export default function RegisterPage() {
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
   const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
   const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
-  const [emailDevCode, setEmailDevCode] = useState<string | null>(null);
   const [emailCountdown, setEmailCountdown] = useState(0);
 
   // WhatsApp Phone In-Flow Verification States
@@ -64,10 +63,7 @@ export default function RegisterPage() {
   const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
   const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
   const [phoneOtpError, setPhoneOtpError] = useState<string | null>(null);
-  const [phoneDevCode, setPhoneDevCode] = useState<string | null>(null);
   const [phoneCountdown, setPhoneCountdown] = useState(0);
-
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   // Email countdown timer
   useEffect(() => {
@@ -154,7 +150,7 @@ export default function RegisterPage() {
 
     setIsSendingEmailOtp(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/auth/send-email-otp`, {
+      const res = await fetch('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: formData.email.toLowerCase().trim() }),
@@ -162,17 +158,11 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || 'Failed to send verification code.');
       setEmailOtpSent(true);
-      setEmailCountdown(45);
-      if (data.data?.devCode) {
-        setEmailDevCode(data.data.devCode);
-        setEmailOtp(data.data.devCode); // Pre-fill in dev mode
-      }
+      setEmailCountdown(60);
+      setEmailOtp(''); // Field remains strictly empty for user entry
     } catch (err: unknown) {
-      // In local dev without API server, simulate delivery so user can proceed
-      setEmailOtpSent(true);
-      setEmailCountdown(45);
-      setEmailDevCode('123456');
-      setEmailOtp('123456');
+      const msg = err instanceof Error ? err.message : 'Unable to dispatch verification code.';
+      setEmailOtpError(msg);
     } finally {
       setIsSendingEmailOtp(false);
     }
@@ -182,13 +172,13 @@ export default function RegisterPage() {
   const handleVerifyEmailOtp = async () => {
     setEmailOtpError(null);
     if (emailOtp.trim().length < 6) {
-      setEmailOtpError('Please enter the full 6-digit code.');
+      setEmailOtpError('Please enter the full 6-digit verification code.');
       return;
     }
 
     setIsVerifyingEmailOtp(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/auth/verify-email-otp`, {
+      const res = await fetch('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,14 +190,10 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(data.error?.message || 'Invalid verification code.');
       setIsEmailVerified(true);
       setEmailOtpSent(false);
+      setEmailOtp('');
     } catch (err: unknown) {
-      // In local dev simulation fallback
-      if (emailOtp.trim() === '123456' || emailOtp.trim() === emailDevCode) {
-        setIsEmailVerified(true);
-        setEmailOtpSent(false);
-      } else {
-        setEmailOtpError('Invalid code. Please enter 123456 for testing.');
-      }
+      const msg = err instanceof Error ? err.message : 'Invalid code. Please check your email.';
+      setEmailOtpError(msg);
     } finally {
       setIsVerifyingEmailOtp(false);
     }
@@ -223,7 +209,7 @@ export default function RegisterPage() {
 
     setIsSendingPhoneOtp(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/auth/send-phone-otp`, {
+      const res = await fetch('/api/auth/send-phone-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
@@ -231,17 +217,11 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || 'Failed to send WhatsApp code.');
       setPhoneOtpSent(true);
-      setPhoneCountdown(45);
-      if (data.data?.devCode) {
-        setPhoneDevCode(data.data.devCode);
-        setPhoneOtp(data.data.devCode); // Pre-fill in dev mode
-      }
+      setPhoneCountdown(60);
+      setPhoneOtp(''); // Field remains strictly empty for user entry
     } catch (err: unknown) {
-      // In local dev simulation fallback
-      setPhoneOtpSent(true);
-      setPhoneCountdown(45);
-      setPhoneDevCode('123456');
-      setPhoneOtp('123456');
+      const msg = err instanceof Error ? err.message : 'Unable to dispatch WhatsApp code.';
+      setPhoneOtpError(msg);
     } finally {
       setIsSendingPhoneOtp(false);
     }
@@ -251,13 +231,13 @@ export default function RegisterPage() {
   const handleVerifyPhoneOtp = async () => {
     setPhoneOtpError(null);
     if (phoneOtp.trim().length < 6) {
-      setPhoneOtpError('Please enter the full 6-digit code.');
+      setPhoneOtpError('Please enter the full 6-digit WhatsApp code.');
       return;
     }
 
     setIsVerifyingPhoneOtp(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/auth/verify-phone-otp`, {
+      const res = await fetch('/api/auth/verify-phone-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,14 +249,10 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(data.error?.message || 'Invalid WhatsApp code.');
       setIsPhoneVerified(true);
       setPhoneOtpSent(false);
+      setPhoneOtp('');
     } catch (err: unknown) {
-      // In local dev simulation fallback
-      if (phoneOtp.trim() === '123456' || phoneOtp.trim() === phoneDevCode) {
-        setIsPhoneVerified(true);
-        setPhoneOtpSent(false);
-      } else {
-        setPhoneOtpError('Invalid code. Please enter 123456 for testing.');
-      }
+      const msg = err instanceof Error ? err.message : 'Invalid code. Please check your message.';
+      setPhoneOtpError(msg);
     } finally {
       setIsVerifyingPhoneOtp(false);
     }
@@ -318,7 +294,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/auth/register`, {
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -352,7 +328,22 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-white dark:bg-[#070D18] transition-colors duration-200">
+    <div className="relative min-h-screen flex flex-col lg:flex-row bg-[#060D1A] lg:bg-white lg:dark:bg-[#070D18] transition-colors duration-200">
+      {/* ======================================================== */}
+      {/* MOBILE BACKGROUND: 3D Fintech Backdrop visible on mobile */}
+      {/* ======================================================== */}
+      <div className="lg:hidden fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <Image
+          src="/fintech-bg.jpg"
+          alt="BAXATO Fintech Backdrop"
+          fill
+          priority
+          className="object-cover opacity-50 dark:opacity-40 scale-105"
+        />
+        {/* Subtle deep navy gradient for high contrast */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#060D1A]/90 via-[#060D1A]/80 to-[#060D1A]/95 dark:from-[#040810]/95 dark:via-[#060D1A]/85 dark:to-[#040810]/98" />
+      </div>
+
       {/* ======================================================== */}
       {/* LEFT SIDE: Brand Showcase with Generated 3D Asset (Desktop) */}
       {/* ======================================================== */}
@@ -451,11 +442,11 @@ export default function RegisterPage() {
       {/* ======================================================== */}
       {/* RIGHT SIDE: Authentication / Registration Surface        */}
       {/* ======================================================== */}
-      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-12 xl:p-16 bg-white dark:bg-[#070D18] overflow-y-auto min-h-screen">
-        <div className="w-full max-w-md mx-auto">
-          {/* Mobile Top Branding */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800">
+      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 xl:p-16 relative z-10 overflow-y-auto min-h-screen">
+        <div className="w-full max-w-lg mx-auto py-4 sm:py-8">
+          {/* Mobile Top Branding (Sits on top of 3D Backdrop) */}
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
+            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-white/10 backdrop-blur-md p-1">
               <Image
                 src="/baxato-logo.jpg"
                 alt="BAXATO Logo"
@@ -464,10 +455,13 @@ export default function RegisterPage() {
                 className="object-contain"
               />
             </div>
-            <span className="font-extrabold text-2xl tracking-tight text-[#0B1220] dark:text-white">
+            <span className="font-extrabold text-2xl tracking-tight text-white drop-shadow-md">
               BAXATO
             </span>
           </div>
+
+          {/* Elevated Surface on Mobile, Clean Seamless on Desktop */}
+          <div className="bg-white/95 dark:bg-[#0A1220]/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-3xl shadow-2xl p-6 sm:p-10 lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:shadow-none lg:p-0">
 
           <AnimatePresence mode="wait">
             {isClerkConfigured ? (
@@ -679,9 +673,9 @@ export default function RegisterPage() {
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-2.5 p-4 rounded-xl bg-slate-50 dark:bg-[#0A1220] border-2 border-blue-200 dark:border-blue-900/50 overflow-hidden"
                         >
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Enter 6-digit email code
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              Verify Email Address
                             </span>
                             <button
                               type="button"
@@ -692,14 +686,19 @@ export default function RegisterPage() {
                             </button>
                           </div>
 
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
+                            Enter the 6-digit verification code sent to{' '}
+                            <strong className="text-slate-800 dark:text-slate-200">{formData.email}</strong>.
+                          </p>
+
                           <div className="flex gap-2">
                             <input
                               type="text"
                               maxLength={6}
-                              placeholder="123456"
+                              placeholder="• • • • • •"
                               value={emailOtp}
                               onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
-                              className="flex-1 px-4 py-2.5 text-center tracking-[0.3em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
+                              className="flex-1 px-4 py-2.5 text-center tracking-[0.35em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
                             />
                             <button
                               type="button"
@@ -707,7 +706,7 @@ export default function RegisterPage() {
                               disabled={isVerifyingEmailOtp || emailOtp.length < 6}
                               className="px-5 py-2.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-colors disabled:opacity-40"
                             >
-                              {isVerifyingEmailOtp ? 'Checking...' : 'Confirm'}
+                              {isVerifyingEmailOtp ? 'Verifying...' : 'Confirm'}
                             </button>
                           </div>
 
@@ -717,10 +716,10 @@ export default function RegisterPage() {
                             </p>
                           )}
 
-                          <div className="flex justify-between items-center mt-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                          <div className="flex justify-between items-center mt-3 text-[11px] text-slate-500 dark:text-slate-400">
                             <span>
                               {emailCountdown > 0 ? (
-                                `Resend in ${emailCountdown}s`
+                                `Resend code in ${emailCountdown}s`
                               ) : (
                                 <button
                                   type="button"
@@ -731,9 +730,6 @@ export default function RegisterPage() {
                                 </button>
                               )}
                             </span>
-                            {emailDevCode && (
-                              <span className="text-slate-400 font-mono">Dev: {emailDevCode}</span>
-                            )}
                           </div>
                         </motion.div>
                       )}
@@ -806,9 +802,9 @@ export default function RegisterPage() {
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-2.5 p-4 rounded-xl bg-slate-50 dark:bg-[#0A1220] border-2 border-blue-200 dark:border-blue-900/50 overflow-hidden"
                         >
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Enter 6-digit WhatsApp code
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              Verify WhatsApp Number
                             </span>
                             <button
                               type="button"
@@ -819,14 +815,19 @@ export default function RegisterPage() {
                             </button>
                           </div>
 
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
+                            Enter the 6-digit WhatsApp code sent to{' '}
+                            <strong className="text-slate-800 dark:text-slate-200">+234{formData.phoneNumber}</strong>.
+                          </p>
+
                           <div className="flex gap-2">
                             <input
                               type="text"
                               maxLength={6}
-                              placeholder="123456"
+                              placeholder="• • • • • •"
                               value={phoneOtp}
                               onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
-                              className="flex-1 px-4 py-2.5 text-center tracking-[0.3em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
+                              className="flex-1 px-4 py-2.5 text-center tracking-[0.35em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
                             />
                             <button
                               type="button"
@@ -834,7 +835,7 @@ export default function RegisterPage() {
                               disabled={isVerifyingPhoneOtp || phoneOtp.length < 6}
                               className="px-5 py-2.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-colors disabled:opacity-40"
                             >
-                              {isVerifyingPhoneOtp ? 'Checking...' : 'Confirm'}
+                              {isVerifyingPhoneOtp ? 'Verifying...' : 'Confirm'}
                             </button>
                           </div>
 
@@ -844,10 +845,10 @@ export default function RegisterPage() {
                             </p>
                           )}
 
-                          <div className="flex justify-between items-center mt-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                          <div className="flex justify-between items-center mt-3 text-[11px] text-slate-500 dark:text-slate-400">
                             <span>
                               {phoneCountdown > 0 ? (
-                                `Resend in ${phoneCountdown}s`
+                                `Resend code in ${phoneCountdown}s`
                               ) : (
                                 <button
                                   type="button"
@@ -858,9 +859,6 @@ export default function RegisterPage() {
                                 </button>
                               )}
                             </span>
-                            {phoneDevCode && (
-                              <span className="text-slate-400 font-mono">Dev: {phoneDevCode}</span>
-                            )}
                           </div>
                         </motion.div>
                       )}
@@ -1079,6 +1077,7 @@ export default function RegisterPage() {
               </motion.div>
             )}
           </AnimatePresence>
+          </div>
         </div>
       </section>
     </div>

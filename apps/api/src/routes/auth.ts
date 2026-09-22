@@ -175,6 +175,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const result = await whatsAppService.sendOtp(parseResult.data.phoneNumber);
     const activeCode = whatsAppService.getActiveOtpForTesting(parseResult.data.phoneNumber);
+    if (env.NODE_ENV !== 'production') {
+      request.log.info({ phone: parseResult.data.phoneNumber, otp: activeCode }, '[DEV] WhatsApp OTP code dispatched');
+    }
+
     return reply.status(200).send(
       createSuccessResponse(
         {
@@ -182,7 +186,6 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           message: result.success
             ? 'Verification code sent to WhatsApp successfully.'
             : 'Could not send WhatsApp message. Please try again.',
-          devCode: env.NODE_ENV !== 'production' ? activeCode : undefined,
         },
         request.id,
       ),
@@ -237,6 +240,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const result = await zeptoMailService.sendOtp(body.email, body.name);
     const activeCode = zeptoMailService.getActiveOtp(body.email);
+    if (env.NODE_ENV !== 'production') {
+      request.log.info({ email: body.email, otp: activeCode }, '[DEV] Email OTP code dispatched');
+    }
 
     return reply.status(200).send(
       createSuccessResponse(
@@ -245,7 +251,6 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           message: result.success
             ? 'Verification code sent to your email.'
             : 'Could not dispatch email. Please check your address.',
-          devCode: env.NODE_ENV !== 'production' ? activeCode : undefined,
         },
         request.id,
       ),
