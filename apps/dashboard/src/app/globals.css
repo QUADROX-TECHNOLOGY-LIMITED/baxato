@@ -16,12 +16,33 @@
   --color-link: #126BEB;
 }
 
+.dark {
+  --bg-primary: #070D18;
+  --bg-navbar: #0A1220;
+  --bg-card: #0A1220;
+  --border-color: #1E2D44;
+  --text-heading: #F8FAFC;
+  --text-body: #94A3B8;
+  --color-brand: #1677FF;
+  --color-brand-hover: #0B63CE;
+  --color-button: #1677FF;
+  --color-button-hover: #0B63CE;
+  --color-link: #1677FF;
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-body);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Enforce 16px on mobile inputs to prevent iOS Safari auto-zoom */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Custom subtle scrollbar */

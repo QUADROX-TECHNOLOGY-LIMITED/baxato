@@ -173,6 +173,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = await whatsAppService.sendOtp(parseResult.data.phoneNumber);
+    const activeCode = whatsAppService.getActiveOtpForTesting(parseResult.data.phoneNumber);
     return reply.status(200).send(
       createSuccessResponse(
         {
@@ -180,6 +181,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           message: result.success
             ? 'Verification code sent to WhatsApp successfully.'
             : 'Could not send WhatsApp message. Please try again.',
+          devCode: env.NODE_ENV !== 'production' ? activeCode : undefined,
         },
         request.id,
       ),
@@ -187,9 +189,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   /**
-   * POST /auth/verify-phone
+   * POST /auth/verify-phone & POST /auth/verify-phone-otp
    */
-  fastify.post('/verify-phone', async (request, reply) => {
+  const handleVerifyPhone = async (request: any, reply: any) => {
     const parseResult = verifyPhoneOtpSchema.safeParse(request.body);
     if (!parseResult.success) {
       throw new ValidationError(parseResult.error.errors[0]?.message || 'Invalid OTP payload');
@@ -218,7 +220,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         request.id,
       ),
     );
-  });
+  };
+
+  fastify.post('/verify-phone', handleVerifyPhone);
+  fastify.post('/verify-phone-otp', handleVerifyPhone);
 
   /**
    * POST /auth/send-email-otp
@@ -230,6 +235,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = await zeptoMailService.sendOtp(body.email, body.name);
+    const activeCode = zeptoMailService.getActiveOtp(body.email);
+
     return reply.status(200).send(
       createSuccessResponse(
         {
@@ -237,6 +244,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           message: result.success
             ? 'Verification code sent to your email.'
             : 'Could not dispatch email. Please check your address.',
+          devCode: env.NODE_ENV !== 'production' ? activeCode : undefined,
         },
         request.id,
       ),
@@ -267,6 +275,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       ),
     );
   });
+
+
 
   /**
    * POST /auth/login

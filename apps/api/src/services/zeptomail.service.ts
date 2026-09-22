@@ -100,6 +100,13 @@ export class ZeptoMailService {
   }
 
   /**
+   * Helper to retrieve active OTP for testing or dev mode
+   */
+  public getActiveOtp(email: string): string | undefined {
+    return this.otpStore.get(email.toLowerCase().trim())?.code;
+  }
+
+  /**
    * Dispatches email OTP code.
    */
   public async sendOtp(email: string, name?: string): Promise<{ success: boolean; error?: string }> {
