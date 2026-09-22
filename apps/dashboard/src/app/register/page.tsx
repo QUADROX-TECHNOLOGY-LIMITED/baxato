@@ -4,10 +4,9 @@ import { useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, Check, Send } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 import { nigeriaStates, nigeriaStatesList } from '@baxato/common';
 import SearchableSelect from '@/components/SearchableSelect';
-import ThemeToggle from '@/components/ThemeToggle';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -29,22 +28,6 @@ export default function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
 
-  // Email verification state
-  const [emailOtpSent, setEmailOtpSent] = useState(false);
-  const [emailOtp, setEmailOtp] = useState('');
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
-  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
-  const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
-
-  // WhatsApp verification state
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-  const [phoneOtp, setPhoneOtp] = useState('');
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
-  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
-  const [phoneOtpError, setPhoneOtpError] = useState<string | null>(null);
-
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   // Available LGAs dynamically filtered by the selected State
@@ -57,150 +40,46 @@ export default function RegisterPage() {
     setFormData((prev) => ({
       ...prev,
       state,
-      lga: '',
+      lga: '', // Reset LGA when state changes
     }));
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const cleaned = e.target.value.replace(/\D/g, '').slice(0, 11);
     setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
-    if (isPhoneVerified) setIsPhoneVerified(false);
-    if (phoneOtpSent) setPhoneOtpSent(false);
-  };
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({ ...prev, email: e.target.value }));
-    if (isEmailVerified) setIsEmailVerified(false);
-    if (emailOtpSent) setEmailOtpSent(false);
   };
 
   // Password Strength Calculation
   const passwordStrength = useMemo(() => {
     const pwd = formData.password;
-    if (!pwd) return { score: 0, label: '', color: '', percent: 0 };
+    if (!pwd) return { score: 0, label: '', percent: 0, color: '' };
     let score = 0;
     if (pwd.length >= 8) score += 1;
-    if (pwd.length >= 12) score += 1;
-    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score += 1;
-    if (/\d/.test(pwd)) score += 1;
-    if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
+    if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score += 1;
+    if (/\d/.test(pwd) || /[^A-Za-z0-9]/.test(pwd)) score += 1;
 
-    if (score <= 2) {
-      return { score: 1, label: 'Weak', color: 'bg-red-500', text: 'text-red-500', percent: 33 };
-    } else if (score <= 3) {
-      return { score: 2, label: 'Moderate', color: 'bg-amber-500', text: 'text-amber-500', percent: 66 };
-    } else {
-      return { score: 3, label: 'Strong', color: 'bg-emerald-500', text: 'text-emerald-500', percent: 100 };
-    }
+    if (score === 1) return { score: 1, label: 'Weak', percent: 33, color: 'bg-red-500' };
+    if (score === 2) return { score: 2, label: 'Moderate', percent: 66, color: 'bg-amber-500' };
+    return { score: 3, label: 'Strong', percent: 100, color: 'bg-emerald-600' };
   }, [formData.password]);
 
-  // Trigger Email OTP Send
-  const handleSendEmailOtp = async () => {
-    setEmailOtpError(null);
-    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setEmailOtpError('Enter a valid email address first.');
-      return;
-    }
+  const isValidEmail = useMemo(() => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
+  }, [formData.email]);
 
-    setIsSendingEmailOtp(true);
-    try {
-      const res = await fetch(`${apiBaseUrl}/auth/send-email-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email.toLowerCase().trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Failed to send verification code.');
-      setEmailOtpSent(true);
-    } catch (err: unknown) {
-      setEmailOtpError(err instanceof Error ? err.message : 'Could not send code');
-    } finally {
-      setIsSendingEmailOtp(false);
-    }
-  };
-
-  // Verify Email OTP Code
-  const handleVerifyEmailOtp = async () => {
-    setEmailOtpError(null);
-    if (emailOtp.length < 6) {
-      setEmailOtpError('Enter the 6-digit code.');
-      return;
-    }
-
-    setIsVerifyingEmailOtp(true);
-    try {
-      const res = await fetch(`${apiBaseUrl}/auth/verify-email-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email.toLowerCase().trim(),
-          otp: emailOtp.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Invalid code.');
-      setIsEmailVerified(true);
-      setEmailOtpSent(false);
-    } catch (err: unknown) {
-      setEmailOtpError(err instanceof Error ? err.message : 'Verification failed');
-    } finally {
-      setIsVerifyingEmailOtp(false);
-    }
-  };
-
-  // Trigger WhatsApp OTP Send
-  const handleSendPhoneOtp = async () => {
-    setPhoneOtpError(null);
-    if (formData.phoneNumber.length < 10) {
-      setPhoneOtpError('Enter a valid phone number (at least 10 digits).');
-      return;
-    }
-
-    setIsSendingPhoneOtp(true);
-    try {
-      const res = await fetch(`${apiBaseUrl}/auth/send-phone-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Failed to send WhatsApp code.');
-      setPhoneOtpSent(true);
-    } catch (err: unknown) {
-      setPhoneOtpError(err instanceof Error ? err.message : 'Could not dispatch code');
-    } finally {
-      setIsSendingPhoneOtp(false);
-    }
-  };
-
-  // Verify WhatsApp OTP Code
-  const handleVerifyPhoneOtp = async () => {
-    setPhoneOtpError(null);
-    if (phoneOtp.length < 6) {
-      setPhoneOtpError('Enter the 6-digit code.');
-      return;
-    }
-
-    setIsVerifyingPhoneOtp(true);
-    try {
-      const res = await fetch(`${apiBaseUrl}/auth/verify-phone`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber: formData.phoneNumber,
-          otp: phoneOtp.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Invalid code.');
-      setIsPhoneVerified(true);
-      setPhoneOtpSent(false);
-    } catch (err: unknown) {
-      setPhoneOtpError(err instanceof Error ? err.message : 'Verification failed');
-    } finally {
-      setIsVerifyingPhoneOtp(false);
-    }
-  };
+  const isFormValid = useMemo(() => {
+    return (
+      formData.firstName.trim().length > 0 &&
+      formData.lastName.trim().length > 0 &&
+      isValidEmail &&
+      formData.phoneNumber.length >= 10 &&
+      formData.businessName.trim().length > 0 &&
+      formData.state.length > 0 &&
+      formData.lga.length > 0 &&
+      formData.password.length >= 8 &&
+      formData.password === formData.confirmPassword
+    );
+  }, [formData, isValidEmail]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,16 +90,16 @@ export default function RegisterPage() {
       setErrorMessage('Please provide both first and last name.');
       return;
     }
-    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setErrorMessage('Please provide a valid email address.');
+    if (!formData.email.trim() || !isValidEmail) {
+      setErrorMessage('Please enter a valid work email address.');
       return;
     }
     if (formData.phoneNumber.length < 10) {
-      setErrorMessage('Please enter a valid WhatsApp number (at least 10 digits).');
+      setErrorMessage('Please enter a valid WhatsApp phone number (at least 10 digits).');
       return;
     }
     if (!formData.businessName.trim()) {
-      setErrorMessage('Please provide your business name.');
+      setErrorMessage('Please provide your registered business or enterprise name.');
       return;
     }
     if (!formData.state) {
@@ -232,7 +111,7 @@ export default function RegisterPage() {
       return;
     }
     if (formData.password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters long.');
+      setErrorMessage('Password must be at least 8 characters.');
       return;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -274,44 +153,49 @@ export default function RegisterPage() {
     }
   };
 
-  const isPasswordMismatch = formData.confirmPassword.length > 0 && formData.password !== formData.confirmPassword;
+  const inputStyle =
+    'w-full bg-white border-2 border-stone-200 rounded-xl px-4 py-3.5 text-stone-900 font-medium placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors text-sm';
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#07111F] flex flex-col justify-between transition-colors duration-200">
-      {/* Top Navbar */}
-      <header className="w-full border-b border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#0B1728] px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-[#E2E8F0] dark:border-[#1D3048] shadow-sm">
-            <Image
-              src="/baxato-logo.jpg"
-              alt="BAXATO Logo"
-              fill
-              priority
-              className="object-contain"
-            />
-          </div>
-          <span className="font-extrabold text-xl tracking-tight text-[#0B1220] dark:text-[#F8FAFC]">
-            BAXATO
-          </span>
-        </Link>
+    <main className="min-h-screen selection:bg-amber-200 selection:text-stone-900 relative overflow-x-hidden font-sans bg-[#FAFAF9] text-stone-900 flex flex-col justify-between">
+      {/* Warm Ambient Glow Aura */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-amber-500/5 rounded-[100%] blur-[120px] pointer-events-none" />
 
-        <div className="flex items-center gap-4">
-          <span className="hidden sm:inline text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Already registered?{' '}
+      {/* Slim Top Navigation Header */}
+      <header className="sticky top-0 inset-x-0 z-40 border-b border-stone-200 bg-white/95 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-stone-200">
+              <Image
+                src="/baxato-logo.jpg"
+                alt="BAXATO Logo"
+                fill
+                priority
+                className="object-contain"
+              />
+            </div>
+            <span className="font-black text-stone-900 text-lg uppercase tracking-[0.2em]">
+              BAXATO
+            </span>
+          </Link>
+
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-xs font-bold text-stone-500 uppercase tracking-wider">
+              Already registered?
+            </span>
             <Link
               href="/login"
-              className="text-[#126BEB] dark:text-[#1677FF] font-semibold hover:underline"
+              className="text-[11px] uppercase tracking-[0.15em] font-bold text-stone-900 border-2 border-stone-900 px-5 py-2 rounded-full hover:bg-stone-900 hover:text-white transition-colors"
             >
               Sign In
             </Link>
-          </span>
-          <ThemeToggle />
+          </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-xl">
+      {/* Main Registration Content */}
+      <section className="flex-1 flex items-center justify-center px-4 py-12 sm:px-6 z-10">
+        <div className="w-full max-w-xl mx-auto">
           <AnimatePresence mode="wait">
             {isRegistered ? (
               /* Success Confirmation Card */
@@ -320,52 +204,55 @@ export default function RegisterPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white dark:bg-[#101F33] border border-[#E2E8F0] dark:border-[#1D3048] rounded-2xl p-8 sm:p-10 shadow-xl text-center"
+                transition={{ duration: 0.3 }}
+                className="bg-white border-2 border-stone-200 rounded-3xl p-8 sm:p-12 shadow-xl shadow-stone-900/5 text-center"
               >
-                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-200 dark:border-emerald-800">
+                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-amber-200 shadow-sm">
                   <CheckCircle2 className="w-9 h-9" />
                 </div>
 
-                <h2 className="text-2xl font-bold text-[#0B1220] dark:text-[#F8FAFC] mb-2 tracking-tight">
-                  Registration Successful
+                <p className="text-[10px] text-stone-500 uppercase tracking-[0.2em] font-black mb-2">
+                  Account Provisioned
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-black text-stone-900 uppercase tracking-[0.1em] mb-3">
+                  Registration Complete
                 </h2>
 
-                <p className="text-sm text-[#526173] dark:text-[#A8B5C7] mb-6 leading-relaxed">
-                  Your merchant account for{' '}
-                  <span className="font-semibold text-[#0B1220] dark:text-[#F8FAFC]">{formData.businessName}</span>{' '}
-                  has been created successfully.
+                <p className="text-sm text-stone-600 mb-8 leading-relaxed max-w-md mx-auto">
+                  Your merchant enterprise account for{' '}
+                  <strong className="text-stone-900 font-bold">{formData.businessName}</strong> has
+                  been initialized.
                 </p>
 
-                <div className="bg-slate-50 dark:bg-[#0B1728] rounded-xl p-4 border border-[#E2E8F0] dark:border-[#1D3048] text-xs text-slate-500 dark:text-slate-400 mb-8 flex items-center gap-3 text-left">
-                  <ShieldCheck className="w-5 h-5 text-[#126BEB] dark:text-[#1677FF] shrink-0" />
+                <div className="bg-amber-50/70 border-l-4 border-amber-500 rounded-r-xl p-4 text-xs text-stone-700 mb-8 text-left flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>
-                    Main wallet and commission wallet provisioned. You can proceed directly to sign in.
+                    Your secure merchant wallet has been initialized. You may now proceed directly
+                    to sign in to your merchant dashboard.
                   </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Link
-                    href="/login"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] dark:bg-[#1677FF] dark:hover:bg-[#0B63CE] text-white font-medium text-sm transition-colors shadow-sm"
-                  >
-                    Proceed to Sign In
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
+                <Link
+                  href="/login"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-stone-900 text-white font-bold py-4 px-8 uppercase tracking-[0.15em] text-sm hover:bg-amber-600 transition-all duration-300 shadow-lg shadow-stone-900/10 active:scale-[0.98]"
+                >
+                  Proceed to Sign In
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
               </motion.div>
             ) : (
               /* Registration Form Card */
               <motion.div
                 key="register-card"
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25 }}
-                className="bg-white dark:bg-[#101F33] border border-[#E2E8F0] dark:border-[#1D3048] rounded-2xl p-6 sm:p-8 shadow-xl"
+                transition={{ duration: 0.4 }}
+                className="bg-white border-2 border-stone-200 rounded-3xl p-6 sm:p-10 shadow-xl shadow-stone-900/5"
               >
                 {/* Brand Header */}
                 <div className="text-center mb-8">
-                  <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-[#F8FAFC] dark:bg-[#0B1728] border border-[#E2E8F0] dark:border-[#1D3048] mb-4 shadow-sm">
-                    <div className="relative w-12 h-12 rounded-xl overflow-hidden">
+                  <div className="w-14 h-14 mx-auto rounded-full border-2 border-stone-200 p-2.5 bg-white flex items-center justify-center mb-4 shadow-sm">
+                    <div className="relative w-full h-full">
                       <Image
                         src="/baxato-logo.jpg"
                         alt="BAXATO Logo"
@@ -375,17 +262,32 @@ export default function RegisterPage() {
                       />
                     </div>
                   </div>
-                  <h1 className="text-2xl font-bold tracking-tight text-[#0B1220] dark:text-[#F8FAFC]">
-                    Create your BAXATO account
+                  <h1 className="text-2xl sm:text-3xl font-black text-stone-900 uppercase tracking-[0.1em]">
+                    Merchant Registration
                   </h1>
+                  <p className="text-[11px] text-stone-500 uppercase tracking-[0.2em] font-bold mt-2">
+                    Create your enterprise BAXATO account
+                  </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Name Fields: First Name and Last Name */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Error Banner */}
+                {errorMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 text-xs font-semibold flex items-center gap-3 mb-6"
+                  >
+                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                    <span>{errorMessage}</span>
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Name Fields: First Name & Last Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                        First Name <span className="text-red-500">*</span>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        First Name <span className="text-amber-600">*</span>
                       </label>
                       <input
                         type="text"
@@ -393,12 +295,12 @@ export default function RegisterPage() {
                         placeholder="e.g. John"
                         value={formData.firstName}
                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] focus:ring-2 focus:ring-[#126BEB]/10 transition-all"
+                        className={inputStyle}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                        Last Name <span className="text-red-500">*</span>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        Last Name <span className="text-amber-600">*</span>
                       </label>
                       <input
                         type="text"
@@ -406,328 +308,226 @@ export default function RegisterPage() {
                         placeholder="e.g. Doe"
                         value={formData.lastName}
                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] focus:ring-2 focus:ring-[#126BEB]/10 transition-all"
+                        className={inputStyle}
                       />
                     </div>
                   </div>
 
-                  {/* Email Field with Inline Verify Button */}
+                  {/* Work Email Address */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                      Work / Business Email <span className="text-red-500">*</span>
+                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                      Work / Business Email <span className="text-amber-600">*</span>
                     </label>
-                    <div className="relative flex rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] overflow-hidden focus-within:border-[#126BEB] dark:focus-within:border-[#1677FF] focus-within:ring-2 focus-within:ring-[#126BEB]/10">
-                      <input
-                        type="email"
-                        required
-                        disabled={isEmailVerified}
-                        placeholder="e.g. alex@example.com"
-                        value={formData.email}
-                        onChange={handleEmailChange}
-                        className="flex-1 px-3.5 py-2.5 bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none disabled:opacity-75"
-                      />
-                      {isEmailVerified ? (
-                        <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 border-l border-emerald-200 dark:border-emerald-800 select-none">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Verified</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleSendEmailOtp}
-                          disabled={isSendingEmailOtp || !formData.email.trim()}
-                          className="px-3 py-2 bg-slate-50 dark:bg-[#1D3048] hover:bg-slate-100 dark:hover:bg-[#233b5c] text-[#126BEB] dark:text-[#1677FF] text-xs font-semibold border-l border-[#E2E8F0] dark:border-[#1D3048] transition-colors disabled:opacity-50 select-none flex items-center gap-1"
-                        >
-                          {isSendingEmailOtp ? (
-                            <span>Sending...</span>
-                          ) : (
-                            <>
-                              <Send className="w-3 h-3" />
-                              <span>Verify</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Inline Email OTP Entry */}
-                    <AnimatePresence>
-                      {emailOtpSent && !isEmailVerified && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 p-3 rounded-lg bg-blue-50/70 dark:bg-[#0B1728] border border-blue-200 dark:border-[#1D3048] flex flex-col sm:flex-row items-center gap-2"
-                        >
-                          <div className="flex-1 w-full">
-                            <input
-                              type="text"
-                              maxLength={6}
-                              placeholder="Enter 6-digit email code"
-                              value={emailOtp}
-                              onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
-                              className="w-full px-3 py-1.5 text-xs rounded border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#101F33] text-[#0B1220] dark:text-[#F8FAFC] tracking-widest font-mono text-center focus:outline-none focus:border-[#126BEB]"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleVerifyEmailOtp}
-                            disabled={isVerifyingEmailOtp || emailOtp.length !== 6}
-                            className="w-full sm:w-auto px-4 py-1.5 bg-[#126BEB] hover:bg-[#0B5CC7] dark:bg-[#1677FF] text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
-                          >
-                            {isVerifyingEmailOtp ? 'Checking...' : 'Confirm'}
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {emailOtpError && (
-                      <p className="text-red-500 text-[11px] mt-1 flex items-center gap-1">
-                        <span>⚠ {emailOtpError}</span>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. alex@example.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className={`${inputStyle} ${
+                        formData.email && !isValidEmail ? 'border-red-300 focus:border-red-500' : ''
+                      }`}
+                    />
+                    {formData.email && !isValidEmail && (
+                      <p className="text-[10px] text-red-500 font-bold mt-1.5 uppercase tracking-wider">
+                        Please enter a valid email format.
                       </p>
                     )}
                   </div>
 
-                  {/* WhatsApp Number Field with Inline Verify Button */}
+                  {/* WhatsApp Phone Number */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                      WhatsApp Number <span className="text-red-500">*</span>
+                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                      WhatsApp Phone Number <span className="text-amber-600">*</span>
                     </label>
-                    <div className="relative flex rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] overflow-hidden focus-within:border-[#126BEB] dark:focus-within:border-[#1677FF] focus-within:ring-2 focus-within:ring-[#126BEB]/10">
-                      <span className="inline-flex items-center gap-1 px-3 bg-slate-50 dark:bg-[#0B1728] text-xs font-semibold text-slate-600 dark:text-slate-300 border-r border-[#E2E8F0] dark:border-[#1D3048] select-none">
+                    <div className="relative flex items-center">
+                      <div className="absolute left-4 pointer-events-none text-stone-500 text-sm font-bold flex items-center gap-1.5 border-r border-stone-200 pr-3">
+                        <span>🇳🇬</span>
                         <span>+234</span>
-                      </span>
+                      </div>
                       <input
                         type="tel"
                         required
-                        disabled={isPhoneVerified}
-                        placeholder="801 234 5678"
+                        maxLength={11}
+                        placeholder="08012345678"
                         value={formData.phoneNumber}
                         onChange={handlePhoneChange}
-                        className="flex-1 px-3.5 py-2.5 bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none disabled:opacity-75"
+                        className={`${inputStyle} pl-24`}
                       />
-                      {isPhoneVerified ? (
-                        <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1 border-l border-emerald-200 dark:border-emerald-800 select-none">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Verified</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleSendPhoneOtp}
-                          disabled={isSendingPhoneOtp || formData.phoneNumber.length < 10}
-                          className="px-3 py-2 bg-slate-50 dark:bg-[#1D3048] hover:bg-slate-100 dark:hover:bg-[#233b5c] text-[#126BEB] dark:text-[#1677FF] text-xs font-semibold border-l border-[#E2E8F0] dark:border-[#1D3048] transition-colors disabled:opacity-50 select-none flex items-center gap-1"
-                        >
-                          {isSendingPhoneOtp ? (
-                            <span>Sending...</span>
-                          ) : (
-                            <>
-                              <Send className="w-3 h-3" />
-                              <span>Verify</span>
-                            </>
-                          )}
-                        </button>
-                      )}
                     </div>
-
-                    {/* Inline Phone OTP Entry */}
-                    <AnimatePresence>
-                      {phoneOtpSent && !isPhoneVerified && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 p-3 rounded-lg bg-blue-50/70 dark:bg-[#0B1728] border border-blue-200 dark:border-[#1D3048] flex flex-col sm:flex-row items-center gap-2"
-                        >
-                          <div className="flex-1 w-full">
-                            <input
-                              type="text"
-                              maxLength={6}
-                              placeholder="Enter 6-digit WhatsApp OTP"
-                              value={phoneOtp}
-                              onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
-                              className="w-full px-3 py-1.5 text-xs rounded border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#101F33] text-[#0B1220] dark:text-[#F8FAFC] tracking-widest font-mono text-center focus:outline-none focus:border-[#126BEB]"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleVerifyPhoneOtp}
-                            disabled={isVerifyingPhoneOtp || phoneOtp.length !== 6}
-                            className="w-full sm:w-auto px-4 py-1.5 bg-[#126BEB] hover:bg-[#0B5CC7] dark:bg-[#1677FF] text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
-                          >
-                            {isVerifyingPhoneOtp ? 'Checking...' : 'Confirm'}
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {phoneOtpError && (
-                      <p className="text-red-500 text-[11px] mt-1 flex items-center gap-1">
-                        <span>⚠ {phoneOtpError}</span>
-                      </p>
-                    )}
+                    <p className="text-[10px] text-stone-400 font-medium mt-1.5">
+                      11-digit WhatsApp-enabled mobile number for alerts.
+                    </p>
                   </div>
 
                   {/* Business Name */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                      Business or Enterprise Name <span className="text-red-500">*</span>
+                    <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                      Business or Enterprise Name <span className="text-amber-600">*</span>
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Acme Global Services Ltd"
+                      placeholder="e.g. Apex Telecom Services"
                       value={formData.businessName}
                       onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] focus:ring-2 focus:ring-[#126BEB]/10 transition-all"
+                      className={inputStyle}
                     />
                   </div>
 
-                  {/* Location (Cascading State & LGA Dropdowns - No standalone country box) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  {/* Country & State */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                        State <span className="text-red-500">*</span>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        Country
+                      </label>
+                      <div className="w-full bg-stone-100 border-2 border-stone-200 rounded-xl px-4 py-3.5 text-stone-700 font-medium flex items-center gap-2 cursor-not-allowed text-sm">
+                        <span>🇳🇬</span>
+                        <span>Nigeria</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        State <span className="text-amber-600">*</span>
                       </label>
                       <SearchableSelect
-                        id="register-state-select"
+                        id="state-select"
                         options={nigeriaStatesList}
                         placeholder="Select State..."
                         value={formData.state}
                         onChange={handleStateChange}
                       />
                     </div>
+                  </div>
+
+                  {/* LGA / City Cascading Selector */}
+                  <div>
+                    <div className="flex justify-between items-end mb-2">
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest">
+                        LGA / City <span className="text-amber-600">*</span>
+                      </label>
+                      {!formData.state && (
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
+                          Select State first
+                        </span>
+                      )}
+                    </div>
+                    <SearchableSelect
+                      id="lga-select"
+                      options={availableLgas}
+                      placeholder={formData.state ? 'Select LGA...' : 'Select State first...'}
+                      value={formData.lga}
+                      onChange={(lga) => setFormData({ ...formData, lga })}
+                      disabled={!formData.state}
+                    />
+                  </div>
+
+                  {/* Password & Confirm Password */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        Password <span className="text-amber-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          placeholder="Min 8 characters"
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          className={`${inputStyle} pr-12`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                        City / LGA <span className="text-red-500">*</span>
+                      <label className="block text-xs font-black text-stone-900 uppercase tracking-widest mb-2">
+                        Confirm Password <span className="text-amber-600">*</span>
                       </label>
-                      <SearchableSelect
-                        id="register-lga-select"
-                        options={availableLgas}
-                        placeholder={formData.state ? 'Select LGA...' : 'Select State first...'}
-                        value={formData.lga}
-                        onChange={(lga) => setFormData((prev) => ({ ...prev, lga }))}
-                        disabled={!formData.state || availableLgas.length === 0}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Password Field with Dynamic Strength Meter */}
-                  <div className="pt-1">
-                    <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        placeholder="Min. 8 characters"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full pl-3.5 pr-10 py-2.5 rounded-lg border border-[#E2E8F0] dark:border-[#1D3048] bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] focus:ring-2 focus:ring-[#126BEB]/10 transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-
-                    {/* Password Strength Indicator */}
-                    {formData.password && (
-                      <div className="mt-2 space-y-1.5">
-                        <div className="w-full bg-slate-100 dark:bg-[#0B1728] h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 ${passwordStrength.color}`}
-                            style={{ width: `${passwordStrength.percent}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-400 dark:text-slate-500">
-                            Strength: <strong className={passwordStrength.text}>{passwordStrength.label}</strong>
-                          </span>
-                          <span className="text-slate-400 dark:text-slate-500">Min. 8 characters</span>
-                        </div>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          required
+                          placeholder="Re-enter password"
+                          value={formData.confirmPassword}
+                          onChange={(e) =>
+                            setFormData({ ...formData, confirmPassword: e.target.value })
+                          }
+                          className={`${inputStyle} pr-12 ${
+                            formData.confirmPassword &&
+                            formData.password !== formData.confirmPassword
+                              ? 'border-red-300 focus:border-red-500'
+                              : ''
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 transition-colors"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Confirm Password Field with Inline Mismatch Notice */}
-                  <div>
-                    <label className="block text-xs font-semibold text-[#0B1220] dark:text-[#F8FAFC] mb-1.5">
-                      Confirm Password <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        required
-                        placeholder="Repeat password"
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border bg-white dark:bg-[#0B1728] text-[#0B1220] dark:text-[#F8FAFC] text-sm placeholder-slate-400 focus:outline-none transition-all ${
-                          isPasswordMismatch
-                            ? 'border-red-400 dark:border-red-600 focus:ring-2 focus:ring-red-400/20'
-                            : 'border-[#E2E8F0] dark:border-[#1D3048] focus:border-[#126BEB] dark:focus:border-[#1677FF] focus:ring-2 focus:ring-[#126BEB]/10'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
                     </div>
-
-                    {/* Mismatch Error placed directly below confirm password */}
-                    {isPasswordMismatch && (
-                      <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1 font-medium">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        <span>Passwords do not match</span>
-                      </p>
-                    )}
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="pt-3">
+                  {/* Password Strength Indicator */}
+                  {formData.password && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                        <span>Password Strength</span>
+                        <span
+                          className={
+                            passwordStrength.score === 1
+                              ? 'text-red-500'
+                              : passwordStrength.score === 2
+                              ? 'text-amber-600'
+                              : 'text-emerald-600'
+                          }
+                        >
+                          {passwordStrength.label}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                          style={{ width: `${passwordStrength.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submit CTA Button */}
+                  <div className="pt-4">
                     <button
                       type="submit"
-                      disabled={isSubmitting || isPasswordMismatch}
-                      className="w-full py-3 px-4 rounded-xl font-semibold text-sm text-white bg-[#126BEB] hover:bg-[#0B5CC7] dark:bg-[#1677FF] dark:hover:bg-[#0B63CE] transition-all duration-150 shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={isSubmitting || !isFormValid}
+                      className="w-full rounded-full bg-stone-900 text-white font-bold py-4 px-8 uppercase tracking-[0.15em] text-sm transition-all duration-300 hover:bg-amber-600 hover:shadow-[0_10px_25px_rgba(217,119,6,0.3)] active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-stone-900 disabled:cursor-not-allowed"
                     >
-                      {isSubmitting ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          <span>Creating Merchant Account...</span>
-                        </>
-                      ) : (
-                        <span>Create Merchant Account</span>
-                      )}
+                      {isSubmitting ? 'Creating Account...' : 'Create Account'}
                     </button>
                   </div>
                 </form>
 
-                {/* Terms Notice */}
-                <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-5 leading-normal">
-                  By registering, you agree to BAXATO&apos;s{' '}
-                  <span className="text-[#126BEB] dark:text-[#1677FF] hover:underline cursor-pointer">Terms of Service</span>{' '}
-                  and{' '}
-                  <span className="text-[#126BEB] dark:text-[#1677FF] hover:underline cursor-pointer">Privacy Policy</span>.
-                </p>
-
-                {/* Bottom Sign In Link */}
-                <div className="text-center mt-6 pt-5 border-t border-[#E2E8F0] dark:border-[#1D3048]">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                {/* Footer Switcher */}
+                <div className="mt-8 pt-6 border-t border-stone-100 text-center">
+                  <p className="text-xs font-bold text-stone-500">
                     Already have a BAXATO merchant account?{' '}
                     <Link
                       href="/login"
-                      className="font-semibold text-[#126BEB] dark:text-[#1677FF] hover:underline"
+                      className="text-stone-900 hover:text-amber-600 uppercase tracking-wider underline transition-colors"
                     >
                       Sign in here
                     </Link>
@@ -737,40 +537,12 @@ export default function RegisterPage() {
             )}
           </AnimatePresence>
         </div>
-      </main>
-
-      {/* Slide-in floating error toast at bottom of screen */}
-      <AnimatePresence>
-        {errorMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-md w-full px-4"
-          >
-            <div className="bg-red-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center justify-between gap-3 text-xs font-medium">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMessage}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setErrorMessage(null)}
-                className="text-white/80 hover:text-white text-base leading-none px-1"
-                aria-label="Dismiss error"
-              >
-                &times;
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </section>
 
       {/* Corporate Legal Footer */}
-      <footer className="w-full py-5 text-center text-xs text-slate-400 dark:text-slate-500 border-t border-[#E2E8F0] dark:border-[#1D3048]">
-        <p>&copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
+      <footer className="border-t border-stone-200 bg-white py-6 text-center text-xs font-medium text-stone-500">
+        <p>© 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
       </footer>
-    </div>
+    </main>
   );
 }

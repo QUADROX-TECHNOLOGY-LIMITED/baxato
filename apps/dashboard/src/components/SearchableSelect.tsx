@@ -65,70 +65,52 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border text-sm font-normal text-left transition-all duration-150 outline-none ${
+        className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 text-sm font-medium text-left transition-colors duration-150 outline-none ${
           disabled
-            ? 'bg-slate-100 dark:bg-[#07111F]/50 border-slate-200 dark:border-[#1D3048]/50 text-slate-400 cursor-not-allowed'
+            ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
             : isOpen
-            ? 'bg-white dark:bg-[#101F33] border-[#126BEB] dark:border-[#1677FF] ring-2 ring-[#126BEB]/10 text-[#0B1220] dark:text-[#F8FAFC]'
-            : 'bg-white dark:bg-[#101F33] border-[#E2E8F0] dark:border-[#1D3048] hover:border-slate-400 dark:hover:border-slate-600 text-[#0B1220] dark:text-[#F8FAFC]'
+            ? 'bg-white border-amber-500 ring-2 ring-amber-500/10 text-stone-900'
+            : 'bg-white border-stone-200 hover:border-amber-500 text-stone-900'
         }`}
       >
-        <span className={value ? 'text-[#0B1220] dark:text-[#F8FAFC]' : 'text-[#94A3B8] dark:text-[#64748B]'}>
+        <span className={value ? 'text-stone-900 font-medium' : 'text-stone-400'}>
           {value || placeholder}
         </span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-[#126BEB] dark:text-[#1677FF]' : ''
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+          stroke="currentColor"
+          className={`w-4 h-4 text-stone-500 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-amber-600' : ''
           }`}
         >
-          <path
-            fillRule="evenodd"
-            d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
-            clipRule="evenodd"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
         </svg>
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute z-[100] w-full mt-1.5 bg-white dark:bg-[#101F33] border border-[#E2E8F0] dark:border-[#1D3048] rounded-xl shadow-2xl overflow-hidden"
+            className="absolute z-[100] w-full mt-2 bg-white border-2 border-stone-200 rounded-xl shadow-2xl overflow-hidden"
           >
-            <div className="p-2 border-b border-[#E2E8F0] dark:border-[#1D3048] bg-slate-50/50 dark:bg-[#0B1728]/50">
-              <div className="relative flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-3.5 h-3.5 absolute left-2.5 text-slate-400"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                  />
-                </svg>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#07111F] border border-[#E2E8F0] dark:border-[#1D3048] rounded-lg text-[#0B1220] dark:text-[#F8FAFC] placeholder-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF]"
-                />
-              </div>
+            <div className="p-2 border-b border-stone-100 bg-stone-50">
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              />
             </div>
 
-            <ul className="max-h-52 overflow-y-auto py-1 touch-pan-y overscroll-contain">
+            <ul className="max-h-48 overflow-y-auto divide-y divide-stone-50">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt) => {
                   const isSelected = opt === value;
@@ -140,10 +122,10 @@ export default function SearchableSelect({
                         setSearch('');
                         setIsOpen(false);
                       }}
-                      className={`px-3.5 py-2 text-xs cursor-pointer flex items-center justify-between transition-colors ${
+                      className={`px-4 py-3 text-sm font-medium cursor-pointer flex items-center justify-between transition-colors ${
                         isSelected
-                          ? 'bg-[#126BEB]/10 dark:bg-[#1677FF]/20 text-[#126BEB] dark:text-[#1677FF] font-semibold'
-                          : 'text-[#0B1220] dark:text-[#F8FAFC] hover:bg-slate-50 dark:hover:bg-[#1A2E4C]'
+                          ? 'bg-amber-50 text-amber-900 font-bold'
+                          : 'text-stone-700 hover:bg-amber-50/70 hover:text-stone-900'
                       }`}
                     >
                       <span>{opt}</span>
@@ -152,7 +134,7 @@ export default function SearchableSelect({
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 20 20"
                           fill="currentColor"
-                          className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#1677FF]"
+                          className="w-4 h-4 text-amber-600"
                         >
                           <path
                             fillRule="evenodd"
@@ -165,7 +147,7 @@ export default function SearchableSelect({
                   );
                 })
               ) : (
-                <li className="px-3.5 py-3 text-xs text-slate-400 italic text-center">
+                <li className="px-4 py-3 text-sm text-stone-400 italic text-center">
                   No matching results
                 </li>
               )}
