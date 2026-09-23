@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import swagger from '@fastify/swagger';
 import scalarReference from '@scalar/fastify-api-reference';
-import { generateEntityId, AppError, createErrorResponse } from '@baxato/common';
+import { generateEntityId, AppError, createErrorResponse, createSuccessResponse } from '@baxato/common';
 import { env } from '@baxato/config';
 import { authPlugin } from './plugins/auth.plugin.js';
 import { healthRoutes } from './routes/health.js';
@@ -132,6 +132,28 @@ export function buildServer(): FastifyInstance {
   // Raw OpenAPI JSON Specification Endpoint
   app.get('/docs/json', { schema: { hide: true } }, async () => {
     return app.swagger();
+  });
+
+  // Root Service Status & Welcome Endpoint
+  app.get('/', async (request, reply) => {
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          service: 'BAXATO API Gateway',
+          status: 'OPERATIONAL',
+          version: '1.0.0',
+          docs: '/docs',
+          health: '/health',
+          company: 'XATO TECHNOLOGIES LIMITED',
+        },
+        request.id,
+      ),
+    );
+  });
+
+  // Browser favicon silence handler
+  app.get('/favicon.ico', async (_request, reply) => {
+    return reply.status(204).send();
   });
 
   // 3. Global Error Handler formatting standard ApiResponse envelope
