@@ -261,28 +261,13 @@ function RegisterFormContent({
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col lg:flex-row bg-[#060D1A] lg:bg-white lg:dark:bg-[#070D18] transition-colors duration-200">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-200 transition-colors duration-200">
       {/* ======================================================== */}
-      {/* MOBILE BACKGROUND: 3D Fintech Backdrop visible on mobile */}
+      {/* LEFT SIDE: Brand Showcase with Theme-Aware Visuals (Desktop) */}
       {/* ======================================================== */}
-      <div className="lg:hidden fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <Image
-          src="/fintech-bg.jpg"
-          alt="BAXATO Fintech Backdrop"
-          fill
-          priority
-          className="object-cover opacity-50 dark:opacity-40 scale-105"
-        />
-        {/* Subtle deep navy gradient for high contrast */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#060D1A]/90 via-[#060D1A]/80 to-[#060D1A]/95 dark:from-[#040810]/95 dark:via-[#060D1A]/85 dark:to-[#040810]/98" />
-      </div>
-
-      {/* ======================================================== */}
-      {/* LEFT SIDE: Brand Showcase with Generated 3D Asset (Desktop) */}
-      {/* ======================================================== */}
-      <section className="hidden lg:flex lg:w-1/2 bg-[#060D1A] text-white p-12 xl:p-16 flex-col justify-between relative overflow-hidden">
-        {/* Generated 3D Glassmorphic Backdrop Image */}
-        <div className="absolute inset-0 z-0">
+      <section className="hidden lg:flex lg:w-1/2 bg-slate-100/80 dark:bg-[#060D1A] text-slate-900 dark:text-white p-12 xl:p-16 flex-col justify-between relative border-r border-slate-200 dark:border-slate-800/80">
+        {/* Dark Mode ONLY 3D Glassmorphic Backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none hidden dark:block">
           <Image
             src="/fintech-bg.jpg"
             alt="BAXATO Fintech Infrastructure"
@@ -294,10 +279,13 @@ function RegisterFormContent({
           <div className="absolute inset-0 bg-gradient-to-t from-[#060D18] via-[#060D18]/80 to-[#060D18]/50" />
         </div>
 
+        {/* Light Mode Soft Ambient Gradient (No Dark Image) */}
+        <div className="absolute inset-0 z-0 pointer-events-none dark:hidden bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-blue-100/60 via-slate-100/40 to-transparent" />
+
         {/* Top Logo */}
         <div className="relative z-10">
           <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shadow-xl border border-white/15 bg-white/5 backdrop-blur-md group-hover:scale-105 transition-transform p-1">
+            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 backdrop-blur-md group-hover:scale-105 transition-transform p-1">
               <Image
                 src="/baxato-logo.jpg"
                 alt="BAXATO Logo"
@@ -306,7 +294,7 @@ function RegisterFormContent({
                 className="object-contain"
               />
             </div>
-            <span className="font-extrabold text-2xl tracking-tight text-white">
+            <span className="font-extrabold text-2xl tracking-tight text-slate-900 dark:text-white">
               BAXATO
             </span>
           </Link>
@@ -314,52 +302,52 @@ function RegisterFormContent({
 
         {/* Center: Commercial Showcase & Value Proposition */}
         <div className="relative z-10 max-w-lg my-10">
-          <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
             Empowering High-Growth Digital Commerce &amp; Payments Across Nigeria
           </h2>
 
-          <p className="text-slate-300 text-sm leading-relaxed mt-4 font-normal">
+          <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed mt-4 font-normal">
             Join thousands of businesses, merchants, and aggregators vending airtime, data bundles, electricity tokens, and cable subscriptions with instant automated reconciliation.
           </p>
 
           {/* 4 Professional Commercial Value Pillars */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
-            <div className="p-4 rounded-xl bg-white/[0.05] border border-white/10 backdrop-blur-md">
-              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/25 text-[#38BDF8] flex items-center justify-center mb-2.5">
+            <div className="p-4 rounded-xl bg-white/90 dark:bg-white/[0.05] border border-slate-200/90 dark:border-white/10 shadow-sm dark:shadow-none backdrop-blur-md">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-[#126BEB]/25 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center mb-2.5">
                 <CreditCard className="w-4 h-4" />
               </div>
-              <h4 className="text-sm font-bold text-white">Instant Wallet Settlement</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-normal font-normal">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Instant Wallet Settlement</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-normal font-normal">
                 Commissions and funds credited immediately upon vending.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-white/[0.05] border border-white/10 backdrop-blur-md">
-              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/25 text-[#38BDF8] flex items-center justify-center mb-2.5">
+            <div className="p-4 rounded-xl bg-white/90 dark:bg-white/[0.05] border border-slate-200/90 dark:border-white/10 shadow-sm dark:shadow-none backdrop-blur-md">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-[#126BEB]/25 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center mb-2.5">
                 <Building2 className="w-4 h-4" />
               </div>
-              <h4 className="text-sm font-bold text-white">Nationwide Coverage</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-normal font-normal">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Nationwide Coverage</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-normal font-normal">
                 Direct integration with all Nigerian DISCOs and telecom operators.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-white/[0.05] border border-white/10 backdrop-blur-md">
-              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/25 text-[#38BDF8] flex items-center justify-center mb-2.5">
+            <div className="p-4 rounded-xl bg-white/90 dark:bg-white/[0.05] border border-slate-200/90 dark:border-white/10 shadow-sm dark:shadow-none backdrop-blur-md">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-[#126BEB]/25 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center mb-2.5">
                 <Lock className="w-4 h-4" />
               </div>
-              <h4 className="text-sm font-bold text-white">Bank-Grade Ledger</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-normal font-normal">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Bank-Grade Ledger</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-normal font-normal">
                 Transparent cryptographic accounting and financial auditing.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-white/[0.05] border border-white/10 backdrop-blur-md">
-              <div className="w-8 h-8 rounded-lg bg-[#126BEB]/25 text-[#38BDF8] flex items-center justify-center mb-2.5">
+            <div className="p-4 rounded-xl bg-white/90 dark:bg-white/[0.05] border border-slate-200/90 dark:border-white/10 shadow-sm dark:shadow-none backdrop-blur-md">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-[#126BEB]/25 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center mb-2.5">
                 <Headphones className="w-4 h-4" />
               </div>
-              <h4 className="text-sm font-bold text-white">Dedicated Support</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-normal font-normal">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Dedicated Support</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-normal font-normal">
                 24/7 technical and merchant onboarding assistance.
               </p>
             </div>
@@ -367,7 +355,7 @@ function RegisterFormContent({
         </div>
 
         {/* Bottom Legal Notice */}
-        <div className="relative z-10 pt-6 border-t border-white/10 text-xs text-slate-400">
+        <div className="relative z-10 pt-6 border-t border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400">
           <p>© 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
         </div>
       </section>
@@ -375,11 +363,11 @@ function RegisterFormContent({
       {/* ======================================================== */}
       {/* RIGHT SIDE: Authentication / Registration Surface        */}
       {/* ======================================================== */}
-      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 xl:p-16 relative z-10 overflow-y-auto min-h-screen">
-        <div className="w-full max-w-lg mx-auto py-4 sm:py-8">
-          {/* Mobile Top Branding (Sits on top of 3D Backdrop) */}
+      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 py-8 sm:px-8 sm:py-12 lg:p-12 xl:p-16 relative z-10 pb-28 sm:pb-36">
+        <div className="w-full max-w-lg mx-auto">
+          {/* Mobile Top Branding */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
-            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-white/10 backdrop-blur-md p-1">
+            <div className="relative w-11 h-11 rounded-2xl overflow-hidden shadow-md border border-slate-200 dark:border-white/10 bg-white dark:bg-white/10 p-1">
               <Image
                 src="/baxato-logo.jpg"
                 alt="BAXATO Logo"
@@ -388,13 +376,13 @@ function RegisterFormContent({
                 className="object-contain"
               />
             </div>
-            <span className="font-extrabold text-2xl tracking-tight text-white drop-shadow-md">
+            <span className="font-extrabold text-2xl tracking-tight text-slate-900 dark:text-white">
               BAXATO
             </span>
           </div>
 
           {/* Elevated Surface on Mobile, Clean Seamless on Desktop */}
-          <div className="bg-white/95 dark:bg-[#0A1220]/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-3xl shadow-2xl p-6 sm:p-10 lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:shadow-none lg:p-0">
+          <div className="bg-white dark:bg-[#0A1220] border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl dark:shadow-2xl p-6 sm:p-10 lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:shadow-none lg:p-0">
 
           <AnimatePresence mode="wait">
             {isRegistered ? (
