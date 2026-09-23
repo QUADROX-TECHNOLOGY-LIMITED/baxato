@@ -3,6 +3,7 @@ name: BAXATO Build & Deploy to Coolify (CD)
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,6 +35,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify Builds
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || secrets.CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.CLERK_PUBLISHABLE_KEY || 'pk_test_ci_mock_clerk_publishable_key' }}
         run: pnpm build
 
       - name: Verify Tests
@@ -89,7 +92,7 @@ jobs:
           file: Dockerfile.dashboard
           push: true
           build-args: |
-            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || secrets.CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || secrets.CLERK_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || vars.CLERK_PUBLISHABLE_KEY }}
           tags: |
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:latest
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:${{ github.sha }}
