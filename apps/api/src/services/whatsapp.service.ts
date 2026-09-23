@@ -58,17 +58,25 @@ export class WhatsAppService {
     const normalized = this.normalizePhoneNumber(phoneNumber);
     const code = this.generateOtp(normalized);
 
-    // In test or development without active token, simulate delivery
-    if (
-      env.NODE_ENV === 'test' ||
-      env.WHATSAPP_API_TOKEN === 'EAAB_DUMMY_WHATSAPP_TOKEN' ||
-      !env.WHATSAPP_API_TOKEN ||
-      !env.WHATSAPP_PHONE_NUMBER_ID
-    ) {
+    // Automated unit test runner
+    if (env.NODE_ENV === 'test') {
       return {
         success: true,
         messageId: `wamid_simulated_${Date.now()}`,
         simulated: true,
+      };
+    }
+
+    // Explicit validation: In production, never silently simulate delivery if variables are missing
+    if (!env.WHATSAPP_API_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
+      const missing: string[] = [];
+      if (!env.WHATSAPP_API_TOKEN) missing.push('WHATSAPP_API_TOKEN');
+      if (!env.WHATSAPP_PHONE_NUMBER_ID) missing.push('WHATSAPP_PHONE_NUMBER_ID');
+      const errorMsg = `[WhatsAppService] Missing required WhatsApp environment variables: ${missing.join(', ')}. Please add them to your Coolify environment variables.`;
+      console.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
       };
     }
 
