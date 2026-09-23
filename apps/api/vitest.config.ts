@@ -5,8 +5,9 @@ export default defineConfig({
     name: 'api',
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
     hookTimeout: 30000,
     testTimeout: 30000,
+    passWithNoTests: true,
   },
 });

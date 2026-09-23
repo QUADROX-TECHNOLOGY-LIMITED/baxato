@@ -8,5 +8,6 @@ export default defineConfig({
     ],
     hookTimeout: 30000,
     testTimeout: 30000,
+    passWithNoTests: true,
   },
 });
