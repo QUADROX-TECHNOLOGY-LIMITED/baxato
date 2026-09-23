@@ -7,6 +7,7 @@ export const registerUserSchema = z.object({
   middleName: z.string().optional(),
   email: z.string().email('Invalid email address'),
   phoneNumber: z.string().min(10, 'Phone number must be at least 10 digits'),
+  isPhoneVerified: z.boolean().optional().default(false),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   // Initial Business Details
   businessName: z.string().min(2, 'Business name must be at least 2 characters'),

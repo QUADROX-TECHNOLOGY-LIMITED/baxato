@@ -60,7 +60,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         phoneNumber: normalizedPhone,
         passwordHash,
         isEmailVerified: true,
-        isPhoneVerified: false,
+        isPhoneVerified: data.isPhoneVerified ?? false,
         role: UserRole.BUSINESS_OWNER,
         status: 'ACTIVE',
         kycStatus: KycStatus.UNVERIFIED,
@@ -119,8 +119,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       emailVerificationToken,
     );
 
-    // 5. Dispatch WhatsApp OTP for phone verification
-    await whatsAppService.sendOtp(normalizedPhone);
+    // 5. Dispatch WhatsApp OTP for phone verification if not already verified
+    if (!data.isPhoneVerified) {
+      await whatsAppService.sendOtp(normalizedPhone);
+    }
 
     // 6. Generate Session Token
     const token = generateToken({
@@ -157,7 +159,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
               }
             : null,
           token,
-          message: 'Account created successfully. A WhatsApp verification code was sent to your phone.',
+          message: data.isPhoneVerified
+            ? 'Account created successfully.'
+            : 'Account created successfully. A WhatsApp verification code was sent to your phone.',
         },
         request.id,
       ),

@@ -74,6 +74,15 @@ function RegisterFormContent({
   const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
   const [emailCountdown, setEmailCountdown] = useState(0);
 
+  // WhatsApp Phone In-Flow Verification States
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
+  const [phoneOtpError, setPhoneOtpError] = useState<string | null>(null);
+  const [phoneCountdown, setPhoneCountdown] = useState(0);
+
   // Email countdown timer
   useEffect(() => {
     if (emailCountdown > 0) {
@@ -81,6 +90,14 @@ function RegisterFormContent({
       return () => clearTimeout(timer);
     }
   }, [emailCountdown]);
+
+  // Phone countdown timer
+  useEffect(() => {
+    if (phoneCountdown > 0) {
+      const timer = setTimeout(() => setPhoneCountdown((c) => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [phoneCountdown]);
 
   // Available LGAs dynamically filtered by the selected State
   const availableLgas = useMemo(() => {
@@ -99,6 +116,10 @@ function RegisterFormContent({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const cleaned = e.target.value.replace(/\D/g, '').slice(0, 11);
     setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
+    if (isPhoneVerified) {
+      setIsPhoneVerified(false);
+      setPhoneOtpSent(false);
+    }
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,12 +205,73 @@ function RegisterFormContent({
     }
   };
 
+  // WhatsApp phone verification trigger (via Meta WhatsApp Cloud API)
+  const handleSendPhoneOtp = async () => {
+    setPhoneOtpError(null);
+    if (!formData.phoneNumber || formData.phoneNumber.length < 10) {
+      setPhoneOtpError('Enter a valid 10 or 11-digit phone number first.');
+      return;
+    }
+
+    setIsSendingPhoneOtp(true);
+    try {
+      const res = await fetch('/api/auth/send-phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error?.message || data.message || 'Could not send WhatsApp verification code.');
+      }
+      setPhoneOtpSent(true);
+      setPhoneCountdown(60);
+      setPhoneOtp('');
+    } catch (err: unknown) {
+      setPhoneOtpError(err instanceof Error ? err.message : 'Failed to send WhatsApp code.');
+    } finally {
+      setIsSendingPhoneOtp(false);
+    }
+  };
+
+  // WhatsApp phone OTP confirm
+  const handleVerifyPhoneOtp = async () => {
+    setPhoneOtpError(null);
+    if (phoneOtp.trim().length < 6) {
+      setPhoneOtpError('Please enter the full 6-digit WhatsApp code.');
+      return;
+    }
+
+    setIsVerifyingPhoneOtp(true);
+    try {
+      const res = await fetch('/api/auth/verify-phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: formData.phoneNumber,
+          otp: phoneOtp.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error?.message || data.message || 'Invalid WhatsApp verification code.');
+      }
+      setIsPhoneVerified(true);
+      setPhoneOtpSent(false);
+      setPhoneOtp('');
+    } catch (err: unknown) {
+      setPhoneOtpError(err instanceof Error ? err.message : 'Invalid code.');
+    } finally {
+      setIsVerifyingPhoneOtp(false);
+    }
+  };
 
   const isFormValid = useMemo(() => {
     return (
       formData.firstName.trim().length > 0 &&
       formData.lastName.trim().length > 0 &&
       isEmailVerified &&
+      isPhoneVerified &&
       formData.phoneNumber.length >= 10 &&
       formData.businessName.trim().length > 0 &&
       formData.state.length > 0 &&
@@ -197,7 +279,7 @@ function RegisterFormContent({
       isPasswordSecure &&
       passwordsMatch === true
     );
-  }, [formData, isEmailVerified, isPasswordSecure, passwordsMatch]);
+  }, [formData, isEmailVerified, isPhoneVerified, isPasswordSecure, passwordsMatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,6 +287,11 @@ function RegisterFormContent({
 
     if (!isEmailVerified) {
       setErrorMessage('Please verify your email address before creating an account.');
+      return;
+    }
+
+    if (!isPhoneVerified) {
+      setErrorMessage('Please verify your WhatsApp phone number before creating an account.');
       return;
     }
 
@@ -237,6 +324,7 @@ function RegisterFormContent({
           lastName: formData.lastName.trim(),
           email: formData.email.toLowerCase().trim(),
           phoneNumber: formData.phoneNumber,
+          isPhoneVerified: true,
           businessName: formData.businessName.trim(),
           country: formData.country,
           state: formData.state,
@@ -643,15 +731,15 @@ function RegisterFormContent({
                     </AnimatePresence>
                   </div>
 
-                  {/* WhatsApp Phone Number */}
+                  {/* WhatsApp Phone Number with In-Flow Meta Verification */}
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                         WhatsApp Phone Number <span className="text-red-500">*</span>
                       </label>
-                      {formData.phoneNumber.length >= 10 && (
+                      {isPhoneVerified && (
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          <Check className="w-3.5 h-3.5" /> Valid
+                          <Check className="w-3.5 h-3.5" /> Verified
                         </span>
                       )}
                     </div>
@@ -664,19 +752,144 @@ function RegisterFormContent({
                       <input
                         type="tel"
                         required
+                        disabled={isPhoneVerified}
                         maxLength={11}
                         placeholder="08012345678"
                         value={formData.phoneNumber}
                         onChange={handlePhoneChange}
-                        className={`w-full pl-24 pr-4 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
-                          formData.phoneNumber.length >= 10
+                        className={`w-full pl-24 pr-28 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
+                          isPhoneVerified
                             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60'
+                            : formData.phoneNumber.length >= 10
+                            ? 'border-emerald-300 dark:border-emerald-800/60 focus:border-emerald-500'
                             : 'border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
                         }`}
                       />
+                      {!isPhoneVerified ? (
+                        <button
+                          type="button"
+                          onClick={handleSendPhoneOtp}
+                          disabled={isSendingPhoneOtp || formData.phoneNumber.length < 10}
+                          className="absolute right-2 h-8 px-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                        >
+                          {isSendingPhoneOtp ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-emerald-600 dark:text-emerald-400" />
+                              <span>Sending...</span>
+                            </>
+                          ) : (
+                            <span>Verify</span>
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPhoneVerified(false);
+                            setPhoneOtpSent(false);
+                          }}
+                          className="absolute right-2.5 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-medium flex items-center gap-1"
+                          title="Change phone number"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
                     </div>
+
+                    {phoneOtpError && !phoneOtpSent && (
+                      <p className="text-[11px] text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>{phoneOtpError}</span>
+                      </p>
+                    )}
+
+                    {/* Compact Streamlined WhatsApp OTP Verification Card */}
+                    <AnimatePresence>
+                      {phoneOtpSent && !isPhoneVerified && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          className="mt-2.5 p-3 sm:p-3.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50"
+                        >
+                          <div className="flex items-center justify-between text-xs mb-2">
+                            <span className="text-slate-600 dark:text-slate-300 truncate mr-2 text-[11px] sm:text-xs">
+                              WhatsApp code sent to <strong className="text-slate-800 dark:text-white font-semibold">+234 {formData.phoneNumber}</strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPhoneOtpSent(false)}
+                              className="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium hover:underline shrink-0"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+
+                          {/* Inline Input & Guaranteed Visible Confirm Button */}
+                          <div className="flex items-center gap-2 w-full">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="one-time-code"
+                              maxLength={6}
+                              placeholder="6-digit WhatsApp code"
+                              value={phoneOtp}
+                              onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
+                              className="min-w-0 flex-1 h-10 px-3 text-center tracking-[0.25em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleVerifyPhoneOtp}
+                              disabled={isVerifyingPhoneOtp || phoneOtp.length < 6}
+                              className="shrink-0 h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm min-w-[85px]"
+                            >
+                              {isVerifyingPhoneOtp ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                  <span>Checking</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Confirm</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {phoneOtpError && (
+                            <p className="text-[11px] text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>{phoneOtpError}</span>
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-emerald-100/80 dark:border-emerald-900/30 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span>
+                              {phoneCountdown > 0 ? (
+                                <>Resend in <strong className="text-slate-700 dark:text-slate-300 font-semibold">{phoneCountdown}s</strong></>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleSendPhoneOtp}
+                                  disabled={isSendingPhoneOtp}
+                                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline inline-flex items-center gap-1 disabled:opacity-40"
+                                >
+                                  <RotateCw className={`w-3 h-3 ${isSendingPhoneOtp ? 'animate-spin' : ''}`} />
+                                  <span>Resend code</span>
+                                </button>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-slate-400">Template: registration_otp</span>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <p className="text-[11px] text-slate-400 mt-1.5">
-                      Official Nigerian merchant contact for transaction notices and emergency support.
+                      Official Nigerian merchant WhatsApp contact for transaction alerts and support.
                     </p>
                   </div>
 
@@ -876,9 +1089,13 @@ function RegisterFormContent({
                         <span>Create Account</span>
                       )}
                     </button>
-                    {!isEmailVerified && (
+                    {(!isEmailVerified || !isPhoneVerified) && (
                       <p className="text-[11px] text-center text-slate-400 mt-2">
-                        Verify your work email above to activate account creation.
+                        {!isEmailVerified && !isPhoneVerified
+                          ? 'Verify your work email and WhatsApp phone number above to activate account creation.'
+                          : !isEmailVerified
+                          ? 'Verify your work email above to activate account creation.'
+                          : 'Verify your WhatsApp phone number above to activate account creation.'}
                       </p>
                     )}
                   </div>
