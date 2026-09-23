@@ -14,36 +14,33 @@ export const envSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),
 
-  // Database (PostgreSQL)
-  DATABASE_URL: z
-    .string()
-    .url()
-    .default('postgresql://baxato_user:baxato_password@localhost:5432/baxato_dev'),
+  // Database (PostgreSQL) — STRICTLY REQUIRED, NO FALLBACK
+  DATABASE_URL: z.string().url(),
   DATABASE_POOL_MIN: z.coerce.number().min(1).default(2),
   DATABASE_POOL_MAX: z.coerce.number().min(5).default(20),
 
   // Redis / Key-Value Store
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
-  // Authentication & Identity (Clerk & JWT)
-  JWT_SECRET: z.string().default('baxato_super_secret_jwt_key_development_32bytes'),
-  CLERK_PUBLISHABLE_KEY: z.string().default('pk_test_baxato_dummy_key'),
-  CLERK_SECRET_KEY: z.string().default('sk_test_baxato_dummy_secret'),
+  // Authentication & Identity (Clerk & JWT) — STRICTLY REQUIRED, NO FALLBACK
+  JWT_SECRET: z.string().min(16),
+  CLERK_PUBLISHABLE_KEY: z.string().min(1),
+  CLERK_SECRET_KEY: z.string().min(1),
   CLERK_WEBHOOK_SECRET: z.string().optional(),
 
   // WhatsApp Cloud API (Phone OTP Verification)
-  WHATSAPP_API_TOKEN: z.string().default('EAAB_DUMMY_WHATSAPP_TOKEN'),
-  WHATSAPP_PHONE_NUMBER_ID: z.string().default('123456789012345'),
-  WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().default('987654321098765'),
+  WHATSAPP_API_TOKEN: z.string().default(''),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
+  WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().default(''),
 
   // Identity & KYC Provider (NIMC / NIN Verification via Monnify / Optional)
-  IDENTITY_API_KEY: z.string().default('identity_pass_test_api_key').optional(),
-  IDENTITY_API_BASE_URL: z.string().url().default('https://api.myidentitypass.com/api/v2').optional(),
-  IDENTITY_APP_ID: z.string().default('baxato_identity_app_id').optional(),
+  IDENTITY_API_KEY: z.string().default('').optional(),
+  IDENTITY_API_BASE_URL: z.string().url().optional(),
+  IDENTITY_APP_ID: z.string().default('').optional(),
 
   // Interswitch Orion SVA v5
-  INTERSWITCH_CLIENT_ID: z.string().default('IKIA_DUMMY_CLIENT_ID'),
-  INTERSWITCH_CLIENT_SECRET: z.string().default('DUMMY_CLIENT_SECRET'),
+  INTERSWITCH_CLIENT_ID: z.string().default(''),
+  INTERSWITCH_CLIENT_SECRET: z.string().default(''),
   INTERSWITCH_PASSPORT_URL: z
     .string()
     .url()
@@ -56,18 +53,18 @@ export const envSchema = z.object({
   INTERSWITCH_TRANSFER_CODE_PREFIX: z.string().default('2411'),
 
   // Monnify Provider (Dual Provider / Wallet Funding)
-  MONNIFY_API_KEY: z.string().default('MK_TEST_DUMMY_API_KEY'),
-  MONNIFY_SECRET_KEY: z.string().default('MS_TEST_DUMMY_SECRET_KEY'),
+  MONNIFY_API_KEY: z.string().default(''),
+  MONNIFY_SECRET_KEY: z.string().default(''),
   MONNIFY_BASE_URL: z
     .string()
     .url()
     .default('https://sandbox.monnify.com'),
-  MONNIFY_CONTRACT_CODE: z.string().default('0000000000'),
-  MONNIFY_WALLET_ACCOUNT_NUMBER: z.string().default('0000000000').optional(),
+  MONNIFY_CONTRACT_CODE: z.string().default(''),
+  MONNIFY_WALLET_ACCOUNT_NUMBER: z.string().default('').optional(),
 
   // Webhooks & Security
-  WEBHOOK_SIGNING_SECRET: z.string().default('baxato_whsec_dummy_local_secret_key_32bytes'),
-  ENCRYPTION_MASTER_KEY: z.string().default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+  WEBHOOK_SIGNING_SECRET: z.string().default(''),
+  ENCRYPTION_MASTER_KEY: z.string().default(''),
 
   // ZeptoMail Email Infrastructure
   ZEPTOMAIL_API_KEY: z.string().default(''),
@@ -94,16 +91,16 @@ export function parseEnv(rawEnv: Record<string, unknown> = process.env): Env {
 export function getSanitizedEnv(env: Env): Record<string, unknown> {
   return {
     ...env,
-    DATABASE_URL: env.DATABASE_URL.replace(/:[^:@]+@/, ':****@'),
-    REDIS_URL: env.REDIS_URL.replace(/:[^:@]+@/, ':****@'),
-    JWT_SECRET: '****',
-    CLERK_SECRET_KEY: '****',
-    WHATSAPP_API_TOKEN: '****',
-    IDENTITY_API_KEY: '****',
-    INTERSWITCH_CLIENT_SECRET: '****',
-    MONNIFY_SECRET_KEY: '****',
-    WEBHOOK_SIGNING_SECRET: '****',
-    ENCRYPTION_MASTER_KEY: '****',
-    ZEPTOMAIL_API_KEY: '****',
+    DATABASE_URL: env.DATABASE_URL ? env.DATABASE_URL.replace(/:[^:@]+@/, ':****@') : undefined,
+    REDIS_URL: env.REDIS_URL ? env.REDIS_URL.replace(/:[^:@]+@/, ':****@') : undefined,
+    JWT_SECRET: env.JWT_SECRET ? '****' : undefined,
+    CLERK_SECRET_KEY: env.CLERK_SECRET_KEY ? '****' : undefined,
+    WHATSAPP_API_TOKEN: env.WHATSAPP_API_TOKEN ? '****' : undefined,
+    IDENTITY_API_KEY: env.IDENTITY_API_KEY ? '****' : undefined,
+    INTERSWITCH_CLIENT_SECRET: env.INTERSWITCH_CLIENT_SECRET ? '****' : undefined,
+    MONNIFY_SECRET_KEY: env.MONNIFY_SECRET_KEY ? '****' : undefined,
+    WEBHOOK_SIGNING_SECRET: env.WEBHOOK_SIGNING_SECRET ? '****' : undefined,
+    ENCRYPTION_MASTER_KEY: env.ENCRYPTION_MASTER_KEY ? '****' : undefined,
+    ZEPTOMAIL_API_KEY: env.ZEPTOMAIL_API_KEY ? '****' : undefined,
   };
 }

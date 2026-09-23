@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { parseEnv, getSanitizedEnv } from './env.schema.js';
 
 describe('Environment Configuration Schema (Zod)', () => {
-  it('successfully parses valid environment configuration with defaults', () => {
+  it('successfully parses valid environment configuration without fallbacks', () => {
     const parsed = parseEnv({
       NODE_ENV: 'test',
       PORT: '5000',
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/baxato_test',
+      JWT_SECRET: 'super_secret_jwt_key_at_least_16_chars',
+      CLERK_PUBLISHABLE_KEY: 'pk_test_baxato_sample_key',
+      CLERK_SECRET_KEY: 'sk_test_baxato_sample_secret',
     });
 
     expect(parsed.NODE_ENV).toBe('test');
@@ -16,17 +19,25 @@ describe('Environment Configuration Schema (Zod)', () => {
     expect(parsed.INTERSWITCH_TRANSFER_CODE_PREFIX).toBe('2411');
   });
 
-  it('throws informative error on invalid URL or missing required types', () => {
+  it('throws informative error when required variables are missing or invalid', () => {
     expect(() =>
       parseEnv({
         DATABASE_URL: 'not-a-valid-url',
       }),
     ).toThrowError(/Environment configuration validation failed/);
+
+    expect(() =>
+      parseEnv({
+        NODE_ENV: 'production',
+      }),
+    ).toThrowError(/DATABASE_URL: Required/);
   });
 
   it('redacts sensitive secrets in sanitized environment copy', () => {
     const parsed = parseEnv({
       DATABASE_URL: 'postgresql://db_user:secret_password@db.example.com:5432/prod',
+      JWT_SECRET: 'super_secret_jwt_key_at_least_16_chars',
+      CLERK_PUBLISHABLE_KEY: 'pk_test_baxato_sample_key',
       CLERK_SECRET_KEY: 'sk_live_very_secret_clerk_key',
       INTERSWITCH_CLIENT_SECRET: 'super_secret_interswitch_secret',
       MONNIFY_SECRET_KEY: 'super_secret_monnify_secret',

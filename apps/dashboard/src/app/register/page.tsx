@@ -24,10 +24,8 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { SignUp } from '@clerk/nextjs';
 
 export default function RegisterPage() {
-  const clerkPubKey =
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY;
-  const isClerkConfigured =
-    clerkPubKey && !clerkPubKey.includes('dummy') && clerkPubKey.startsWith('pk_');
+  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured = Boolean(clerkPubKey && clerkPubKey.startsWith('pk_'));
 
   const [formData, setFormData] = useState({
     firstName: '',
