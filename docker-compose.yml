@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-baxato_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-baxato_secure_pass_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_production}
       POSTGRES_DB: ${POSTGRES_DB:-baxato_db}
     ports:
       - "5432:5432"
@@ -59,10 +59,10 @@ services:
       NODE_ENV: production
       PORT: 4000
       HOST: 0.0.0.0
-      DATABASE_URL: postgres://${POSTGRES_USER:-baxato_user}:${POSTGRES_PASSWORD:-baxato_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-baxato_db}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-baxato_user}:${POSTGRES_PASSWORD:-change_me_in_production}@postgres:5432/${POSTGRES_DB:-baxato_db}}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-baxato_jwt_super_secret_production_key_32c}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      JWT_SECRET: ${JWT_SECRET:-change_me_jwt_secret_in_production}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-change_me_encryption_master_key_in_production}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}

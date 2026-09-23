@@ -18,7 +18,7 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .url()
-    .default('postgresql://postgres:postgres@localhost:5432/baxato_dev'),
+    .default('postgresql://baxato_user:baxato_password@localhost:5432/baxato_dev'),
   DATABASE_POOL_MIN: z.coerce.number().min(1).default(2),
   DATABASE_POOL_MAX: z.coerce.number().min(5).default(20),
 
