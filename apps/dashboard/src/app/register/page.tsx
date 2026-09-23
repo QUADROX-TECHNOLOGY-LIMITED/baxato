@@ -18,6 +18,7 @@ import {
   Headphones,
   Edit2,
   RotateCw,
+  Loader2,
 } from 'lucide-react';
 import { nigeriaStates, nigeriaStatesList } from '@baxato/common';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -381,8 +382,8 @@ function RegisterFormContent({
             </span>
           </div>
 
-          {/* Elevated Surface on Mobile, Clean Seamless on Desktop */}
-          <div className="bg-white dark:bg-[#0A1220] border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl dark:shadow-2xl p-6 sm:p-10 lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:shadow-none lg:p-0">
+          {/* Seamless Registration Surface (No redundant card-on-card) */}
+          <div className="w-full">
 
           <AnimatePresence mode="wait">
             {isRegistered ? (
@@ -510,7 +511,7 @@ function RegisterFormContent({
                         placeholder="alex@example.com"
                         value={formData.email}
                         onChange={handleEmailChange}
-                        className={`w-full px-4 py-3 pr-24 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
+                        className={`w-full px-4 py-3 pr-28 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
                           isEmailVerified
                             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60'
                             : formData.email && !isValidEmail
@@ -523,9 +524,16 @@ function RegisterFormContent({
                           type="button"
                           onClick={handleSendEmailOtp}
                           disabled={isSendingEmailOtp || !isValidEmail}
-                          className="absolute right-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[#126BEB] dark:text-[#38BDF8] text-xs font-bold transition-colors disabled:opacity-40"
+                          className="absolute right-2 h-8 px-3 rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                          {isSendingEmailOtp ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-[#126BEB] dark:text-[#38BDF8]" />
+                              <span>Sending...</span>
+                            </>
+                          ) : (
+                            <span>Verify</span>
+                          )}
                         </button>
                       ) : (
                         <button
@@ -550,72 +558,85 @@ function RegisterFormContent({
                       </p>
                     )}
 
-                    {/* Email Verification Box (Expands when OTP is sent) */}
+                    {/* Compact Streamlined OTP Verification Card */}
                     <AnimatePresence>
                       {emailOtpSent && !isEmailVerified && (
                         <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2.5 p-4 rounded-xl bg-slate-50 dark:bg-[#0A1220] border-2 border-blue-200 dark:border-blue-900/50 overflow-hidden"
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          className="mt-2.5 p-3 sm:p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/50"
                         >
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                              Verify Email Address
+                          <div className="flex items-center justify-between text-xs mb-2">
+                            <span className="text-slate-600 dark:text-slate-300 truncate mr-2 text-[11px] sm:text-xs">
+                              Code sent to <strong className="text-slate-800 dark:text-white font-semibold">{formData.email}</strong>
                             </span>
                             <button
                               type="button"
                               onClick={() => setEmailOtpSent(false)}
-                              className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
+                              className="text-[#126BEB] dark:text-[#38BDF8] text-[11px] font-medium hover:underline shrink-0"
                             >
-                              Change Email
+                              Cancel
                             </button>
                           </div>
 
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-                            Enter the 6-digit verification code sent to{' '}
-                            <strong className="text-slate-800 dark:text-slate-200">{formData.email}</strong>.
-                          </p>
-
-                          <div className="flex gap-2">
+                          {/* Inline Input & Guaranteed Visible Confirm Button */}
+                          <div className="flex items-center gap-2 w-full">
                             <input
                               type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="one-time-code"
                               maxLength={6}
-                              placeholder="• • • • • •"
+                              placeholder="6-digit code"
                               value={emailOtp}
                               onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
-                              className="flex-1 px-4 py-2.5 text-center tracking-[0.35em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
+                              className="min-w-0 flex-1 h-10 px-3 text-center tracking-[0.25em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
                             />
                             <button
                               type="button"
                               onClick={handleVerifyEmailOtp}
                               disabled={isVerifyingEmailOtp || emailOtp.length < 6}
-                              className="px-5 py-2.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-colors disabled:opacity-40"
+                              className="shrink-0 h-10 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm min-w-[85px]"
                             >
-                              {isVerifyingEmailOtp ? 'Verifying...' : 'Confirm'}
+                              {isVerifyingEmailOtp ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                  <span>Checking</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5 shrink-0" />
+                                  <span>Confirm</span>
+                                </>
+                              )}
                             </button>
                           </div>
 
                           {emailOtpError && (
-                            <p className="text-[11px] text-red-500 font-medium mt-2">
-                              {emailOtpError}
+                            <p className="text-[11px] text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>{emailOtpError}</span>
                             </p>
                           )}
 
-                          <div className="flex justify-between items-center mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-blue-100/80 dark:border-blue-900/30 text-[11px] text-slate-500 dark:text-slate-400">
                             <span>
                               {emailCountdown > 0 ? (
-                                `Resend code in ${emailCountdown}s`
+                                <>Resend in <strong className="text-slate-700 dark:text-slate-300 font-semibold">{emailCountdown}s</strong></>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={handleSendEmailOtp}
-                                  className="text-[#126BEB] font-semibold hover:underline inline-flex items-center gap-1"
+                                  disabled={isSendingEmailOtp}
+                                  className="text-[#126BEB] dark:text-[#38BDF8] font-semibold hover:underline inline-flex items-center gap-1 disabled:opacity-40"
                                 >
-                                  <RotateCw className="w-3 h-3" /> Resend Code
+                                  <RotateCw className={`w-3 h-3 ${isSendingEmailOtp ? 'animate-spin' : ''}`} />
+                                  <span>Resend code</span>
                                 </button>
                               )}
                             </span>
+                            <span className="text-[10px] text-slate-400">Check spam folder</span>
                           </div>
                         </motion.div>
                       )}
@@ -844,9 +865,16 @@ function RegisterFormContent({
                     <button
                       type="submit"
                       disabled={isSubmitting || !isFormValid}
-                      className="w-full py-3.5 px-6 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full py-3.5 px-6 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      {isSubmitting ? 'Creating Account...' : 'Create Account'}
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                          <span>Creating Account...</span>
+                        </>
+                      ) : (
+                        <span>Create Account</span>
+                      )}
                     </button>
                     {!isEmailVerified && (
                       <p className="text-[11px] text-center text-slate-400 mt-2">
