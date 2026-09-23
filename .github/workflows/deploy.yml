@@ -37,6 +37,12 @@ jobs:
         run: pnpm build
 
       - name: Verify Tests
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/baxato_test
+          JWT_SECRET: ci_secret_jwt_key_at_least_16_chars_test
+          CLERK_PUBLISHABLE_KEY: pk_test_ci_mock_clerk_publishable_key
+          CLERK_SECRET_KEY: sk_test_ci_mock_clerk_secret_key
         run: pnpm test
 
   build-and-push-images:
@@ -82,6 +88,8 @@ jobs:
           context: .
           file: Dockerfile.dashboard
           push: true
+          build-args: |
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || secrets.CLERK_PUBLISHABLE_KEY }}
           tags: |
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:latest
             ghcr.io/${{ steps.repo_owner.outputs.OWNER }}/baxato-dashboard:${{ github.sha }}

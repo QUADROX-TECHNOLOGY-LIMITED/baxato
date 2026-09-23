@@ -35,4 +35,10 @@ jobs:
         run: pnpm build
 
       - name: Execute Vitest Test Suites
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/baxato_test
+          JWT_SECRET: ci_secret_jwt_key_at_least_16_chars_test
+          CLERK_PUBLISHABLE_KEY: pk_test_ci_mock_clerk_publishable_key
+          CLERK_SECRET_KEY: sk_test_ci_mock_clerk_secret_key
         run: pnpm test
