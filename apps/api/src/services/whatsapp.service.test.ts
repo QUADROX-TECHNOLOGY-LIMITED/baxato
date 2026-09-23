@@ -6,13 +6,15 @@ describe('WhatsAppService', () => {
     expect(whatsAppService.normalizePhoneNumber('08161437292')).toBe('2348161437292');
     expect(whatsAppService.normalizePhoneNumber('+2348161437292')).toBe('2348161437292');
     expect(whatsAppService.normalizePhoneNumber('2348161437292')).toBe('2348161437292');
+    expect(whatsAppService.normalizePhoneNumber('8161437292')).toBe('2348161437292');
   });
 
   it('generates a 6-digit numeric OTP and successfully verifies it', async () => {
     const phone = '08161437292';
-    await whatsAppService.sendOtp(phone);
-    const code = whatsAppService.getActiveOtpForTesting(phone);
+    const result = await whatsAppService.sendOtp(phone);
+    expect(result.success).toBe(true);
 
+    const code = whatsAppService.getActiveOtpForTesting(phone);
     expect(code).toBeDefined();
     expect(code).toHaveLength(6);
     expect(/^\d{6}$/.test(code!)).toBe(true);

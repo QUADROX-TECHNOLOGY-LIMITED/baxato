@@ -21,6 +21,9 @@ export class WhatsAppService {
     if (cleaned.startsWith('0') && cleaned.length === 11) {
       return `234${cleaned.slice(1)}`;
     }
+    if (cleaned.length === 10) {
+      return `234${cleaned}`;
+    }
     if (cleaned.startsWith('234') || cleaned.startsWith('233')) {
       return cleaned;
     }
@@ -47,14 +50,21 @@ export class WhatsAppService {
   }
 
   /**
-   * Dispatches OTP via WhatsApp Cloud API.
+   * Dispatches OTP via WhatsApp Cloud API using pre-approved Meta message templates.
    */
-  public async sendOtp(phoneNumber: string): Promise<{ success: boolean; messageId?: string; simulated?: boolean }> {
+  public async sendOtp(
+    phoneNumber: string,
+  ): Promise<{ success: boolean; messageId?: string; simulated?: boolean; error?: string }> {
     const normalized = this.normalizePhoneNumber(phoneNumber);
     const code = this.generateOtp(normalized);
 
     // In test or development without active token, simulate delivery
-    if (env.NODE_ENV === 'test' || env.WHATSAPP_API_TOKEN === 'EAAB_DUMMY_WHATSAPP_TOKEN') {
+    if (
+      env.NODE_ENV === 'test' ||
+      env.WHATSAPP_API_TOKEN === 'EAAB_DUMMY_WHATSAPP_TOKEN' ||
+      !env.WHATSAPP_API_TOKEN ||
+      !env.WHATSAPP_PHONE_NUMBER_ID
+    ) {
       return {
         success: true,
         messageId: `wamid_simulated_${Date.now()}`,
@@ -63,19 +73,10 @@ export class WhatsAppService {
     }
 
     const endpoint = `https://graph.facebook.com/v22.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    const templateName = env.WHATSAPP_TEMPLATE_NAME || 'registration_otp';
+    const templateLanguage = env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_GB';
 
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: normalized,
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: `Your BAXATO verification code is: *${code}*. Valid for 10 minutes. Do not share this code with anyone.`,
-      },
-    };
-
-    try {
+    const postToMeta = async (payload: unknown) => {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -85,20 +86,154 @@ export class WhatsAppService {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`[WhatsAppService] Cloud API dispatch failed: ${errorText}`);
-        return { success: false };
+      const responseText = await response.text();
+      let responseJson: any = null;
+      try {
+        responseJson = JSON.parse(responseText);
+      } catch {
+        // raw text response
       }
 
-      const data = (await response.json()) as { messages?: Array<{ id: string }> };
+      return {
+        ok: response.ok,
+        status: response.status,
+        data: responseJson,
+        rawText: responseText,
+      };
+    };
+
+    // Format 1: Authentication Category Template (Standard body parameter + OTP button)
+    const authOtpPayload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: normalized,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: templateLanguage },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                text: code,
+              },
+            ],
+          },
+          {
+            type: 'button',
+            sub_type: 'otp',
+            index: '0',
+            parameters: [
+              {
+                type: 'text',
+                text: code,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    // Format 2: Utility / Body-Only Template (Body parameter {{1}} without button)
+    const bodyOnlyPayload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: normalized,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: templateLanguage },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                text: code,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    // Format 3: Authentication Category Template with 'url' sub_type button
+    const authUrlPayload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: normalized,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: templateLanguage },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                text: code,
+              },
+            ],
+          },
+          {
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
+            parameters: [
+              {
+                type: 'text',
+                text: code,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    try {
+      // 1. Try primary format: Authentication template with OTP button
+      let result = await postToMeta(authOtpPayload);
+
+      // 2. If Meta rejected because the template has no button (Utility template or button mismatch)
+      if (!result.ok && result.rawText.toLowerCase().includes('button')) {
+        result = await postToMeta(bodyOnlyPayload);
+      }
+
+      // 3. If Meta rejected because the button sub_type was 'url' instead of 'otp'
+      if (!result.ok && (result.rawText.includes('sub_type') || result.rawText.includes('url'))) {
+        result = await postToMeta(authUrlPayload);
+      }
+
+      // 4. Final fallback check if body-only succeeds when components parameter had mismatch
+      if (!result.ok && result.rawText.toLowerCase().includes('component')) {
+        const retryBody = await postToMeta(bodyOnlyPayload);
+        if (retryBody.ok) {
+          result = retryBody;
+        }
+      }
+
+      if (!result.ok) {
+        console.error(
+          `[WhatsAppService] Meta WhatsApp Cloud API template dispatch failed for template '${templateName}' (${templateLanguage}):`,
+          result.data || result.rawText,
+        );
+        return {
+          success: false,
+          error: result.data?.error?.message || 'Meta Cloud API template delivery failed',
+        };
+      }
+
+      const messageId = result.data?.messages?.[0]?.id;
       return {
         success: true,
-        messageId: data.messages?.[0]?.id,
+        messageId,
       };
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('[WhatsAppService] Network error sending WhatsApp message:', err);
-      return { success: false };
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 

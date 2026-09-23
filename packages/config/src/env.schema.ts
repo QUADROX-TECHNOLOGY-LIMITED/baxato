@@ -28,10 +28,13 @@ export const envSchema = z.object({
   CLERK_SECRET_KEY: z.string().min(1),
   CLERK_WEBHOOK_SECRET: z.string().optional(),
 
-  // WhatsApp Cloud API (Phone OTP Verification)
+  // WhatsApp Cloud API (Phone OTP Verification & Message Templates)
   WHATSAPP_API_TOKEN: z.string().default(''),
   WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().default(''),
+  WHATSAPP_APP_ID: z.string().default('').optional(),
+  WHATSAPP_TEMPLATE_NAME: z.string().default('registration_otp'),
+  WHATSAPP_TEMPLATE_LANGUAGE: z.string().default('en_GB'),
 
   // Identity & KYC Provider (NIMC / NIN Verification via Monnify / Optional)
   IDENTITY_API_KEY: z.string().default('').optional(),
