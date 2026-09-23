@@ -27,6 +27,8 @@ COPY packages/config ./packages/config
 COPY apps/dashboard ./apps/dashboard
 
 # Compile packages and Next.js standalone build
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN pnpm --filter @baxato/common build
 RUN pnpm --filter @baxato/config build
 ENV NEXT_STANDALONE="true"

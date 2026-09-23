@@ -21,11 +21,31 @@ import {
 } from 'lucide-react';
 import { nigeriaStates, nigeriaStatesList } from '@baxato/common';
 import SearchableSelect from '@/components/SearchableSelect';
-import { SignUp } from '@clerk/nextjs';
+import { useClerk } from '@clerk/nextjs';
 
-export default function RegisterPage() {
-  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkConfigured = Boolean(clerkPubKey && clerkPubKey.startsWith('pk_'));
+interface RegisterFormContentProps {
+  onSendEmailOtp: (email: string, password?: string, firstName?: string, lastName?: string) => Promise<void>;
+  onVerifyEmailOtp: (code: string) => Promise<void>;
+  onCompleteSignUp: (password: string, firstName: string, lastName: string) => Promise<string | null>;
+  isClerkActive: boolean;
+}
+
+function getClerkErrorMessage(err: unknown): string {
+  if (!err) return 'An error occurred during authentication.';
+  const clerkErr = err as { errors?: Array<{ message?: string; longMessage?: string }> };
+  if (Array.isArray(clerkErr.errors) && clerkErr.errors.length > 0) {
+    return clerkErr.errors[0].longMessage || clerkErr.errors[0].message || 'Authentication error';
+  }
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function RegisterFormContent({
+  onSendEmailOtp,
+  onVerifyEmailOtp,
+  onCompleteSignUp,
+  isClerkActive,
+}: RegisterFormContentProps) {
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -139,7 +159,7 @@ export default function RegisterPage() {
     return formData.password === formData.confirmPassword;
   }, [formData.password, formData.confirmPassword]);
 
-  // Email verification trigger
+  // Email verification trigger (via Clerk Pro)
   const handleSendEmailOtp = async () => {
     setEmailOtpError(null);
     if (!formData.email.trim() || !isValidEmail) {
@@ -149,25 +169,23 @@ export default function RegisterPage() {
 
     setIsSendingEmailOtp(true);
     try {
-      const res = await fetch('/api/auth/send-email-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email.toLowerCase().trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Failed to send verification code.');
+      await onSendEmailOtp(
+        formData.email.toLowerCase().trim(),
+        formData.password || undefined,
+        formData.firstName.trim() || undefined,
+        formData.lastName.trim() || undefined,
+      );
       setEmailOtpSent(true);
       setEmailCountdown(60);
       setEmailOtp(''); // Field remains strictly empty for user entry
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to dispatch verification code.';
-      setEmailOtpError(msg);
+      setEmailOtpError(getClerkErrorMessage(err));
     } finally {
       setIsSendingEmailOtp(false);
     }
   };
 
-  // Email OTP verification confirm
+  // Email OTP verification confirm (via Clerk Pro)
   const handleVerifyEmailOtp = async () => {
     setEmailOtpError(null);
     if (emailOtp.trim().length < 6) {
@@ -177,22 +195,12 @@ export default function RegisterPage() {
 
     setIsVerifyingEmailOtp(true);
     try {
-      const res = await fetch('/api/auth/verify-email-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email.toLowerCase().trim(),
-          otp: emailOtp.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Invalid verification code.');
+      await onVerifyEmailOtp(emailOtp.trim());
       setIsEmailVerified(true);
       setEmailOtpSent(false);
       setEmailOtp('');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Invalid code. Please check your email.';
-      setEmailOtpError(msg);
+      setEmailOtpError(getClerkErrorMessage(err));
     } finally {
       setIsVerifyingEmailOtp(false);
     }
@@ -293,10 +301,18 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
+      // Finalize Clerk authentication & retrieve Clerk User ID
+      const clerkUserId = await onCompleteSignUp(
+        formData.password,
+        formData.firstName.trim(),
+        formData.lastName.trim(),
+      );
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          clerkId: clerkUserId || undefined,
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           email: formData.email.toLowerCase().trim(),
@@ -319,8 +335,7 @@ export default function RegisterPage() {
 
       setIsRegistered(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to complete registration.';
-      setErrorMessage(msg);
+      setErrorMessage(getClerkErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -463,49 +478,7 @@ export default function RegisterPage() {
           <div className="bg-white/95 dark:bg-[#0A1220]/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-3xl shadow-2xl p-6 sm:p-10 lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:shadow-none lg:p-0">
 
           <AnimatePresence mode="wait">
-            {isClerkConfigured ? (
-              /* ==================================================== */
-              /* CLERK AUTH COMPONENT                                 */
-              /* ==================================================== */
-              <motion.div
-                key="clerk-signup"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="w-full"
-              >
-                <div className="text-center mb-8">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0B1220] dark:text-white">
-                    Create your account
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                    Start vending telecom and utility services with BAXATO.
-                  </p>
-                </div>
-
-                <SignUp
-                  appearance={{
-                    variables: {
-                      colorPrimary: '#126BEB',
-                      borderRadius: '0.75rem',
-                    },
-                    elements: {
-                      card: 'shadow-none border-0 p-0 bg-transparent w-full',
-                      rootBox: 'w-full',
-                      headerTitle: 'hidden',
-                      headerSubtitle: 'hidden',
-                      formButtonPrimary:
-                        'bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-blue-500/15 text-sm',
-                      formFieldInput:
-                        'border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base sm:text-sm focus:border-[#126BEB] dark:bg-[#0D1726] dark:text-white',
-                      footerActionLink: 'text-[#126BEB] hover:text-[#0B5CC7] font-semibold',
-                    },
-                  }}
-                  routing="hash"
-                  signInUrl="/login"
-                />
-              </motion.div>
-            ) : isRegistered ? (
+            {isRegistered ? (
               /* ==================================================== */
               /* SUCCESS CONFIRMATION                                 */
               /* ==================================================== */
@@ -1081,4 +1054,136 @@ export default function RegisterPage() {
       </section>
     </div>
   );
+}
+
+function RegisterWithClerk() {
+  const clerk = useClerk();
+
+  const handleSendEmailOtp = async (
+    email: string,
+    password?: string,
+    firstName?: string,
+    lastName?: string,
+  ) => {
+    if (!clerk.loaded || !clerk.client) {
+      throw new Error('Clerk authentication service is still initializing. Please wait a moment.');
+    }
+
+    const signUp = clerk.client.signUp;
+
+    if (!signUp.id || signUp.emailAddress !== email.toLowerCase().trim()) {
+      await signUp.create({
+        emailAddress: email.toLowerCase().trim(),
+        password: password || undefined,
+        firstName: firstName?.trim() || undefined,
+        lastName: lastName?.trim() || undefined,
+      });
+    }
+
+    await signUp.prepareEmailAddressVerification({
+      strategy: 'email_code',
+    });
+  };
+
+  const handleVerifyEmailOtp = async (code: string) => {
+    if (!clerk.loaded || !clerk.client) {
+      throw new Error('Clerk authentication service is still initializing. Please wait a moment.');
+    }
+
+    const signUp = clerk.client.signUp;
+
+    const completeSignUp = await signUp.attemptEmailAddressVerification({
+      code: code.trim(),
+    });
+
+    if (completeSignUp.verifications?.emailAddress?.status !== 'verified') {
+      throw new Error('Verification code was not accepted. Please check the code and try again.');
+    }
+  };
+
+  const handleCompleteSignUp = async (
+    password: string,
+    firstName: string,
+    lastName: string,
+  ) => {
+    if (!clerk.loaded || !clerk.client) return null;
+
+    const signUp = clerk.client.signUp;
+    let sessionId = signUp.createdSessionId;
+    let userId = signUp.createdUserId;
+
+    if (signUp.status !== 'complete') {
+      const completeResult = await signUp.update({
+        password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      sessionId = completeResult.createdSessionId;
+      userId = completeResult.createdUserId;
+    }
+
+    if (sessionId) {
+      await clerk.setActive({ session: sessionId });
+    }
+
+    return userId;
+  };
+
+  return (
+    <RegisterFormContent
+      onSendEmailOtp={handleSendEmailOtp}
+      onVerifyEmailOtp={handleVerifyEmailOtp}
+      onCompleteSignUp={handleCompleteSignUp}
+      isClerkActive={true}
+    />
+  );
+}
+
+function RegisterWithoutClerk() {
+  const handleSendEmailOtp = async (email: string) => {
+    const res = await fetch('/api/auth/send-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.toLowerCase().trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Failed to dispatch verification code.');
+    }
+  };
+
+  const handleVerifyEmailOtp = async (code: string) => {
+    // Local development fallback
+    const res = await fetch('/api/auth/verify-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp: code }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Invalid verification code.');
+    }
+  };
+
+  const handleCompleteSignUp = async () => null;
+
+  return (
+    <RegisterFormContent
+      onSendEmailOtp={handleSendEmailOtp}
+      onVerifyEmailOtp={handleVerifyEmailOtp}
+      onCompleteSignUp={handleCompleteSignUp}
+      isClerkActive={false}
+    />
+  );
+}
+
+export default function RegisterPage() {
+  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured = Boolean(clerkPubKey && clerkPubKey.startsWith('pk_'));
+
+  if (isClerkConfigured) {
+    return <RegisterWithClerk />;
+  }
+
+  return <RegisterWithoutClerk />;
 }

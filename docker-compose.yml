@@ -87,6 +87,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     image: baxato-dashboard:latest
     container_name: baxato-dashboard
     restart: unless-stopped
