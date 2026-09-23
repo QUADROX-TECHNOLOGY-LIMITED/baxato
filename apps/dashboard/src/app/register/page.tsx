@@ -27,7 +27,6 @@ interface RegisterFormContentProps {
   onSendEmailOtp: (email: string, password?: string, firstName?: string, lastName?: string) => Promise<void>;
   onVerifyEmailOtp: (code: string) => Promise<void>;
   onCompleteSignUp: (password: string, firstName: string, lastName: string) => Promise<string | null>;
-  isClerkActive: boolean;
 }
 
 function getClerkErrorMessage(err: unknown): string {
@@ -44,7 +43,6 @@ function RegisterFormContent({
   onSendEmailOtp,
   onVerifyEmailOtp,
   onCompleteSignUp,
-  isClerkActive,
 }: RegisterFormContentProps) {
 
   const [formData, setFormData] = useState({
@@ -75,15 +73,6 @@ function RegisterFormContent({
   const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
   const [emailCountdown, setEmailCountdown] = useState(0);
 
-  // WhatsApp Phone In-Flow Verification States
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
-  const [phoneOtp, setPhoneOtp] = useState('');
-  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
-  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
-  const [phoneOtpError, setPhoneOtpError] = useState<string | null>(null);
-  const [phoneCountdown, setPhoneCountdown] = useState(0);
-
   // Email countdown timer
   useEffect(() => {
     if (emailCountdown > 0) {
@@ -91,14 +80,6 @@ function RegisterFormContent({
       return () => clearTimeout(timer);
     }
   }, [emailCountdown]);
-
-  // Phone countdown timer
-  useEffect(() => {
-    if (phoneCountdown > 0) {
-      const timer = setTimeout(() => setPhoneCountdown((c) => c - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [phoneCountdown]);
 
   // Available LGAs dynamically filtered by the selected State
   const availableLgas = useMemo(() => {
@@ -117,10 +98,6 @@ function RegisterFormContent({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const cleaned = e.target.value.replace(/\D/g, '').slice(0, 11);
     setFormData((prev) => ({ ...prev, phoneNumber: cleaned }));
-    if (isPhoneVerified) {
-      setIsPhoneVerified(false);
-      setPhoneOtpSent(false);
-    }
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,64 +183,6 @@ function RegisterFormContent({
     }
   };
 
-  // WhatsApp OTP verification trigger
-  const handleSendPhoneOtp = async () => {
-    setPhoneOtpError(null);
-    if (formData.phoneNumber.length < 10) {
-      setPhoneOtpError('Enter a valid 11-digit WhatsApp phone number.');
-      return;
-    }
-
-    setIsSendingPhoneOtp(true);
-    try {
-      const res = await fetch('/api/auth/send-phone-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Failed to send WhatsApp code.');
-      setPhoneOtpSent(true);
-      setPhoneCountdown(60);
-      setPhoneOtp(''); // Field remains strictly empty for user entry
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to dispatch WhatsApp code.';
-      setPhoneOtpError(msg);
-    } finally {
-      setIsSendingPhoneOtp(false);
-    }
-  };
-
-  // WhatsApp OTP verification confirm
-  const handleVerifyPhoneOtp = async () => {
-    setPhoneOtpError(null);
-    if (phoneOtp.trim().length < 6) {
-      setPhoneOtpError('Please enter the full 6-digit WhatsApp code.');
-      return;
-    }
-
-    setIsVerifyingPhoneOtp(true);
-    try {
-      const res = await fetch('/api/auth/verify-phone-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber: formData.phoneNumber,
-          otp: phoneOtp.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Invalid WhatsApp code.');
-      setIsPhoneVerified(true);
-      setPhoneOtpSent(false);
-      setPhoneOtp('');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Invalid code. Please check your message.';
-      setPhoneOtpError(msg);
-    } finally {
-      setIsVerifyingPhoneOtp(false);
-    }
-  };
 
   const isFormValid = useMemo(() => {
     return (
@@ -636,6 +555,13 @@ function RegisterFormContent({
                       )}
                     </div>
 
+                    {emailOtpError && !emailOtpSent && (
+                      <p className="text-[11px] text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>{emailOtpError}</span>
+                      </p>
+                    )}
+
                     {/* Email Verification Box (Expands when OTP is sent) */}
                     <AnimatePresence>
                       {emailOtpSent && !isEmailVerified && (
@@ -708,15 +634,15 @@ function RegisterFormContent({
                     </AnimatePresence>
                   </div>
 
-                  {/* WhatsApp Phone Number with In-Flow Verification */}
+                  {/* WhatsApp Phone Number */}
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                         WhatsApp Phone Number <span className="text-red-500">*</span>
                       </label>
-                      {isPhoneVerified && (
+                      {formData.phoneNumber.length >= 10 && (
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          <Check className="w-3.5 h-3.5" /> Verified
+                          <Check className="w-3.5 h-3.5" /> Valid
                         </span>
                       )}
                     </div>
@@ -730,111 +656,19 @@ function RegisterFormContent({
                         type="tel"
                         required
                         maxLength={11}
-                        disabled={isPhoneVerified}
                         placeholder="08012345678"
                         value={formData.phoneNumber}
                         onChange={handlePhoneChange}
-                        className={`w-full pl-24 pr-24 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
-                          isPhoneVerified
+                        className={`w-full pl-24 pr-4 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
+                          formData.phoneNumber.length >= 10
                             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60'
                             : 'border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
                         }`}
                       />
-                      {!isPhoneVerified ? (
-                        <button
-                          type="button"
-                          onClick={handleSendPhoneOtp}
-                          disabled={isSendingPhoneOtp || formData.phoneNumber.length < 10}
-                          className="absolute right-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-[#126BEB] dark:text-[#38BDF8] text-xs font-bold transition-colors disabled:opacity-40"
-                        >
-                          {isSendingPhoneOtp ? 'Sending...' : 'Verify'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsPhoneVerified(false);
-                            setPhoneOtpSent(false);
-                          }}
-                          className="absolute right-2.5 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-medium flex items-center gap-1"
-                          title="Change phone"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Edit</span>
-                        </button>
-                      )}
                     </div>
-
-                    {/* Phone Verification Box (Expands when OTP is sent) */}
-                    <AnimatePresence>
-                      {phoneOtpSent && !isPhoneVerified && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2.5 p-4 rounded-xl bg-slate-50 dark:bg-[#0A1220] border-2 border-blue-200 dark:border-blue-900/50 overflow-hidden"
-                        >
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                              Verify WhatsApp Number
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setPhoneOtpSent(false)}
-                              className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
-                            >
-                              Change Number
-                            </button>
-                          </div>
-
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-                            Enter the 6-digit WhatsApp code sent to{' '}
-                            <strong className="text-slate-800 dark:text-slate-200">+234{formData.phoneNumber}</strong>.
-                          </p>
-
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              maxLength={6}
-                              placeholder="• • • • • •"
-                              value={phoneOtp}
-                              onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
-                              className="flex-1 px-4 py-2.5 text-center tracking-[0.35em] font-mono text-base font-bold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB]"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleVerifyPhoneOtp}
-                              disabled={isVerifyingPhoneOtp || phoneOtp.length < 6}
-                              className="px-5 py-2.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-colors disabled:opacity-40"
-                            >
-                              {isVerifyingPhoneOtp ? 'Verifying...' : 'Confirm'}
-                            </button>
-                          </div>
-
-                          {phoneOtpError && (
-                            <p className="text-[11px] text-red-500 font-medium mt-2">
-                              {phoneOtpError}
-                            </p>
-                          )}
-
-                          <div className="flex justify-between items-center mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-                            <span>
-                              {phoneCountdown > 0 ? (
-                                `Resend code in ${phoneCountdown}s`
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={handleSendPhoneOtp}
-                                  className="text-[#126BEB] font-semibold hover:underline inline-flex items-center gap-1"
-                                >
-                                  <RotateCw className="w-3 h-3" /> Resend OTP
-                                </button>
-                              )}
-                            </span>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      Official Nigerian merchant contact for transaction notices and emergency support.
+                    </p>
                   </div>
 
                   {/* Business Name */}
@@ -1056,7 +890,9 @@ function RegisterFormContent({
   );
 }
 
-function RegisterWithClerk() {
+export const dynamic = 'force-dynamic';
+
+export default function RegisterPage() {
   const clerk = useClerk();
 
   const handleSendEmailOtp = async (
@@ -1065,19 +901,39 @@ function RegisterWithClerk() {
     firstName?: string,
     lastName?: string,
   ) => {
+    // Wait briefly if Clerk SDK is still finishing initialization
     if (!clerk.loaded || !clerk.client) {
-      throw new Error('Clerk authentication service is still initializing. Please wait a moment.');
+      let attempts = 0;
+      while ((!clerk.loaded || !clerk.client) && attempts < 25) {
+        await new Promise((r) => setTimeout(r, 200));
+        attempts++;
+      }
+      if (!clerk.loaded || !clerk.client) {
+        throw new Error('Clerk authentication service is still connecting. Please wait a moment and try again.');
+      }
     }
 
     const signUp = clerk.client.signUp;
+    const normalizedEmail = email.toLowerCase().trim();
 
-    if (!signUp.id || signUp.emailAddress !== email.toLowerCase().trim()) {
-      await signUp.create({
-        emailAddress: email.toLowerCase().trim(),
-        password: password || undefined,
-        firstName: firstName?.trim() || undefined,
-        lastName: lastName?.trim() || undefined,
-      });
+    // If an existing sign-up attempt exists for a different email or was abandoned, create fresh
+    if (!signUp.id || signUp.emailAddress !== normalizedEmail || signUp.status === 'abandoned') {
+      try {
+        await signUp.create({
+          emailAddress: normalizedEmail,
+          password: password || undefined,
+          firstName: firstName?.trim() || undefined,
+          lastName: lastName?.trim() || undefined,
+        });
+      } catch (createErr: unknown) {
+        const clerkErr = createErr as { errors?: Array<{ code?: string; message?: string }> };
+        const isExistingForm = clerkErr?.errors?.some(
+          (e) => e.code === 'form_identifier_exists' || e.code === 'session_exists'
+        );
+        if (!isExistingForm && signUp.emailAddress !== normalizedEmail) {
+          throw createErr;
+        }
+      }
     }
 
     await signUp.prepareEmailAddressVerification({
@@ -1091,7 +947,6 @@ function RegisterWithClerk() {
     }
 
     const signUp = clerk.client.signUp;
-
     const completeSignUp = await signUp.attemptEmailAddressVerification({
       code: code.trim(),
     });
@@ -1126,7 +981,7 @@ function RegisterWithClerk() {
       await clerk.setActive({ session: sessionId });
     }
 
-    return userId;
+    return userId || null;
   };
 
   return (
@@ -1134,56 +989,6 @@ function RegisterWithClerk() {
       onSendEmailOtp={handleSendEmailOtp}
       onVerifyEmailOtp={handleVerifyEmailOtp}
       onCompleteSignUp={handleCompleteSignUp}
-      isClerkActive={true}
     />
   );
-}
-
-function RegisterWithoutClerk() {
-  const handleSendEmailOtp = async (email: string) => {
-    const res = await fetch('/api/auth/send-email-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.toLowerCase().trim() }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error?.message || 'Failed to dispatch verification code.');
-    }
-  };
-
-  const handleVerifyEmailOtp = async (code: string) => {
-    // Local development fallback
-    const res = await fetch('/api/auth/verify-email-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp: code }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error?.message || 'Invalid verification code.');
-    }
-  };
-
-  const handleCompleteSignUp = async () => null;
-
-  return (
-    <RegisterFormContent
-      onSendEmailOtp={handleSendEmailOtp}
-      onVerifyEmailOtp={handleVerifyEmailOtp}
-      onCompleteSignUp={handleCompleteSignUp}
-      isClerkActive={false}
-    />
-  );
-}
-
-export default function RegisterPage() {
-  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkConfigured = Boolean(clerkPubKey && clerkPubKey.startsWith('pk_'));
-
-  if (isClerkConfigured) {
-    return <RegisterWithClerk />;
-  }
-
-  return <RegisterWithoutClerk />;
 }
