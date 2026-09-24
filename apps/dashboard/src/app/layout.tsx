@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   },
 };
 
+import ThemeSynchronizer from '@/components/ThemeSynchronizer';
+
 export default function RootLayout({
   children,
 }: {
@@ -31,8 +33,9 @@ export default function RootLayout({
   const content = (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#070D18" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#ffffff" id="meta-theme-color" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -40,10 +43,17 @@ export default function RootLayout({
                 try {
                   var stored = localStorage.getItem('baxato_theme');
                   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (stored === 'dark' || (!stored && prefersDark)) {
+                  var isDark = stored === 'dark' || (!stored && prefersDark);
+                  if (isDark) {
                     document.documentElement.classList.add('dark');
+                    document.documentElement.style.colorScheme = 'dark';
                   } else {
                     document.documentElement.classList.remove('dark');
+                    document.documentElement.style.colorScheme = 'light';
+                  }
+                  var meta = document.getElementById('meta-theme-color');
+                  if (meta) {
+                    meta.setAttribute('content', isDark ? '#070D18' : '#ffffff');
                   }
                 } catch (err) {}
               })();
@@ -52,6 +62,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 antialiased selection:bg-blue-100 selection:text-[#126BEB]">
+        <ThemeSynchronizer />
         {isClerkConfigured ? (
           children
         ) : (

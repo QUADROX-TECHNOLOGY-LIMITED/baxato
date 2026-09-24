@@ -21,14 +21,22 @@ export default function ThemeToggle() {
 
   const toggleTheme = () => {
     const root = document.documentElement;
-    if (isDark) {
-      root.classList.remove('dark');
-      localStorage.setItem('baxato_theme', 'light');
-      setIsDark(false);
-    } else {
+    const nextDark = !isDark;
+    if (nextDark) {
       root.classList.add('dark');
+      root.style.colorScheme = 'dark';
       localStorage.setItem('baxato_theme', 'dark');
       setIsDark(true);
+    } else {
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+      localStorage.setItem('baxato_theme', 'light');
+      setIsDark(false);
+    }
+
+    const meta = document.getElementById('meta-theme-color') || document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', nextDark ? '#070D18' : '#ffffff');
     }
   };
 
