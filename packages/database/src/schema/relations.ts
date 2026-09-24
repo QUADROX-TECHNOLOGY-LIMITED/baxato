@@ -1,8 +1,8 @@
 import { relations } from 'drizzle-orm';
-import { users, businesses, businessMembers, kycVerifications } from './core';
-import { wallets, financialLedger } from './wallets';
-import { serviceTransactions, providerTransactions, examPins } from './services';
-import { apiKeys, idempotencyKeys, webhookDeliveries, auditLogs } from './security';
+import { users, businesses, businessMembers, kycVerifications } from './core.js';
+import { wallets, financialLedger } from './wallets.js';
+import { serviceTransactions, providerTransactions, examPins } from './services.js';
+import { apiKeys, idempotencyKeys, webhookDeliveries, auditLogs } from './security.js';
 
 export const usersRelations = relations(users, ({ many }) => ({
   ownedBusinesses: many(businesses),

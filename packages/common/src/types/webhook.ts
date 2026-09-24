@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WebhookDeliveryStatus, WebhookEventType } from './enums';
+import { WebhookDeliveryStatus, WebhookEventType } from './enums.js';
 
 export interface WebhookConfigDto {
   webhookUrl: string | null;

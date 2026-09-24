@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WalletType } from './enums';
+import { WalletType } from './enums.js';
 
 export const transferCommissionSchema = z.object({
   amountNaira: z

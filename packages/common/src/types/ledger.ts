@@ -1,4 +1,4 @@
-import type { LedgerDirection } from './enums';
+import type { LedgerDirection } from './enums.js';
 
 export enum LedgerEntryType {
   WALLET_FUNDING = 'WALLET_FUNDING',

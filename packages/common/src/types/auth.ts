@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserRole, KycStatus, ApiKeyEnvironment, ApiKeyStatus } from './enums';
+import { UserRole, KycStatus, ApiKeyEnvironment, ApiKeyStatus } from './enums.js';
 
 export const registerUserSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),

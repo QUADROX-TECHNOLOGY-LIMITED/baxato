@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, integer, jsonb, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { generateEntityId } from '@baxato/common';
-import { businesses, users } from './core';
+import { businesses, users } from './core.js';
 
 export const apiKeyStatusEnum = pgEnum('api_key_status', [
   'ACTIVE',

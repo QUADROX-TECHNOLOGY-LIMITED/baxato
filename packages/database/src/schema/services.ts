@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, bigint, integer, boolean, jsonb, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { generateEntityId, ServiceType, TransactionStatus, ProviderName } from '@baxato/common';
-import { businesses, users } from './core';
+import { businesses, users } from './core.js';
 
 export const serviceTypeEnum = pgEnum('service_type', [
   ServiceType.AIRTIME,

@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, bigint, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { generateEntityId, WalletType, LedgerDirection } from '@baxato/common';
-import { businesses } from './core';
+import { businesses } from './core.js';
 
 export const walletTypeEnum = pgEnum('wallet_type', [
   WalletType.MAIN,

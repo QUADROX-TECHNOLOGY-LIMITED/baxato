@@ -1,5 +1,5 @@
-import { db, closeDatabasePool } from './client';
-import { users, businesses, wallets, providers } from './schema/index';
+import { db, closeDatabasePool } from './client.js';
+import { users, businesses, wallets, providers } from './schema/index.js';
 import { UserRole, WalletType, ProviderName } from '@baxato/common';
 
 export async function seedDatabase() {
