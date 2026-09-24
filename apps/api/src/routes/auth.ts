@@ -217,6 +217,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /auth/verify-phone & POST /auth/verify-phone-otp
    */
   const handleVerifyPhone = async (request: any, reply: any) => {
+    request.log.info({ body: request.body }, '[WhatsApp] Received phone OTP verification request');
+
     const parseResult = verifyPhoneOtpSchema.safeParse(request.body);
     if (!parseResult.success) {
       throw new ValidationError(parseResult.error.errors[0]?.message || 'Invalid OTP payload');
@@ -226,15 +228,28 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     const verification = whatsAppService.verifyOtp(phoneNumber, otp);
 
     if (!verification.valid) {
+      request.log.warn(
+        { phoneNumber, reason: verification.reason },
+        '[WhatsApp] Phone OTP verification rejected',
+      );
       throw new ValidationError(verification.reason || 'Invalid verification code.');
     }
 
-    // Update user record if matching phone exists
-    const normalizedPhone = whatsAppService.normalizePhoneNumber(phoneNumber);
-    await db
-      .update(users)
-      .set({ isPhoneVerified: true, updatedAt: new Date() })
-      .where(eq(users.phoneNumber, normalizedPhone));
+    request.log.info({ phoneNumber }, '[WhatsApp] Phone OTP verification succeeded');
+
+    // Update user record if matching phone exists (for existing registered users)
+    try {
+      const normalizedPhone = whatsAppService.normalizePhoneNumber(phoneNumber);
+      await db
+        .update(users)
+        .set({ isPhoneVerified: true, updatedAt: new Date() })
+        .where(eq(users.phoneNumber, normalizedPhone));
+    } catch (dbErr) {
+      request.log.warn(
+        { phoneNumber, err: dbErr },
+        '[WhatsApp] DB user update skipped (user may be registering in-flow)',
+      );
+    }
 
     return reply.status(200).send(
       createSuccessResponse(
