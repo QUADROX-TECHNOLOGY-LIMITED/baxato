@@ -12,6 +12,7 @@ import {
   UserRole,
   WalletType,
   KycStatus,
+  generateEntityId,
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { env } from '@baxato/config';
@@ -33,6 +34,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const data = parseResult.data;
+    const rawClerkId = data.clerkId?.trim() || (request.body as Record<string, any>)?.clerkId?.trim();
 
     // Check if email already exists
     const [existingEmail] = await db
@@ -45,83 +47,138 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ConflictError(`An account with email ${data.email} already exists.`);
     }
 
+    // Check if clerkId already exists (if provided)
+    if (rawClerkId) {
+      const [existingClerk] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.clerkId, rawClerkId))
+        .limit(1);
+
+      if (existingClerk) {
+        throw new ConflictError('An account is already linked to this authentication identity. Please sign in.');
+      }
+    }
+
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10);
     const normalizedPhone = whatsAppService.normalizePhoneNumber(data.phoneNumber);
+    const userId = generateEntityId('usr');
+    const finalClerkId = rawClerkId || `clerk_${userId}`;
 
-    // 1. Create User
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        email: data.email.toLowerCase().trim(),
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
-        middleName: data.middleName ? data.middleName.trim() : null,
-        phoneNumber: normalizedPhone,
-        passwordHash,
-        isEmailVerified: true,
-        isPhoneVerified: data.isPhoneVerified ?? false,
-        role: UserRole.BUSINESS_OWNER,
-        status: 'ACTIVE',
-        kycStatus: KycStatus.UNVERIFIED,
-      })
-      .returning();
+    let newUser;
+    let newBusiness;
 
-    if (!newUser) {
-      throw new Error('Failed to create user record.');
+    try {
+      // 1. Create User
+      const [createdUser] = await db
+        .insert(users)
+        .values({
+          id: userId,
+          clerkId: finalClerkId,
+          email: data.email.toLowerCase().trim(),
+          firstName: data.firstName.trim(),
+          lastName: data.lastName.trim(),
+          middleName: data.middleName ? data.middleName.trim() : null,
+          phoneNumber: normalizedPhone,
+          passwordHash,
+          isEmailVerified: true,
+          isPhoneVerified: data.isPhoneVerified ?? false,
+          role: UserRole.BUSINESS_OWNER,
+          status: 'ACTIVE',
+          kycStatus: KycStatus.UNVERIFIED,
+        })
+        .returning();
+
+      newUser = createdUser;
+      if (!newUser) {
+        throw new Error('Failed to create user record.');
+      }
+
+      // 2. Create Initial Business (with Country, State, LGA)
+      const rawSlug = data.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const baseSlug = rawSlug || 'business';
+      const slug = `${baseSlug}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+      const [createdBusiness] = await db
+        .insert(businesses)
+        .values({
+          ownerId: newUser.id,
+          name: data.businessName.trim(),
+          slug,
+          websiteUrl: data.websiteUrl || null,
+          country: data.country.toUpperCase(),
+          state: data.state.trim(),
+          lga: data.lga.trim(),
+          status: 'ACTIVE',
+        })
+        .returning();
+
+      newBusiness = createdBusiness;
+
+      // 3. Provision Initial Main and Commission Wallets
+      if (newBusiness) {
+        await db.insert(wallets).values([
+          {
+            businessId: newBusiness.id,
+            type: WalletType.MAIN,
+            balance: 0n,
+          },
+          {
+            businessId: newBusiness.id,
+            type: WalletType.COMMISSION,
+            balance: 0n,
+          },
+        ]);
+      }
+    } catch (dbErr: any) {
+      request.log.error({ err: dbErr }, 'Database error during merchant registration');
+      if (dbErr.code === '23505') {
+        const detail = dbErr.detail || dbErr.message || '';
+        if (detail.includes('email')) {
+          throw new ConflictError(`An account with email ${data.email} already exists.`);
+        }
+        if (detail.includes('clerk_id') || detail.includes('clerk')) {
+          throw new ConflictError('An account is already linked to this authentication identity. Please sign in.');
+        }
+        if (detail.includes('slug')) {
+          throw new ConflictError('A business with this name already exists. Please choose a different business name.');
+        }
+        throw new ConflictError(`Registration conflict: ${detail}`);
+      }
+      if (dbErr.code === '23502') {
+        throw new ValidationError(`Required field missing in database: ${dbErr.column || 'column'}`);
+      }
+      throw dbErr;
     }
 
-    // 2. Create Initial Business (with Country, State, LGA)
-    const baseSlug = data.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    const slug = `${baseSlug}-${Date.now().toString(36)}`;
-
-    const [newBusiness] = await db
-      .insert(businesses)
-      .values({
-        ownerId: newUser.id,
-        name: data.businessName.trim(),
-        slug,
-        websiteUrl: data.websiteUrl || null,
-        country: data.country.toUpperCase(),
-        state: data.state.trim(),
-        lga: data.lga.trim(),
-        status: 'ACTIVE',
-      })
-      .returning();
-
-    // 3. Provision Initial Main and Commission Wallets
-    if (newBusiness) {
-      await db.insert(wallets).values([
-        {
-          businessId: newBusiness.id,
-          type: WalletType.MAIN,
-          balance: 0n,
-        },
-        {
-          businessId: newBusiness.id,
-          type: WalletType.COMMISSION,
-          balance: 0n,
-        },
-      ]);
+    // 4. Dispatch Email Verification via ZeptoMail ONLY if not already verified
+    if (!newUser.isEmailVerified) {
+      try {
+        const emailVerificationToken = generateToken({
+          id: newUser.id,
+          email: newUser.email,
+          role: newUser.role as UserRole,
+          businessId: newBusiness?.id,
+          kycStatus: newUser.kycStatus as KycStatus,
+        });
+        await zeptoMailService.sendVerificationEmail(
+          newUser.email,
+          `${newUser.firstName} ${newUser.lastName}`,
+          emailVerificationToken,
+        );
+      } catch (mailErr) {
+        request.log.warn({ err: mailErr }, 'ZeptoMail email verification failed during registration (non-blocking)');
+      }
     }
-
-    // 4. Dispatch Email Verification via ZeptoMail
-    const emailVerificationToken = generateToken({
-      id: newUser.id,
-      email: newUser.email,
-      role: newUser.role as UserRole,
-      businessId: newBusiness?.id,
-      kycStatus: newUser.kycStatus as KycStatus,
-    });
-    await zeptoMailService.sendVerificationEmail(
-      newUser.email,
-      `${newUser.firstName} ${newUser.lastName}`,
-      emailVerificationToken,
-    );
 
     // 5. Dispatch WhatsApp OTP for phone verification if not already verified
     if (!data.isPhoneVerified) {
-      await whatsAppService.sendOtp(normalizedPhone);
+      try {
+        await whatsAppService.sendOtp(normalizedPhone);
+      } catch (waErr) {
+        request.log.warn({ err: waErr }, 'WhatsApp OTP dispatch failed during registration (non-blocking)');
+      }
     }
 
     // 6. Generate Session Token
