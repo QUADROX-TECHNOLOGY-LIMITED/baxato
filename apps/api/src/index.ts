@@ -1,10 +1,19 @@
 import { buildServer } from './server.js';
 import { env, getSanitizedEnv } from '@baxato/config';
+import { runMigrations } from '@baxato/database';
 
 async function bootstrap() {
   const app = buildServer();
 
   try {
+    // 1. Ensure all database tables, columns, indexes, and constraints exist
+    try {
+      await runMigrations();
+      app.log.info('✅ PostgreSQL schemas and migrations verified successfully');
+    } catch (migErr) {
+      app.log.error({ err: migErr }, '⚠️ Database auto-migration reported an error (continuing server startup)');
+    }
+
     const address = await app.listen({
       port: env.PORT,
       host: env.HOST,

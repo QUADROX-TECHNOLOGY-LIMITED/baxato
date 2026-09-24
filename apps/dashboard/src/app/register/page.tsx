@@ -33,14 +33,6 @@ interface RegisterFormContentProps {
   checkEmailVerified?: (email: string) => boolean;
 }
 
-const PROVISIONING_STEPS = [
-  { id: 1, label: 'Authenticating merchant credentials...', detail: 'Verifying Clerk cryptographic session' },
-  { id: 2, label: 'Registering business on telecom infrastructure...', detail: 'Connecting to MTN, Airtel, Glo & DISCO gateways' },
-  { id: 3, label: 'Provisioning NGN settlement & commission wallets...', detail: 'Configuring multi-tier financial accounts' },
-  { id: 4, label: 'Configuring bank-grade double-entry ledger...', detail: 'Initializing real-time automated audit trail' },
-  { id: 5, label: 'Finalizing your merchant workspace...', detail: 'Readying your enterprise console' },
-];
-
 function getClerkErrorMessage(err: unknown): string {
   if (!err) return 'An error occurred during authentication.';
   const clerkErr = err as { errors?: Array<{ code?: string; message?: string; longMessage?: string }> };
@@ -82,8 +74,6 @@ function RegisterFormContent({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [redirectCountdown, setRedirectCountdown] = useState(3);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
 
@@ -131,43 +121,6 @@ function RegisterFormContent({
       }
     }
   }, [formData.email, checkEmailVerified, isEmailVerified]);
-
-  // Stepper interval during account provisioning
-  useEffect(() => {
-    if (!isSubmitting) {
-      setCurrentStepIndex(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        if (prev < PROVISIONING_STEPS.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, 1100);
-
-    return () => clearInterval(interval);
-  }, [isSubmitting]);
-
-  // Auto-redirect countdown on registration success
-  useEffect(() => {
-    if (!isRegistered) return;
-
-    const timer = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push('/dashboard');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isRegistered, router]);
 
   // Available LGAs dynamically filtered by the selected State
   const availableLgas = useMemo(() => {
@@ -443,7 +396,7 @@ function RegisterFormContent({
         } catch {}
       }
 
-      setIsRegistered(true);
+      router.push('/dashboard');
     } catch (err: unknown) {
       setErrorMessage(getClerkErrorMessage(err));
     } finally {
@@ -454,205 +407,43 @@ function RegisterFormContent({
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-200 transition-colors duration-200 relative">
       {/* ======================================================== */}
-      {/* FULL-SCREEN BRANDED PROVISIONING & ONBOARDING OVERLAY     */}
+      {/* SLEEK FROSTED LOADING OVERLAY (CENTERED CIRCULAR SPINNER) */}
       {/* ======================================================== */}
       <AnimatePresence>
-        {(isSubmitting || isRegistered) && (
+        {isSubmitting && (
           <motion.div
-            key="provisioning-fullscreen-overlay"
+            key="frosted-loading-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-slate-950/85 dark:bg-[#040812]/92 backdrop-blur-2xl text-white select-none overflow-hidden"
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-md select-none"
           >
-            {/* Dynamic Background Glows */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-[#126BEB]/25 via-[#38BDF8]/20 to-transparent rounded-full blur-[120px] pointer-events-none" />
-
-            {/* Central Stage Card */}
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative z-10 w-full max-w-md text-center flex flex-col items-center"
-            >
-              {/* Animated Brand Insignia (Loading) vs Verified Shield (Success) */}
-              {!isRegistered ? (
-                <div className="relative w-28 h-28 mb-8 flex items-center justify-center">
-                  {/* Concentric Pulsing Ripples */}
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.4, 1.8],
-                      opacity: [0.6, 0.25, 0],
-                    }}
-                    transition={{
-                      duration: 2.5,
-                      repeat: Infinity,
-                      ease: 'easeOut',
-                    }}
-                    className="absolute inset-0 rounded-3xl bg-[#126BEB]/40 blur-sm pointer-events-none"
-                  />
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.25, 1.55],
-                      opacity: [0.7, 0.35, 0],
-                    }}
-                    transition={{
-                      duration: 2.5,
-                      delay: 0.8,
-                      repeat: Infinity,
-                      ease: 'easeOut',
-                    }}
-                    className="absolute inset-0 rounded-3xl bg-[#38BDF8]/30 blur-sm pointer-events-none"
-                  />
-
-                  {/* Gradient Glow Sheen */}
-                  <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-[#126BEB] via-[#38BDF8] to-blue-500 opacity-70 blur-md animate-pulse" />
-
-                  {/* Brand Logo Core Tile */}
-                  <div className="relative w-24 h-24 rounded-3xl bg-[#071328] border border-blue-500/40 shadow-2xl flex items-center justify-center p-3 backdrop-blur-md">
-                    <div className="relative w-full h-full">
-                      <Image
-                        src="/baxato-logo.jpg"
-                        alt="BAXATO"
-                        fill
-                        priority
-                        className="object-contain rounded-2xl"
-                      />
-                    </div>
+            <div className="flex flex-col items-center justify-center p-6 text-center">
+              {/* Circular spinning ring with BAXATO emblem */}
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                {/* Circular track */}
+                <div className="absolute inset-0 rounded-full border-[3px] border-white/20 dark:border-white/10" />
+                {/* Rotating accent arc */}
+                <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-[#126BEB] border-r-[#38BDF8] animate-spin" />
+                {/* Centered logo badge */}
+                <div className="relative w-11 h-11 rounded-full overflow-hidden shadow-lg bg-white dark:bg-[#0A1324] p-1 flex items-center justify-center border border-slate-200/50 dark:border-slate-800">
+                  <div className="relative w-full h-full">
+                    <Image
+                      src="/baxato-logo.jpg"
+                      alt="BAXATO"
+                      fill
+                      priority
+                      className="object-contain rounded-full"
+                    />
                   </div>
                 </div>
-              ) : (
-                /* Celebratory Success Icon */
-                <motion.div
-                  initial={{ scale: 0.4, rotate: -25, opacity: 0 }}
-                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                  transition={{ type: 'spring', damping: 16, stiffness: 240 }}
-                  className="relative w-28 h-28 mb-8 flex items-center justify-center"
-                >
-                  <div className="absolute inset-0 rounded-3xl bg-emerald-500/30 blur-2xl animate-pulse" />
-                  <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-tr from-emerald-600/30 to-emerald-400/20 border border-emerald-500/50 shadow-2xl flex items-center justify-center text-emerald-400 backdrop-blur-md">
-                    <CheckCircle2 className="w-13 h-13 text-emerald-400 drop-shadow-[0_0_16px_rgba(52,211,153,0.7)]" />
-                  </div>
-                </motion.div>
-              )}
+              </div>
 
-              {/* Headings & Descriptions */}
-              {!isRegistered ? (
-                <>
-                  <motion.h3
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-2xl font-extrabold tracking-tight text-white mb-2"
-                  >
-                    Provisioning Merchant Account
-                  </motion.h3>
-                  <p className="text-sm text-slate-300 font-medium mb-7">
-                    Setting up enterprise infrastructure for{' '}
-                    <span className="text-[#38BDF8] font-bold">{formData.businessName || 'your business'}</span>
-                  </p>
-
-                  {/* Step Progression Card */}
-                  <div className="w-full bg-[#0A162C]/90 border border-blue-900/50 rounded-2xl p-5 mb-6 text-left shadow-2xl backdrop-blur-md">
-                    <div className="space-y-3.5">
-                      {PROVISIONING_STEPS.map((step, idx) => {
-                        const isCurrent = idx === currentStepIndex;
-                        const isDone = idx < currentStepIndex;
-                        return (
-                          <div
-                            key={step.id}
-                            className={`flex items-center gap-3 transition-opacity duration-300 ${
-                              isCurrent ? 'opacity-100' : isDone ? 'opacity-85' : 'opacity-35'
-                            }`}
-                          >
-                            <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-                              {isDone ? (
-                                <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 flex items-center justify-center">
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                </div>
-                              ) : isCurrent ? (
-                                <Loader2 className="w-4 h-4 text-[#38BDF8] animate-spin" />
-                              ) : (
-                                <div className="w-2 h-2 rounded-full bg-slate-600" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className={`text-xs font-semibold truncate ${
-                                  isCurrent
-                                    ? 'text-white'
-                                    : isDone
-                                    ? 'text-slate-300'
-                                    : 'text-slate-500'
-                                }`}
-                              >
-                                {step.label}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Shimmer Progress Bar */}
-                    <div className="mt-5 w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-[#126BEB] via-[#38BDF8] to-blue-400 rounded-full"
-                        initial={{ width: '15%' }}
-                        animate={{
-                          width: `${Math.min(96, ((currentStepIndex + 1) / PROVISIONING_STEPS.length) * 100)}%`,
-                        }}
-                        transition={{ duration: 0.5, ease: 'easeInOut' }}
-                      />
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5 justify-center">
-                    <Lock className="w-3.5 h-3.5 text-[#38BDF8]" />
-                    End-to-end encrypted TLS 1.3 handshake with Central Clearing
-                  </p>
-                </>
-              ) : (
-                /* Success State */
-                <>
-                  <motion.h3
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-2xl font-extrabold tracking-tight text-white mb-2"
-                  >
-                    Merchant Account Ready!
-                  </motion.h3>
-                  <motion.p
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="text-sm text-slate-300 font-medium mb-6"
-                  >
-                    Welcome aboard, <strong className="text-white font-bold">{formData.firstName}</strong>. Your merchant console and settlement wallets are active.
-                  </motion.p>
-
-                  {/* Auto-Redirect Information Box */}
-                  <div className="w-full bg-[#0A162C]/90 border border-emerald-500/40 rounded-2xl p-5 mb-6 text-left shadow-2xl backdrop-blur-md">
-                    <div className="flex items-center gap-2.5 text-emerald-400 text-xs font-semibold mb-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>Multi-tier Wallets &amp; Telecom Ledger Initialized</span>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Launching your merchant dashboard in{' '}
-                      <span className="font-extrabold text-white text-sm">{redirectCountdown}s</span>...
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-semibold text-sm transition-all shadow-lg shadow-blue-500/30 active:scale-[0.99]"
-                  >
-                    Launch Merchant Dashboard
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </motion.div>
+              <p className="mt-4 text-xs font-semibold text-white drop-shadow-md tracking-wide">
+                Creating your account...
+              </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
