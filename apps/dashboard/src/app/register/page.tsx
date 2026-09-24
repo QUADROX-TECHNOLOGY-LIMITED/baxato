@@ -25,7 +25,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { useClerk } from '@clerk/nextjs';
 
 interface RegisterFormContentProps {
-  onSendEmailOtp: (email: string, password?: string, firstName?: string, lastName?: string) => Promise<void>;
+  onSendEmailOtp: (email: string) => Promise<void>;
   onVerifyEmailOtp: (code: string) => Promise<void>;
   onCompleteSignUp: (password: string, firstName: string, lastName: string) => Promise<string | null>;
 }
@@ -168,12 +168,7 @@ function RegisterFormContent({
 
     setIsSendingEmailOtp(true);
     try {
-      await onSendEmailOtp(
-        formData.email.toLowerCase().trim(),
-        formData.password || undefined,
-        formData.firstName.trim() || undefined,
-        formData.lastName.trim() || undefined,
-      );
+      await onSendEmailOtp(formData.email.toLowerCase().trim());
       setEmailOtpSent(true);
       setEmailCountdown(60);
       setEmailOtp(''); // Field remains strictly empty for user entry
@@ -1140,12 +1135,7 @@ export const dynamic = 'force-dynamic';
 export default function RegisterPage() {
   const clerk = useClerk();
 
-  const handleSendEmailOtp = async (
-    email: string,
-    password?: string,
-    firstName?: string,
-    lastName?: string,
-  ) => {
+  const handleSendEmailOtp = async (email: string) => {
     // Wait briefly if Clerk SDK is still finishing initialization
     if (!clerk.loaded || !clerk.client) {
       let attempts = 0;
@@ -1166,9 +1156,6 @@ export default function RegisterPage() {
       try {
         await signUp.create({
           emailAddress: normalizedEmail,
-          password: password || undefined,
-          firstName: firstName?.trim() || undefined,
-          lastName: lastName?.trim() || undefined,
         });
       } catch (createErr: unknown) {
         const clerkErr = createErr as { errors?: Array<{ code?: string; message?: string }> };
