@@ -202,6 +202,10 @@ export class WhatsAppService {
     };
 
     try {
+      console.log(
+        `[WhatsAppService] Initiating template '${templateName}' (${templateLanguage}) dispatch to ${normalized} via Meta Cloud API...`,
+      );
+
       // 1. Try primary format: Authentication template with OTP button
       let result = await postToMeta(authOtpPayload);
 
@@ -224,17 +228,25 @@ export class WhatsAppService {
       }
 
       if (!result.ok) {
+        const metaError =
+          result.data?.error?.message ||
+          result.data?.error?.error_user_msg ||
+          result.rawText ||
+          'Meta Cloud API template delivery failed';
         console.error(
-          `[WhatsAppService] Meta WhatsApp Cloud API template dispatch failed for template '${templateName}' (${templateLanguage}):`,
+          `[WhatsAppService] Meta WhatsApp Cloud API template dispatch failed for template '${templateName}' (${templateLanguage}) to ${normalized}:`,
           result.data || result.rawText,
         );
         return {
           success: false,
-          error: result.data?.error?.message || 'Meta Cloud API template delivery failed',
+          error: `Meta WhatsApp Error: ${metaError}`,
         };
       }
 
       const messageId = result.data?.messages?.[0]?.id;
+      console.log(
+        `[WhatsAppService] Successfully dispatched template '${templateName}' to ${normalized} via Meta Cloud API. Message ID: ${messageId}`,
+      );
       return {
         success: true,
         messageId,

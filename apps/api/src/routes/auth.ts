@@ -177,22 +177,35 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError(parseResult.error.errors[0]?.message || 'Invalid phone number');
     }
 
-    const result = await whatsAppService.sendOtp(parseResult.data.phoneNumber);
-    const activeCode = whatsAppService.getActiveOtpForTesting(parseResult.data.phoneNumber);
+    const { phoneNumber } = parseResult.data;
+    request.log.info({ phoneNumber }, '[WhatsApp] Phone OTP verification request received');
+
+    const result = await whatsAppService.sendOtp(phoneNumber);
+    const activeCode = whatsAppService.getActiveOtpForTesting(phoneNumber);
     if (env.NODE_ENV !== 'production') {
-      request.log.info({ phone: parseResult.data.phoneNumber, otp: activeCode }, '[DEV] WhatsApp OTP code dispatched');
+      request.log.info({ phone: phoneNumber, otp: activeCode }, '[DEV] WhatsApp OTP code dispatched');
     }
 
     if (!result.success) {
+      request.log.error(
+        { phone: phoneNumber, error: result.error },
+        '[WhatsApp] WhatsApp OTP dispatch failed',
+      );
       throw new ValidationError(
         result.error || 'Could not send WhatsApp message. Please check WhatsApp service configuration.',
       );
     }
 
+    request.log.info(
+      { phone: phoneNumber, messageId: result.messageId },
+      '[WhatsApp] Phone OTP message accepted by Meta Cloud API',
+    );
+
     return reply.status(200).send(
       createSuccessResponse(
         {
           sent: true,
+          messageId: result.messageId,
           message: 'Verification code sent to WhatsApp successfully.',
         },
         request.id,

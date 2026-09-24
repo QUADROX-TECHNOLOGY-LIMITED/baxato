@@ -221,8 +221,9 @@ function RegisterFormContent({
         body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok || data?.success === false) {
+      if (!res.ok || data?.success === false || data?.data?.sent === false) {
         throw new Error(
+          data?.data?.message ||
           data?.error?.message ||
           data?.message ||
           `Failed to dispatch WhatsApp OTP (HTTP ${res.status}).`,
@@ -607,12 +608,12 @@ function RegisterFormContent({
                         placeholder="alex@example.com"
                         value={formData.email}
                         onChange={handleEmailChange}
-                        className={`w-full px-4 py-3 pr-28 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
+                        className={`w-full px-4 py-3 pr-28 rounded-xl border-2 bg-white dark:bg-[#0D1726] text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
                           isEmailVerified
                             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60'
                             : formData.email && !isValidEmail
                             ? 'border-red-300 dark:border-red-800/60 focus:border-red-500'
-                            : 'border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
+                            : 'border-slate-200 dark:border-[#1E2D44] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
                         }`}
                       />
                       {!isEmailVerified ? (
@@ -765,12 +766,12 @@ function RegisterFormContent({
                         placeholder="08012345678"
                         value={formData.phoneNumber}
                         onChange={handlePhoneChange}
-                        className={`w-full pl-24 pr-28 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
+                        className={`w-full pl-24 pr-28 py-3 rounded-xl border-2 bg-white dark:bg-[#0D1726] text-base sm:text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition-colors ${
                           isPhoneVerified
                             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60'
                             : formData.phoneNumber.length >= 10
-                            ? 'border-emerald-300 dark:border-emerald-800/60 focus:border-emerald-500'
-                            : 'border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
+                            ? 'border-emerald-400 dark:border-emerald-600 focus:border-emerald-500'
+                            : 'border-slate-200 dark:border-[#1E2D44] focus:border-[#126BEB] dark:focus:border-[#1677FF]'
                         }`}
                       />
                       {!isPhoneVerified ? (
@@ -890,7 +891,10 @@ function RegisterFormContent({
                                 </button>
                               )}
                             </span>
-                            <span className="text-[10px] text-slate-400">Template: registration_otp</span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                              <Check className="w-3 h-3 text-emerald-500" />
+                              <span>WhatsApp Delivery</span>
+                            </span>
                           </div>
                         </motion.div>
                       )}
