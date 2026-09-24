@@ -31,28 +31,27 @@ export default function RootLayout({
   const content = (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#070D18" media="(prefers-color-scheme: dark)" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 try {
-                  function applyTheme(e) {
-                    if (e.matches) {
-                      document.documentElement.classList.add('dark');
-                    } else {
-                      document.documentElement.classList.remove('dark');
-                    }
+                  var stored = localStorage.getItem('baxato_theme');
+                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (stored === 'dark' || (!stored && prefersDark)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
                   }
-                  var mq = window.matchMedia('(prefers-color-scheme: dark)');
-                  applyTheme(mq);
-                  mq.addEventListener('change', applyTheme);
                 } catch (err) {}
               })();
             `,
           }}
         />
       </head>
-      <body className="min-h-screen bg-white dark:bg-[#070D18] text-slate-600 dark:text-slate-400 antialiased selection:bg-blue-100 selection:text-[#126BEB]">
+      <body className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 antialiased selection:bg-blue-100 selection:text-[#126BEB]">
         {isClerkConfigured ? (
           children
         ) : (
