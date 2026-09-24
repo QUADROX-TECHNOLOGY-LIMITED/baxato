@@ -25,16 +25,24 @@ import SearchableSelect from '@/components/SearchableSelect';
 import { useClerk } from '@clerk/nextjs';
 
 interface RegisterFormContentProps {
-  onSendEmailOtp: (email: string) => Promise<void>;
+  onSendEmailOtp: (email: string) => Promise<{ alreadyVerified?: boolean } | void>;
   onVerifyEmailOtp: (code: string) => Promise<void>;
   onCompleteSignUp: (password: string, firstName: string, lastName: string) => Promise<string | null>;
+  checkEmailVerified?: (email: string) => boolean;
 }
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err) return 'An error occurred during authentication.';
-  const clerkErr = err as { errors?: Array<{ message?: string; longMessage?: string }> };
+  const clerkErr = err as { errors?: Array<{ code?: string; message?: string; longMessage?: string }> };
   if (Array.isArray(clerkErr.errors) && clerkErr.errors.length > 0) {
-    return clerkErr.errors[0].longMessage || clerkErr.errors[0].message || 'Authentication error';
+    const firstErr = clerkErr.errors[0];
+    if (firstErr.code === 'form_identifier_exists') {
+      return 'An account with this email address already exists. Please sign in or use a different email.';
+    }
+    if (firstErr.code === 'verification_already_verified') {
+      return 'This email address has already been verified.';
+    }
+    return firstErr.longMessage || firstErr.message || 'Authentication error';
   }
   if (err instanceof Error) return err.message;
   return String(err);
@@ -44,6 +52,7 @@ function RegisterFormContent({
   onSendEmailOtp,
   onVerifyEmailOtp,
   onCompleteSignUp,
+  checkEmailVerified,
 }: RegisterFormContentProps) {
 
   const [formData, setFormData] = useState({
@@ -98,6 +107,17 @@ function RegisterFormContent({
       return () => clearTimeout(timer);
     }
   }, [phoneCountdown]);
+
+  // Auto-detect if entered email is already verified in current Clerk session
+  useEffect(() => {
+    if (!checkEmailVerified) return;
+    if (formData.email && !isEmailVerified) {
+      if (checkEmailVerified(formData.email)) {
+        setIsEmailVerified(true);
+        setEmailOtpSent(false);
+      }
+    }
+  }, [formData.email, checkEmailVerified, isEmailVerified]);
 
   // Available LGAs dynamically filtered by the selected State
   const availableLgas = useMemo(() => {
@@ -168,11 +188,27 @@ function RegisterFormContent({
 
     setIsSendingEmailOtp(true);
     try {
-      await onSendEmailOtp(formData.email.toLowerCase().trim());
+      const result = await onSendEmailOtp(formData.email.toLowerCase().trim());
+      if (result && 'alreadyVerified' in result && result.alreadyVerified) {
+        setIsEmailVerified(true);
+        setEmailOtpSent(false);
+        return;
+      }
       setEmailOtpSent(true);
       setEmailCountdown(60);
       setEmailOtp(''); // Field remains strictly empty for user entry
     } catch (err: unknown) {
+      const clerkErr = err as { errors?: Array<{ code?: string; message?: string }> };
+      const isAlreadyVerified = clerkErr?.errors?.some(
+        (e) =>
+          e.code === 'verification_already_verified' ||
+          e.message?.toLowerCase().includes('already been verified'),
+      );
+      if (isAlreadyVerified) {
+        setIsEmailVerified(true);
+        setEmailOtpSent(false);
+        return;
+      }
       setEmailOtpError(getClerkErrorMessage(err));
     } finally {
       setIsSendingEmailOtp(false);
@@ -1151,7 +1187,16 @@ export default function RegisterPage() {
     const signUp = clerk.client.signUp;
     const normalizedEmail = email.toLowerCase().trim();
 
-    // If an existing sign-up attempt exists for a different email or was abandoned, create fresh
+    // 1. Proactive check: If Clerk already has this email verified in the current browser session
+    if (
+      signUp.id &&
+      signUp.emailAddress === normalizedEmail &&
+      signUp.verifications?.emailAddress?.status === 'verified'
+    ) {
+      return { alreadyVerified: true };
+    }
+
+    // 2. If an existing sign-up attempt exists for a different email or was abandoned, create fresh
     if (!signUp.id || signUp.emailAddress !== normalizedEmail || signUp.status === 'abandoned') {
       try {
         await signUp.create({
@@ -1168,9 +1213,23 @@ export default function RegisterPage() {
       }
     }
 
-    await signUp.prepareEmailAddressVerification({
-      strategy: 'email_code',
-    });
+    // 3. Prepare email verification code (catch if already verified)
+    try {
+      await signUp.prepareEmailAddressVerification({
+        strategy: 'email_code',
+      });
+    } catch (prepErr: unknown) {
+      const clerkErr = prepErr as { errors?: Array<{ code?: string; message?: string }> };
+      const isAlreadyVerified = clerkErr?.errors?.some(
+        (e) =>
+          e.code === 'verification_already_verified' ||
+          e.message?.toLowerCase().includes('already been verified'),
+      );
+      if (isAlreadyVerified || signUp.verifications?.emailAddress?.status === 'verified') {
+        return { alreadyVerified: true };
+      }
+      throw prepErr;
+    }
   };
 
   const handleVerifyEmailOtp = async (code: string) => {
@@ -1216,11 +1275,23 @@ export default function RegisterPage() {
     return userId || null;
   };
 
+  const checkEmailVerified = (email: string): boolean => {
+    if (!clerk.loaded || !clerk.client) return false;
+    const currentSignUp = clerk.client.signUp;
+    const normalizedEmail = email.toLowerCase().trim();
+    return Boolean(
+      currentSignUp?.id &&
+      currentSignUp.emailAddress === normalizedEmail &&
+      currentSignUp.verifications?.emailAddress?.status === 'verified'
+    );
+  };
+
   return (
     <RegisterFormContent
       onSendEmailOtp={handleSendEmailOtp}
       onVerifyEmailOtp={handleVerifyEmailOtp}
       onCompleteSignUp={handleCompleteSignUp}
+      checkEmailVerified={checkEmailVerified}
     />
   );
 }
