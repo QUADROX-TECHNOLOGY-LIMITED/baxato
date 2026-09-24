@@ -183,13 +183,17 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       request.log.info({ phone: parseResult.data.phoneNumber, otp: activeCode }, '[DEV] WhatsApp OTP code dispatched');
     }
 
+    if (!result.success) {
+      throw new ValidationError(
+        result.error || 'Could not send WhatsApp message. Please check WhatsApp service configuration.',
+      );
+    }
+
     return reply.status(200).send(
       createSuccessResponse(
         {
-          sent: result.success,
-          message: result.success
-            ? 'Verification code sent to WhatsApp successfully.'
-            : 'Could not send WhatsApp message. Please try again.',
+          sent: true,
+          message: 'Verification code sent to WhatsApp successfully.',
         },
         request.id,
       ),

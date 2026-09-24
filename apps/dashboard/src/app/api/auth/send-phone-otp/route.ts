@@ -1,26 +1,19 @@
 import { NextResponse } from 'next/server';
+import { proxyToBackendApi } from '@/lib/api-client';
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
-    const apiUrl = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/v1';
-
-    const res = await fetch(`${apiUrl}/auth/send-phone-otp`, {
+    const result = await proxyToBackendApi('/auth/send-phone-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      return NextResponse.json(data, { status: res.status });
-    }
-    return NextResponse.json(data);
+    return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to send WhatsApp verification code.';
     return NextResponse.json(
       { success: false, error: { message } },
-      { status: 500 },
+      { status: 400 },
     );
   }
 }

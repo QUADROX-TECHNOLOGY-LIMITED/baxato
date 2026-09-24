@@ -220,9 +220,13 @@ function RegisterFormContent({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
       });
-      const data = await res.json();
-      if (!res.ok || data.success === false) {
-        throw new Error(data.error?.message || data.message || 'Could not send WhatsApp verification code.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.success === false) {
+        throw new Error(
+          data?.error?.message ||
+          data?.message ||
+          `Failed to dispatch WhatsApp OTP (HTTP ${res.status}).`,
+        );
       }
       setPhoneOtpSent(true);
       setPhoneCountdown(60);
@@ -252,9 +256,13 @@ function RegisterFormContent({
           otp: phoneOtp.trim(),
         }),
       });
-      const data = await res.json();
-      if (!res.ok || data.success === false) {
-        throw new Error(data.error?.message || data.message || 'Invalid WhatsApp verification code.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.success === false) {
+        throw new Error(
+          data?.error?.message ||
+          data?.message ||
+          `Failed to verify WhatsApp code (HTTP ${res.status}).`,
+        );
       }
       setIsPhoneVerified(true);
       setPhoneOtpSent(false);

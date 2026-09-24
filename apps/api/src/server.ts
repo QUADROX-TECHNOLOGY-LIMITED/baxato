@@ -200,6 +200,7 @@ export function buildServer(): FastifyInstance {
   app.register(healthRoutes, { prefix: '' });
   app.register(healthRoutes, { prefix: '/v1' }); // keep /v1/health for container liveness probes
   app.register(authRoutes, { prefix: '/auth' });
+  app.register(authRoutes, { prefix: '/v1/auth' });
   app.register(kycRoutes, { prefix: '/kyc' });
   app.register(userRoutes, { prefix: '/users' });
   app.register(businessRoutes, { prefix: '/businesses' });
