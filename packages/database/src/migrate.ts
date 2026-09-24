@@ -1,5 +1,5 @@
-import { runMigrations } from './migrator';
-import { closeDatabasePool } from './client';
+import { runMigrations } from './migrator.js';
+import { closeDatabasePool } from './client.js';
 
 async function main() {
   try {
@@ -10,8 +10,13 @@ async function main() {
     }
     console.log('[Migration] Migration completed successfully.');
     process.exit(0);
-  } catch (err) {
-    console.error('[Migration] Fatal error during migration:', err);
+  } catch (err: any) {
+    console.error('[Migration] Fatal error during migration:', {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      hint: err?.hint,
+    });
     process.exit(1);
   } finally {
     await closeDatabasePool();

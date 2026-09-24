@@ -2,10 +2,10 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { db } from './client';
+import { db } from './client.js';
 
 /**
- * Automatically applies pending Drizzle migrations to PostgreSQL on startup.
+ * Automatically applies pending Drizzle migrations to PostgreSQL.
  * Ensures all tables, enums, indexes, and constraints exist before the API serves traffic.
  */
 export async function runMigrations(): Promise<boolean> {
@@ -32,7 +32,20 @@ export async function runMigrations(): Promise<boolean> {
   }
 
   console.log(`[Database Migration] Applying PostgreSQL migrations from: ${migrationsFolder}`);
-  await migrate(db, { migrationsFolder });
-  console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
-  return true;
+  try {
+    await migrate(db, { migrationsFolder });
+    console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
+    return true;
+  } catch (err: any) {
+    console.error('[Database Migration] Migration execution failed:', {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      hint: err?.hint,
+      routine: err?.routine,
+      file: err?.file,
+      line: err?.line,
+    });
+    throw err;
+  }
 }

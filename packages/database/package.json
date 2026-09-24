@@ -20,7 +20,8 @@
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "migrate:run": "tsx src/migrate.ts",
+    "migrate:run": "node dist/migrate.js",
+    "migrate:dev": "tsx src/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "vitest run"

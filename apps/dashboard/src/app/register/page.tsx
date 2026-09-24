@@ -405,29 +405,29 @@ function RegisterFormContent({
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-200 transition-colors duration-200 relative">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-200 transition-colors duration-200 relative overflow-x-hidden">
       {/* ======================================================== */}
-      {/* SLEEK FROSTED LOADING OVERLAY (CENTERED CIRCULAR SPINNER) */}
+      {/* SLEEK IMMERSIVE CLEAN LOADING SCREEN (NO CARDS BLEEDING) */}
       {/* ======================================================== */}
       <AnimatePresence>
         {isSubmitting && (
           <motion.div
-            key="frosted-loading-overlay"
+            key="clean-loading-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-md select-none"
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white dark:bg-[#070D18] select-none h-[100dvh] w-screen overflow-hidden"
           >
             <div className="flex flex-col items-center justify-center p-6 text-center">
               {/* Circular spinning ring with BAXATO emblem */}
               <div className="relative w-20 h-20 flex items-center justify-center">
                 {/* Circular track */}
-                <div className="absolute inset-0 rounded-full border-[3px] border-white/20 dark:border-white/10" />
+                <div className="absolute inset-0 rounded-full border-[3px] border-slate-200 dark:border-white/10" />
                 {/* Rotating accent arc */}
                 <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-[#126BEB] border-r-[#38BDF8] animate-spin" />
                 {/* Centered logo badge */}
-                <div className="relative w-11 h-11 rounded-full overflow-hidden shadow-lg bg-white dark:bg-[#0A1324] p-1 flex items-center justify-center border border-slate-200/50 dark:border-slate-800">
+                <div className="relative w-11 h-11 rounded-full overflow-hidden shadow-md bg-white dark:bg-[#0A1324] p-1 flex items-center justify-center border border-slate-200 dark:border-slate-800">
                   <div className="relative w-full h-full">
                     <Image
                       src="/baxato-logo.jpg"
@@ -440,7 +440,7 @@ function RegisterFormContent({
                 </div>
               </div>
 
-              <p className="mt-4 text-xs font-semibold text-white drop-shadow-md tracking-wide">
+              <p className="mt-4 text-xs font-semibold text-slate-800 dark:text-white tracking-wide">
                 Creating your account...
               </p>
             </div>
@@ -548,7 +548,7 @@ function RegisterFormContent({
       {/* ======================================================== */}
       {/* RIGHT SIDE: Authentication / Registration Surface        */}
       {/* ======================================================== */}
-      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 py-8 sm:px-8 sm:py-12 lg:p-12 xl:p-16 relative z-10 pb-28 sm:pb-36">
+      <section className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 py-8 sm:px-8 sm:py-12 lg:p-12 xl:p-16 relative z-10 pb-12 sm:pb-16">
         <div className="w-full max-w-lg mx-auto">
           {/* Mobile Top Branding */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-6">
@@ -643,7 +643,7 @@ function RegisterFormContent({
                   </motion.div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} noValidate className="space-y-4">
                   {/* Name Fields: First & Last Name */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
@@ -769,7 +769,6 @@ function RegisterFormContent({
                             <input
                               type="text"
                               inputMode="numeric"
-                              pattern="[0-9]*"
                               autoComplete="one-time-code"
                               maxLength={6}
                               placeholder="6-digit code"
@@ -927,7 +926,6 @@ function RegisterFormContent({
                             <input
                               type="text"
                               inputMode="numeric"
-                              pattern="[0-9]*"
                               autoComplete="one-time-code"
                               maxLength={6}
                               placeholder="6-digit WhatsApp code"
