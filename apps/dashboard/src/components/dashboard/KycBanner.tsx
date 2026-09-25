@@ -40,12 +40,12 @@ export default function KycBanner({ kycStatus, onOpenKycModal }: KycBannerProps)
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-bold">
-              {isRejected ? 'NIN Verification Failed' : 'Verify your NIN'}
+              {isRejected ? 'Identity Verification Needed' : 'Verify your Identity'}
             </h3>
             <p className="text-xs mt-0.5 text-slate-600 dark:text-slate-300">
               {isRejected
-                ? 'The NIN or date of birth provided did not match official records. Please check and try again.'
-                : 'Link your 11-digit NIN to enable wallet funding and start vending.'}
+                ? 'Your previous verification details did not match official records. Please check and try again.'
+                : 'Complete identity verification to enable wallet funding and start vending.'}
             </p>
           </div>
         </div>
@@ -59,7 +59,7 @@ export default function KycBanner({ kycStatus, onOpenKycModal }: KycBannerProps)
                 : 'bg-[#126BEB] hover:bg-[#0B5CC7]'
             }`}
           >
-            <span>{isRejected ? 'Try Again' : 'Verify NIN'}</span>
+            <span>{isRejected ? 'Try Again' : 'Verify Identity'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

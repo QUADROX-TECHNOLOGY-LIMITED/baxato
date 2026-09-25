@@ -23,16 +23,31 @@ export default function KycModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isVerifiedSuccess, setIsVerifiedSuccess] = useState(false);
 
-  // Prevent background scroll on mobile while modal is open
+  // Prevent background scroll and sync status bar color while modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      // Sync mobile status bar with dark modal overlay
+      const meta =
+        (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
+        document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute('content', '#070D18');
+      }
     } else {
       document.body.style.overflow = '';
       setIsVerifiedSuccess(false);
       setErrorMessage(null);
       setNin('');
       setDob('');
+      // Restore status bar to active theme
+      const isDark = document.documentElement.classList.contains('dark');
+      const meta =
+        (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
+        document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute('content', isDark ? '#070D18' : '#ffffff');
+      }
     }
     return () => {
       document.body.style.overflow = '';
@@ -112,13 +127,13 @@ export default function KycModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 dark:bg-black/90 backdrop-blur-md overflow-hidden">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.15 }}
-        className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-[#0A1220] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden"
+        className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-[#0A1220] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
       >
         {/* Close Button */}
         <button
@@ -146,10 +161,10 @@ export default function KycModal({
 
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    Verification Complete
+                    Identity Verified
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Your NIN has been verified and your account limits have been unlocked.
+                    Your identity has been verified and your account limits have been unlocked.
                   </p>
                 </div>
 
@@ -171,10 +186,10 @@ export default function KycModal({
               >
                 <div>
                   <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    NIN Verification
+                    Identity Verification
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Enter your 11-digit NIN and date of birth to complete verification.
+                    Enter your 11-digit NIN and date of birth to complete identity verification.
                   </p>
                 </div>
 
@@ -230,7 +245,7 @@ export default function KycModal({
                           <span>Verifying...</span>
                         </>
                       ) : (
-                        <span>Verify NIN</span>
+                        <span>Verify Identity</span>
                       )}
                     </button>
                   </div>

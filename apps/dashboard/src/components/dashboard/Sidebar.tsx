@@ -68,7 +68,6 @@ export default function Sidebar({
       title: 'FINANCE & PAYOUTS',
       items: [
         { label: 'Settlement Wallets', href: '/dashboard/wallets', icon: Wallet },
-        { label: 'Commission Sweep', href: '/dashboard/commissions', icon: TrendingUp },
       ],
     },
     {
@@ -214,12 +213,12 @@ export default function Sidebar({
                 {isVerified ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    Tier 1 Verified
+                    Identity Verified
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-pulse" />
-                    Unverified Account
+                    Verify Identity
                   </>
                 )}
               </span>
@@ -231,8 +230,8 @@ export default function Sidebar({
             </div>
             <p className="text-[11px] leading-tight text-slate-500 dark:text-slate-400">
               {isVerified
-                ? 'NIN verified. Daily vending unlocked.'
-                : 'Link NIN to activate vending and withdrawals.'}
+                ? 'Identity verified. Full access active.'
+                : 'Complete identity verification to activate vending.'}
             </p>
           </div>
 

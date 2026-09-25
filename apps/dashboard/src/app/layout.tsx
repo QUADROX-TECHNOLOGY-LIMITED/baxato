@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export const metadata: Metadata = {
@@ -43,7 +44,7 @@ export default function RootLayout({
                 try {
                   var stored = localStorage.getItem('baxato_theme');
                   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  var isDark = stored === 'dark' || (!stored && prefersDark);
+                  var isDark = stored === 'dark' || ((!stored || stored === 'system') && prefersDark);
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.style.colorScheme = 'dark';
