@@ -43,6 +43,8 @@ export type LoginUserInput = z.infer<typeof loginUserSchema>;
 export const verifyNinSchema = z.object({
   nin: z.string().regex(/^\d{11}$/, 'NIN must be exactly 11 digits'),
   dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of Birth must be in YYYY-MM-DD format'),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
 
 export type VerifyNinInput = z.infer<typeof verifyNinSchema>;

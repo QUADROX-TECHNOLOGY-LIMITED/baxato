@@ -109,7 +109,7 @@ export default function KycModal({
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({ nin, dob }),
+        body: JSON.stringify({ nin, dob, firstName, lastName }),
       });
 
       const result = await response.json();
@@ -145,7 +145,7 @@ export default function KycModal({
       } catch {}
 
       setIsVerifiedSuccess(true);
-      onSuccess(result.data?.user || { kycStatus: 'VERIFIED' });
+      onSuccess(result.data?.user || { kycStatus: 'VERIFIED', firstName, lastName });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
       setErrorMessage(msg);
@@ -224,39 +224,9 @@ export default function KycModal({
                       Identity Verification
                     </h2>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Official NIMC government identity validation
+                      Verify your NIMC national identity details
                     </p>
                   </div>
-                </div>
-
-                {/* Pre-filled Registered Name Box */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#071122] border border-slate-200 dark:border-slate-800/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                      <UserCheck className="w-3.5 h-3.5 text-[#126BEB]" />
-                      Registered Name on Account
-                    </span>
-                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-blue-100/70 dark:bg-blue-950/70 text-[#126BEB] dark:text-[#38BDF8]">
-                      Pre-filled
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white dark:bg-[#0B1528] p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
-                      <span className="block text-[10px] text-slate-400">First Name</span>
-                      <span className="font-bold text-slate-900 dark:text-white truncate block">
-                        {firstName || '—'}
-                      </span>
-                    </div>
-                    <div className="bg-white dark:bg-[#0B1528] p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
-                      <span className="block text-[10px] text-slate-400">Last Name</span>
-                      <span className="font-bold text-slate-900 dark:text-white truncate block">
-                        {lastName || '—'}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                    NIMC records will be compared against this registered name. Ensure you submit your personal 11-digit NIN.
-                  </p>
                 </div>
 
                 {errorMessage && (
@@ -270,6 +240,39 @@ export default function KycModal({
                 )}
 
                 <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
+                  {/* Editable Name Inputs */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={firstName}
+                        onChange={(e) => {
+                          setFirstName(e.target.value);
+                          if (errorMessage) setErrorMessage(null);
+                        }}
+                        className="w-full h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={lastName}
+                        onChange={(e) => {
+                          setLastName(e.target.value);
+                          if (errorMessage) setErrorMessage(null);
+                        }}
+                        className="w-full h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       NIN (11 digits)

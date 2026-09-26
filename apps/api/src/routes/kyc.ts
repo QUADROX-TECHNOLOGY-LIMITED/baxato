@@ -31,7 +31,7 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
 
-    const { nin, dob } = parseResult.data;
+    const { nin, dob, firstName, lastName } = parseResult.data;
 
     // Fetch existing user
     const [user] = await db
@@ -43,6 +43,9 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
     if (!user) {
       throw new ValidationError('User record not found.');
     }
+
+    const effectiveFirstName = firstName?.trim() || user.firstName;
+    const effectiveLastName = lastName?.trim() || user.lastName;
 
     if (user.kycStatus === KycStatus.VERIFIED) {
       throw new ConflictError('This account is already KYC verified.');
@@ -68,8 +71,8 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
     const verification = await kycService.verifyNin(
       nin,
       dob,
-      user.firstName,
-      user.lastName,
+      effectiveFirstName,
+      effectiveLastName,
       cachedResponse,
     );
 
@@ -95,14 +98,14 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
     const official = verification.officialData;
     const verifiedAvatarUrl = verification.avatarUrl || user.avatarUrl;
 
-    // Update User Record with Verified KYC, NIMC Photo, and Reconciled Official Names
+    // Update User Record with Verified KYC, NIMC Photo, and Reconciled Official Names (overriding user details)
     const [updatedUser] = await db
       .update(users)
       .set({
         kycStatus: KycStatus.VERIFIED,
         avatarUrl: verifiedAvatarUrl,
-        firstName: official.firstName || user.firstName,
-        lastName: official.lastName || user.lastName,
+        firstName: official.firstName || effectiveFirstName || user.firstName,
+        lastName: official.lastName || effectiveLastName || user.lastName,
         middleName: official.middleName || user.middleName,
         nin: `***-***-${nin.slice(-4)}`, // Masked NIN in public user record for privacy
         dob: official.dob,

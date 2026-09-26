@@ -81,7 +81,6 @@ export default function Sidebar({
       title: 'ORGANIZATION',
       items: [
         { label: 'Team Members', href: '/dashboard/team', icon: Users },
-        { label: 'Compliance & KYC', href: '/dashboard/compliance', icon: ShieldCheck },
         { label: 'Settings', href: '/dashboard/settings', icon: Settings },
       ],
     },
