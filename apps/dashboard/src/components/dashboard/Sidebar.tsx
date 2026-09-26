@@ -143,30 +143,43 @@ export default function Sidebar({
         </div>
 
         {/* Business Selector Pill */}
-        <div className="px-5 py-3 bg-slate-50 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-md bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0">
+        <div className="px-5 py-3.5 bg-slate-50/70 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
                 <Building className="w-3.5 h-3.5" />
               </div>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                {businessName}
-              </span>
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
+                  {businessName || 'Business Workspace'}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                  {isVerified ? 'Production Tier' : 'Testing Environment'}
+                </span>
+              </div>
             </div>
-            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-              Live
-            </span>
+            {isVerified ? (
+              <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 flex items-center gap-1 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Live
+              </span>
+            ) : (
+              <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 flex items-center gap-1 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Sandbox
+              </span>
+            )}
           </div>
         </div>
 
         {/* Navigation Links Scrollable Area */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
           {navGroups.map((group) => (
             <div key={group.title}>
-              <h3 className="px-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
+              <h3 className="px-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
                 {group.title}
               </h3>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
@@ -175,17 +188,17 @@ export default function Sidebar({
                       key={item.href}
                       href={item.href}
                       onClick={() => onClose()}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                         isActive
-                          ? 'bg-[#126BEB] text-white shadow-sm shadow-blue-500/25 font-bold'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#0D182B]'
+                          ? 'bg-[#126BEB] text-white shadow-md shadow-blue-500/25 font-bold'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/90 dark:hover:bg-[#0C1527] hover:translate-x-0.5'
                       }`}
                     >
                       <Icon
                         className={`w-4 h-4 shrink-0 transition-colors ${
                           isActive
                             ? 'text-white'
-                            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200'
+                            : 'text-slate-400 dark:text-slate-500 group-hover:text-[#126BEB] dark:group-hover:text-[#38BDF8]'
                         }`}
                       />
                       <span className="truncate">{item.label}</span>
@@ -198,47 +211,47 @@ export default function Sidebar({
         </div>
 
         {/* Bottom Profile & KYC Verification Box */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#071120]/50 space-y-3">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#071120]/70 space-y-3">
           {/* KYC Status Card */}
           <div
             onClick={!isVerified ? onOpenKycModal : undefined}
             className={`p-3 rounded-xl border text-xs transition-all ${
               isVerified
-                ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300'
-                : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 cursor-pointer hover:border-amber-400 shadow-sm'
+                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                : 'bg-amber-500/5 border-amber-500/25 text-amber-800 dark:text-amber-300 cursor-pointer hover:border-amber-400/50 shadow-sm hover:shadow'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="font-bold flex items-center gap-1.5">
+              <span className="font-bold flex items-center gap-1.5 text-[11px]">
                 {isVerified ? (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     Identity Verified
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-pulse" />
-                    Verify Identity
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                    Identity Verification
                   </>
                 )}
               </span>
               {!isVerified && (
                 <span className="text-[10px] font-black uppercase text-[#126BEB] dark:text-[#38BDF8] underline">
-                  Verify
+                  Verify Now
                 </span>
               )}
             </div>
-            <p className="text-[11px] leading-tight text-slate-500 dark:text-slate-400">
+            <p className="text-[10.5px] leading-tight text-slate-500 dark:text-slate-400">
               {isVerified
-                ? 'Identity verified. Full access active.'
-                : 'Complete identity verification to activate vending.'}
+                ? 'Full production vending & payouts active.'
+                : 'Verify your NIMC identity to activate live services.'}
             </p>
           </div>
 
           {/* User Profile & Logout */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-0.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-[#126BEB] text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#126BEB] to-[#38BDF8] text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
                 {merchantName ? merchantName.charAt(0).toUpperCase() : 'M'}
               </div>
               <div className="min-w-0">
@@ -246,7 +259,7 @@ export default function Sidebar({
                   {merchantName || 'Merchant'}
                 </span>
                 <span className="block text-[10px] font-medium text-slate-400 truncate">
-                  Owner / Administrator
+                  {isVerified ? 'Verified Merchant' : 'Unverified Account'}
                 </span>
               </div>
             </div>
@@ -254,7 +267,7 @@ export default function Sidebar({
             <button
               onClick={handleLogout}
               title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
             >
               <LogOut className="w-4 h-4" />
             </button>

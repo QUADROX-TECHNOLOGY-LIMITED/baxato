@@ -2,19 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Wallet,
-  Smartphone,
-  Wifi,
-  Zap,
-  Tv,
-  GraduationCap,
   Receipt,
   ArrowRight,
   ChevronRight,
   Clock,
   Lock,
+  Eye,
+  EyeOff,
+  Plus,
+  ShieldAlert,
+  Sparkles,
+  Key,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -31,6 +33,7 @@ export default function DashboardOverviewPage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showBalance, setShowBalance] = useState(true);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -47,7 +50,6 @@ export default function DashboardOverviewPage() {
         if (u.lastName) setUserLastName(u.lastName);
         if (u.kycStatus) {
           setKycStatus(u.kycStatus);
-          // If unverified, prompt identity verification modal
           if (u.kycStatus !== 'VERIFIED') {
             const timer = setTimeout(() => {
               setIsKycModalOpen(true);
@@ -71,6 +73,8 @@ export default function DashboardOverviewPage() {
 
   const handleKycSuccess = (updatedUser: any) => {
     setKycStatus('VERIFIED');
+    if (updatedUser?.firstName) setUserFirstName(updatedUser.firstName);
+    if (updatedUser?.lastName) setUserLastName(updatedUser.lastName);
   };
 
   const handleServiceClick = (serviceName: string, serviceRoute: string) => {
@@ -93,49 +97,84 @@ export default function DashboardOverviewPage() {
   const services = [
     {
       id: 'airtime',
-      name: 'Airtime',
-      desc: 'Instant recharge across all networks',
+      name: 'Airtime Recharge',
+      desc: 'Instant VTU airtime across all Nigerian telcos',
       route: '/dashboard/airtime',
-      icon: Smartphone,
-      color: 'bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] dark:text-[#38BDF8]',
+      image: '/logos/categories/airtime.png',
+      badgeText: '4 Networks',
+      providers: [
+        { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
+        { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
+        { name: 'Glo', logo: '/logos/telecom/glo.svg' },
+        { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
+      ],
+      glowBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/10',
     },
     {
       id: 'data',
       name: 'Data Bundles',
-      desc: 'SME, Corporate & Direct data',
+      desc: 'SME, Corporate & Direct gifting bundles',
       route: '/dashboard/data',
-      icon: Wifi,
-      color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+      image: '/logos/categories/data.png',
+      badgeText: '5G / SME',
+      providers: [
+        { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
+        { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
+        { name: 'Glo', logo: '/logos/telecom/glo.svg' },
+        { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
+      ],
+      glowBorder: 'hover:border-cyan-500/50 hover:shadow-cyan-500/10',
     },
     {
       id: 'electricity',
-      name: 'Electricity',
-      desc: 'Prepaid & Postpaid meter tokens',
+      name: 'Electricity Tokens',
+      desc: 'Prepaid meter tokens & postpaid settlements',
       route: '/dashboard/electricity',
-      icon: Zap,
-      color: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400',
+      image: '/logos/categories/electricity.png',
+      badgeText: '11 DisCos',
+      providers: [
+        { name: 'IKEDC', logo: '/logos/electricity/ikedc.png' },
+        { name: 'EKEDC', logo: '/logos/electricity/ekedc.png' },
+        { name: 'AEDC', logo: '/logos/electricity/aedc.png' },
+        { name: 'IBEDC', logo: '/logos/electricity/ibedc.png' },
+      ],
+      glowBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/10',
     },
     {
       id: 'cable',
-      name: 'Cable TV',
-      desc: 'DSTV, GOtv, StarTimes & Showmax',
+      name: 'Cable TV (PayTV)',
+      desc: 'DStv, GOtv, StarTimes & Showmax renewals',
       route: '/dashboard/cable',
-      icon: Tv,
-      color: 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400',
+      image: '/logos/categories/cable.png',
+      badgeText: 'Instant Reconnection',
+      providers: [
+        { name: 'DStv', logo: '/logos/cable/dstv.svg' },
+        { name: 'GOtv', logo: '/logos/cable/gotv.png' },
+        { name: 'StarTimes', logo: '/logos/cable/startimes.svg' },
+        { name: 'Showmax', logo: '/logos/cable/showmax.svg' },
+      ],
+      glowBorder: 'hover:border-purple-500/50 hover:shadow-purple-500/10',
     },
     {
       id: 'education',
       name: 'Exam PINs',
-      desc: 'WAEC, NECO, JAMB & NABTEB',
+      desc: 'WAEC, JAMB, NECO & NABTEB result PINs',
       route: '/dashboard/education',
-      icon: GraduationCap,
-      color: 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400',
+      image: '/logos/categories/exam.png',
+      badgeText: 'Instant Token',
+      providers: [
+        { name: 'WAEC', logo: '/logos/education/waec.png' },
+        { name: 'JAMB', logo: '/logos/education/jamb.png' },
+        { name: 'NECO', logo: '/logos/education/neco.png' },
+        { name: 'NABTEB', logo: '/logos/education/nabteb.png' },
+      ],
+      glowBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/10',
     },
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
-      {/* Sidebar */}
+      {/* Redesigned Sidebar */}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -163,118 +202,244 @@ export default function DashboardOverviewPage() {
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 
-          {/* Simple Clean Greeting */}
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-              {getGreeting()}, {merchantName}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Welcome to your business dashboard.
-            </p>
+          {/* Welcome Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                  {getGreeting()}, {merchantName}
+                </h1>
+                <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-[#126BEB] dark:text-[#38BDF8] border border-blue-200/50 dark:border-blue-800/40">
+                  {businessName}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Manage your digital vending infrastructure, wallets, and provider routing.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/dashboard/developer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-200 shadow-sm transition-all"
+              >
+                <Key className="w-3.5 h-3.5 text-[#126BEB]" />
+                <span>API Keys</span>
+              </Link>
+              <Link
+                href="/dashboard/wallets"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white shadow-sm shadow-blue-500/25 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Fund Wallet</span>
+              </Link>
+            </div>
           </div>
 
           {/* Financial Cards (Settlement Wallet & Volume) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Settlement Wallet */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-semibold text-xs">Settlement Wallet</span>
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
-                  <Wallet className="w-4 h-4" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            {/* Settlement Wallet Card */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors pointer-events-none" />
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-blue-500/15">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">Settlement Wallet</span>
+                    <span className="text-[10px] text-slate-400">Main Vending Balance</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowBalance(!showBalance)}
+                    title={showBalance ? 'Hide Balance' : 'Show Balance'}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+
+                  {isVerified ? (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                      Live
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                      Sandbox
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                ₦0.00
+              <div>
+                <div className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+                  {showBalance ? '₦0.00' : '••••••••'}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Available for instant service fulfillment</p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Available for vending</span>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                <span className="text-slate-400 text-[11px]">Commission Wallet: ₦0.00</span>
                 <Link
                   href="/dashboard/wallets"
-                  className="font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline flex items-center gap-1"
+                  className="font-bold text-[#126BEB] dark:text-[#38BDF8] hover:underline flex items-center gap-1 text-[11px]"
                 >
-                  Fund Wallet <ChevronRight className="w-3.5 h-3.5" />
+                  Manage Wallets <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>
 
-            {/* Today's Transactions Volume */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-semibold text-xs">Today&apos;s Volume</span>
-                <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
+            {/* Today's Transactions Volume Card */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/10 transition-colors pointer-events-none" />
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/15">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">Today&apos;s Volume</span>
+                    <span className="text-[10px] text-slate-400">Total Vended Today</span>
+                  </div>
+                </div>
+
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  0 Transactions
+                </span>
+              </div>
+
+              <div>
+                <div className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+                  ₦0.00
+                </div>
+                <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Gateways Operational (Interswitch & Monnify)</span>
                 </div>
               </div>
 
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                ₦0.00
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                <span>0 transactions today</span>
-                <span>Active</span>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                <span className="text-slate-400 text-[11px]">Success Rate: 100%</span>
+                <Link
+                  href="/dashboard/ledger"
+                  className="font-bold text-[#126BEB] dark:text-[#38BDF8] hover:underline flex items-center gap-1 text-[11px]"
+                >
+                  View Ledger <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
             </div>
           </div>
 
           {/* ======================================================== */}
-          {/* SERVICES SECTION (Clean 5 Cards)                         */}
+          {/* 3D CATEGORIES & VENDING SERVICES SECTION                */}
           {/* ======================================================== */}
           <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                Services
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Select a service to start vending.
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Vending Services
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] border border-blue-500/20">
+                    5 Verticals
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Select a category to vend airtime, data, electricity, pay TV, or exam scratch cards.
+                </p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
-              {services.map((svc) => {
-                const Icon = svc.icon;
-                return (
-                  <button
-                    key={svc.id}
-                    onClick={() => handleServiceClick(svc.name, svc.route)}
-                    className="p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-left hover:border-[#126BEB] dark:hover:border-[#126BEB] hover:shadow-md transition-all group relative flex flex-col justify-between h-36"
-                  >
-                    {!isVerified && (
-                      <div className="absolute top-3.5 right-3.5" title="Identity verification required">
-                        <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      </div>
-                    )}
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${svc.color}`}>
-                      <Icon className="w-4 h-4" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {services.map((svc) => (
+                <button
+                  key={svc.id}
+                  onClick={() => handleServiceClick(svc.name, svc.route)}
+                  className={`p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 text-left transition-all duration-200 group relative flex flex-col justify-between min-h-[220px] shadow-sm hover:shadow-xl hover:-translate-y-1 ${svc.glowBorder}`}
+                >
+                  {/* Lock Indicator when unverified */}
+                  {!isVerified && (
+                    <div
+                      className="absolute top-3.5 right-3.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 z-10"
+                      title="NIMC Verification required to unlock"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+
+                  {/* 3D Category Icon with Specular Floating Frame */}
+                  <div className="flex items-start justify-between">
+                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden shadow-md shadow-slate-950/20 group-hover:scale-105 group-hover:rotate-1 transition-transform duration-300 border border-white/10 shrink-0 bg-[#070D18]">
+                      <Image
+                        src={svc.image}
+                        alt={svc.name}
+                        fill
+                        sizes="64px"
+                        priority
+                        className="object-cover"
+                      />
                     </div>
 
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors">
-                        {svc.name}
-                      </h3>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                        {svc.desc}
-                      </p>
+                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#070F1E] text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800">
+                      {svc.badgeText}
+                    </span>
+                  </div>
+
+                  {/* Category Info */}
+                  <div className="space-y-1 my-2">
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white group-hover:text-[#126BEB] dark:group-hover:text-[#38BDF8] transition-colors leading-tight">
+                      {svc.name}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                      {svc.desc}
+                    </p>
+                  </div>
+
+                  {/* Brand Logos Row & Action Arrow */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <div className="flex items-center -space-x-1.5 overflow-hidden">
+                      {svc.providers.map((p) => (
+                        <div
+                          key={p.name}
+                          title={p.name}
+                          className="w-5 h-5 rounded-full bg-white dark:bg-[#070E1C] border border-slate-200 dark:border-slate-700/80 p-0.5 relative shrink-0 shadow-xs"
+                        >
+                          <Image
+                            src={p.logo}
+                            alt={p.name}
+                            fill
+                            sizes="20px"
+                            className="object-contain rounded-full"
+                          />
+                        </div>
+                      ))}
                     </div>
-                  </button>
-                );
-              })}
+
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-[#126BEB] dark:text-[#38BDF8] group-hover:translate-x-1 transition-transform">
+                      <span>Vend</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
 
           {/* ======================================================== */}
           {/* RECENT TRANSACTIONS                                      */}
           {/* ======================================================== */}
-          <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
                   Recent Transactions
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Your latest vending and wallet activity.
+                  Your latest vending and settlement ledger activity.
                 </p>
               </div>
 
@@ -282,7 +447,7 @@ export default function DashboardOverviewPage() {
                 href="/dashboard/ledger"
                 className="inline-flex items-center gap-1 text-xs font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline"
               >
-                <span>View All</span>
+                <span>View Full Ledger</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -297,7 +462,7 @@ export default function DashboardOverviewPage() {
                   No transactions yet
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                  Transactions will appear here once you begin vending services.
+                  Live vending receipts and reconciliation records will populate here in real time.
                 </p>
               </div>
             ) : (
@@ -349,3 +514,4 @@ export default function DashboardOverviewPage() {
     </div>
   );
 }
+

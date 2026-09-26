@@ -2,32 +2,52 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, AlertTriangle, Loader2, UserCheck, ShieldCheck } from 'lucide-react';
 
 interface KycModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (updatedUser: any) => void;
-  userFirstName: string;
-  userLastName: string;
+  userFirstName?: string;
+  userLastName?: string;
 }
 
 export default function KycModal({
   isOpen,
   onClose,
   onSuccess,
+  userFirstName: initialFirstName,
+  userLastName: initialLastName,
 }: KycModalProps) {
   const [nin, setNin] = useState('');
   const [dob, setDob] = useState('');
+  const [firstName, setFirstName] = useState(initialFirstName || '');
+  const [lastName, setLastName] = useState(initialLastName || '');
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isVerifiedSuccess, setIsVerifiedSuccess] = useState(false);
+
+  // Sync names from props or localStorage
+  useEffect(() => {
+    if (initialFirstName) setFirstName(initialFirstName);
+    if (initialLastName) setLastName(initialLastName);
+
+    if (!initialFirstName || !initialLastName) {
+      try {
+        const stored = localStorage.getItem('bx_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          if (u.firstName && !initialFirstName) setFirstName(u.firstName);
+          if (u.lastName && !initialLastName) setLastName(u.lastName);
+        }
+      } catch {}
+    }
+  }, [initialFirstName, initialLastName, isOpen]);
 
   // Prevent background scroll and sync status bar color while modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      // Sync mobile status bar with dark modal overlay
       const meta =
         (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
         document.querySelector('meta[name="theme-color"]');
@@ -40,7 +60,6 @@ export default function KycModal({
       setErrorMessage(null);
       setNin('');
       setDob('');
-      // Restore status bar to active theme
       const isDark = document.documentElement.classList.contains('dark');
       const meta =
         (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
@@ -96,11 +115,20 @@ export default function KycModal({
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
+        const errorMsg =
           result.error?.message ||
-            result.message ||
-            'Verification failed. Please check your NIN and date of birth.',
-        );
+          result.message ||
+          'Verification failed. Please check your NIN and date of birth.';
+        
+        // If name does not match, reset NIN input so merchant can re-enter their own valid NIN
+        if (
+          errorMsg.toLowerCase().includes('match') ||
+          errorMsg.toLowerCase().includes('name') ||
+          result.error?.code === 'NAME_MISMATCH'
+        ) {
+          setNin('');
+        }
+        throw new Error(errorMsg);
       }
 
       // Update cached user in localStorage
@@ -121,6 +149,9 @@ export default function KycModal({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
       setErrorMessage(msg);
+      if (msg.toLowerCase().includes('match') || msg.toLowerCase().includes('nin')) {
+        setNin('');
+      }
     } finally {
       setIsVerifying(false);
     }
@@ -164,7 +195,7 @@ export default function KycModal({
                     Identity Verified
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Your identity has been verified and your account limits have been unlocked.
+                    Your NIMC records match your account details. Live vending access is now active.
                   </p>
                 </div>
 
@@ -173,7 +204,7 @@ export default function KycModal({
                   onClick={onClose}
                   className="w-full py-2.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors"
                 >
-                  Continue
+                  Continue to Dashboard
                 </button>
               </motion.div>
             ) : (
@@ -184,19 +215,57 @@ export default function KycModal({
                 exit={{ opacity: 0 }}
                 className="space-y-4"
               >
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    Identity Verification
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Enter your 11-digit NIN and date of birth to complete identity verification.
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                      Identity Verification
+                    </h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Official NIMC government identity validation
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pre-filled Registered Name Box */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#071122] border border-slate-200 dark:border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-[#126BEB]" />
+                      Registered Name on Account
+                    </span>
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-blue-100/70 dark:bg-blue-950/70 text-[#126BEB] dark:text-[#38BDF8]">
+                      Pre-filled
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white dark:bg-[#0B1528] p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
+                      <span className="block text-[10px] text-slate-400">First Name</span>
+                      <span className="font-bold text-slate-900 dark:text-white truncate block">
+                        {firstName || '—'}
+                      </span>
+                    </div>
+                    <div className="bg-white dark:bg-[#0B1528] p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
+                      <span className="block text-[10px] text-slate-400">Last Name</span>
+                      <span className="font-bold text-slate-900 dark:text-white truncate block">
+                        {lastName || '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                    NIMC records will be compared against this registered name. Ensure you submit your personal 11-digit NIN.
                   </p>
                 </div>
 
                 {errorMessage && (
-                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                    <span className="leading-snug">{errorMessage}</span>
+                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>Verification Note</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed pl-5.5">{errorMessage}</p>
                   </div>
                 )}
 
@@ -237,15 +306,15 @@ export default function KycModal({
                     <button
                       type="submit"
                       disabled={isVerifying || nin.length !== 11 || !dob}
-                      className="w-full h-10 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full h-10 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-blue-500/20"
                     >
                       {isVerifying ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Verifying...</span>
+                          <span>Verifying with NIMC...</span>
                         </>
                       ) : (
-                        <span>Verify Identity</span>
+                        <span>Verify & Unlock Account</span>
                       )}
                     </button>
                   </div>

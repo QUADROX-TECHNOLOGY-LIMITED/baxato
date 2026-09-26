@@ -14,8 +14,10 @@ export interface NinVerificationResult {
     phoneNumber?: string;
     photoBase64?: string;
   };
+  isNameMismatch?: boolean;
   failureReason?: string;
   rawResponse?: Record<string, unknown>;
+  cached?: boolean;
 }
 
 export class KycService {
@@ -99,13 +101,15 @@ export class KycService {
   }
 
   /**
-   * Verifies NIN and DOB against Monnify's official NIMC identity verification endpoint.
+   * Verifies NIN and DOB against cached DB records or Monnify's official NIMC identity endpoint.
+   * If cachedResponse is provided from previously saved DB verifications, external API billing is bypassed.
    */
   public async verifyNin(
     nin: string,
     dob: string,
     userProvidedFirstName?: string,
     userProvidedLastName?: string,
+    cachedResponse?: Record<string, unknown>,
   ): Promise<NinVerificationResult> {
     if (!/^\d{11}$/.test(nin)) {
       return {
@@ -116,170 +120,174 @@ export class KycService {
       };
     }
 
-    const isDummyKey =
-      !env.MONNIFY_API_KEY ||
-      env.MONNIFY_API_KEY === 'monnify_test_api_key' ||
-      env.MONNIFY_API_KEY.includes('DUMMY') ||
-      env.MONNIFY_SECRET_KEY.includes('DUMMY');
+    let data: any = cachedResponse;
+    const isFromCache = Boolean(
+      cachedResponse &&
+        ((cachedResponse as any).responseBody ||
+          (cachedResponse as any).officialData ||
+          (cachedResponse as any).firstName),
+    );
 
-    // In unit test runner or when placeholder dummy keys are configured in dev, return simulated response
-    if (env.NODE_ENV === 'test' || isDummyKey) {
-      const mockPhoto = `https://images.baxato.com/avatars/verified_nin_${nin.slice(-4)}.jpg`;
-      const officialFirst = userProvidedFirstName || 'Mukhtar';
-      const officialLast = userProvidedLastName || 'Aliyu';
+    if (!isFromCache) {
+      const isDummyKey =
+        !env.MONNIFY_API_KEY ||
+        env.MONNIFY_API_KEY === 'monnify_test_api_key' ||
+        env.MONNIFY_API_KEY.includes('DUMMY') ||
+        env.MONNIFY_SECRET_KEY.includes('DUMMY');
 
-      return {
-        success: true,
-        matchScore: 100,
-        photoExtracted: true,
-        avatarUrl: mockPhoto,
-        officialData: {
-          firstName: officialFirst,
-          lastName: officialLast,
-          middleName: '',
-          dob,
-          phoneNumber: '08161437292',
-        },
-        rawResponse: {
+      // In unit test runner or when placeholder dummy keys are configured in dev, return simulated response
+      if (env.NODE_ENV === 'test' || isDummyKey) {
+        const mockPhoto = `https://images.baxato.com/avatars/verified_nin_${nin.slice(-4)}.jpg`;
+        const officialFirst = userProvidedFirstName || 'Mukhtar';
+        const officialLast = userProvidedLastName || 'Aliyu';
+
+        data = {
+          requestSuccessful: true,
+          responseBody: {
+            firstName: officialFirst,
+            lastName: officialLast,
+            middleName: '',
+            dateOfBirth: dob,
+            phone: '08161437292',
+            photo: mockPhoto,
+          },
           provider: 'MONNIFY_SIMULATED',
           status: true,
           nin,
           photo: mockPhoto,
-        },
-      };
-    }
-
-    // 1. Acquire Monnify Access Token
-    const token = await this.getMonnifyToken();
-    if (!token) {
-      return {
-        success: false,
-        matchScore: 0,
-        photoExtracted: false,
-        failureReason:
-          'Monnify authentication failed. Please check MONNIFY_API_KEY and MONNIFY_SECRET_KEY in your environment.',
-      };
-    }
-
-    // 2. Call Monnify NIN Details Endpoint (POST /api/v1/vas/nin-details)
-    const isLive = env.MONNIFY_API_KEY.startsWith('MK_PROD_') || env.NODE_ENV === 'production';
-    const baseUrl = isLive
-      ? 'https://api.monnify.com'
-      : (env.MONNIFY_BASE_URL || 'https://api.monnify.com').replace(/\/+$/, '');
-    const endpoint = `${baseUrl}/api/v1/vas/nin-details`;
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ nin }),
-      });
-
-      const data = (await response.json()) as any;
-
-      if (!response.ok || !data.requestSuccessful || !data.responseBody) {
-        const failureReason =
-          data.responseMessage ||
-          'Customer identity records not found for this NIN. Please check your 11-digit NIN.';
-        return {
-          success: false,
-          matchScore: 0,
-          photoExtracted: false,
-          failureReason,
-          rawResponse: data,
         };
-      }
-
-      const body = data.responseBody;
-      const officialFirst = body.firstName || body.firstname || '';
-      const officialLast = body.lastName || body.surname || '';
-      const officialMiddle = body.middleName || body.middlename || '';
-      const officialDob = body.dateOfBirth || body.dob || body.birthdate || '';
-      const officialPhone = body.phone || body.phoneNumber || body.mobile || '';
-      const photo = body.photo || body.image || '';
-
-      // Validate Date of Birth match if returned by Monnify
-      if (officialDob && dob) {
-        const normUserDob = this.normalizeDate(dob);
-        const normOfficialDob = this.normalizeDate(officialDob);
-
-        if (normUserDob && normOfficialDob && normUserDob !== normOfficialDob) {
+      } else {
+        // 1. Acquire Monnify Access Token
+        const token = await this.getMonnifyToken();
+        if (!token) {
           return {
             success: false,
             matchScore: 0,
             photoExtracted: false,
-            failureReason: `Date of Birth (${dob}) does not match NIMC records.`,
-            rawResponse: data,
+            failureReason:
+              'Monnify authentication failed. Please check MONNIFY_API_KEY and MONNIFY_SECRET_KEY in your environment.',
+          };
+        }
+
+        // 2. Call Monnify NIN Details Endpoint (POST /api/v1/vas/nin-details)
+        const isLive = env.MONNIFY_API_KEY.startsWith('MK_PROD_') || env.NODE_ENV === 'production';
+        const baseUrl = isLive
+          ? 'https://api.monnify.com'
+          : (env.MONNIFY_BASE_URL || 'https://api.monnify.com').replace(/\/+$/, '');
+        const endpoint = `${baseUrl}/api/v1/vas/nin-details`;
+
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ nin }),
+          });
+
+          data = (await response.json()) as any;
+
+          if (!response.ok || !data.requestSuccessful || !data.responseBody) {
+            const failureReason =
+              data?.responseMessage ||
+              'Customer identity records not found for this NIN. Please check your 11-digit NIN.';
+            return {
+              success: false,
+              matchScore: 0,
+              photoExtracted: false,
+              failureReason,
+              rawResponse: data,
+            };
+          }
+        } catch (err: unknown) {
+          console.error('[Monnify KYC Verification Error]', err);
+          return {
+            success: false,
+            matchScore: 0,
+            photoExtracted: false,
+            failureReason:
+              'Connection to Monnify identity verification gateway timed out. Please try again.',
           };
         }
       }
+    }
 
-      // Check Name match
-      let matchScore = 100;
-      if (userProvidedFirstName && officialFirst) {
-        const uFirst = userProvidedFirstName.toLowerCase().trim();
-        const oFirst = officialFirst.toLowerCase().trim();
-        const oMiddle = officialMiddle.toLowerCase().trim();
-        const oLast = officialLast.toLowerCase().trim();
+    const body = data.responseBody || data.officialData || data;
+    const officialFirst = body.firstName || body.firstname || '';
+    const officialLast = body.lastName || body.surname || '';
+    const officialMiddle = body.middleName || body.middlename || '';
+    const officialDob = body.dateOfBirth || body.dob || body.birthdate || '';
+    const officialPhone = body.phone || body.phoneNumber || body.mobile || '';
+    const photo = body.photo || body.image || '';
 
-        if (uFirst !== oFirst && uFirst !== oMiddle && uFirst !== oLast) {
-          matchScore -= 30;
-        }
-      }
+    // Validate Date of Birth match if returned by Monnify/cache
+    if (officialDob && dob) {
+      const normUserDob = this.normalizeDate(dob);
+      const normOfficialDob = this.normalizeDate(officialDob);
 
-      if (userProvidedLastName && officialLast) {
-        const uLast = userProvidedLastName.toLowerCase().trim();
-        const oFirst = officialFirst.toLowerCase().trim();
-        const oLast = officialLast.toLowerCase().trim();
-
-        if (uLast !== oLast && uLast !== oFirst) {
-          matchScore -= 30;
-        }
-      }
-
-      if (matchScore < 40) {
+      if (normUserDob && normOfficialDob && normUserDob !== normOfficialDob) {
         return {
           success: false,
-          matchScore,
-          photoExtracted: Boolean(photo),
-          failureReason: `Registered name (${userProvidedFirstName} ${userProvidedLastName}) does not match NIMC records (${officialFirst} ${officialLast}).`,
+          matchScore: 0,
+          photoExtracted: false,
+          failureReason: `Date of Birth (${dob}) does not match NIMC records.`,
           rawResponse: data,
+          cached: isFromCache,
         };
       }
+    }
 
-      const avatarUrl = photo?.startsWith('http')
-        ? photo
-        : photo
-          ? `data:image/jpeg;base64,${photo}`
-          : undefined;
+    // Check Name match
+    let matchScore = 100;
+    const uFirst = (userProvidedFirstName || '').toLowerCase().trim();
+    const uLast = (userProvidedLastName || '').toLowerCase().trim();
+    const oFirst = officialFirst.toLowerCase().trim();
+    const oMiddle = officialMiddle.toLowerCase().trim();
+    const oLast = officialLast.toLowerCase().trim();
+    const officialNames = [oFirst, oMiddle, oLast].filter(Boolean);
 
-      return {
-        success: true,
-        matchScore,
-        photoExtracted: Boolean(photo),
-        avatarUrl,
-        officialData: {
-          firstName: officialFirst || userProvidedFirstName || '',
-          lastName: officialLast || userProvidedLastName || '',
-          middleName: officialMiddle || '',
-          dob: officialDob || dob,
-          phoneNumber: officialPhone,
-        },
-        rawResponse: data,
-      };
-    } catch (err: unknown) {
-      console.error('[Monnify KYC Verification Error]', err);
+    if (uFirst && !officialNames.some((n) => n === uFirst || n.includes(uFirst) || uFirst.includes(n))) {
+      matchScore -= 50;
+    }
+
+    if (uLast && !officialNames.some((n) => n === uLast || n.includes(uLast) || uLast.includes(n))) {
+      matchScore -= 50;
+    }
+
+    if (matchScore < 50) {
       return {
         success: false,
-        matchScore: 0,
-        photoExtracted: false,
-        failureReason:
-          'Connection to Monnify identity verification gateway timed out. Please try again.',
+        matchScore,
+        photoExtracted: Boolean(photo),
+        isNameMismatch: true,
+        failureReason: `Name Mismatch: The registered name (${userProvidedFirstName} ${userProvidedLastName}) does not match official NIMC records (${officialFirst} ${officialLast}).`,
+        rawResponse: data,
+        cached: isFromCache,
       };
     }
+
+    const avatarUrl = photo?.startsWith('http')
+      ? photo
+      : photo
+        ? `data:image/jpeg;base64,${photo}`
+        : undefined;
+
+    return {
+      success: true,
+      matchScore,
+      photoExtracted: Boolean(photo),
+      avatarUrl,
+      officialData: {
+        firstName: officialFirst || userProvidedFirstName || '',
+        lastName: officialLast || userProvidedLastName || '',
+        middleName: officialMiddle || '',
+        dob: officialDob || dob,
+        phoneNumber: officialPhone,
+      },
+      rawResponse: data,
+      cached: isFromCache,
+    };
   }
 }
 

@@ -6,7 +6,7 @@ import {
   ConflictError,
   KycStatus,
 } from '@baxato/common';
-import { db, users, kycVerifications, eq } from '@baxato/database';
+import { db, users, kycVerifications, eq, desc } from '@baxato/database';
 import { kycService } from '../services/kyc.service';
 import { authenticate } from '../plugins/auth.plugin';
 
@@ -16,7 +16,7 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * POST /kyc/verify-nin
-   * Verifies NIN + DOB against the national identity database, extracts photo, and reconciles official name.
+   * Verifies NIN + DOB against local DB cache or Monnify NIMC database, extracts photo, and reconciles official name.
    */
   fastify.post('/verify-nin', async (request, reply) => {
     const userId = request.user?.id;
@@ -48,16 +48,38 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ConflictError('This account is already KYC verified.');
     }
 
-    // Call NIMC identity verification service
-    const verification = await kycService.verifyNin(nin, dob, user.firstName, user.lastName);
+    // 1. Check local database for previously queried NIN data (Cost Optimization)
+    // Avoids repeated external billing if user re-submits or corrects details
+    const [cachedRecord] = await db
+      .select()
+      .from(kycVerifications)
+      .where(eq(kycVerifications.nin, nin))
+      .orderBy(desc(kycVerifications.createdAt))
+      .limit(1);
+
+    const cachedResponse =
+      cachedRecord?.rawResponse &&
+      typeof cachedRecord.rawResponse === 'object' &&
+      Object.keys(cachedRecord.rawResponse).length > 0
+        ? (cachedRecord.rawResponse as Record<string, unknown>)
+        : undefined;
+
+    // Call NIMC identity verification service (using DB cache if available)
+    const verification = await kycService.verifyNin(
+      nin,
+      dob,
+      user.firstName,
+      user.lastName,
+      cachedResponse,
+    );
 
     if (!verification.success || !verification.officialData) {
-      // Record failed verification attempt
+      // Record failed verification attempt so raw NIMC data is cached in DB
       await db.insert(kycVerifications).values({
         userId: user.id,
         nin,
         dob,
-        providerName: 'MONNIFY',
+        providerName: verification.cached ? 'DATABASE_CACHE' : 'MONNIFY',
         status: KycStatus.REJECTED,
         matchScore: verification.matchScore,
         photoExtracted: false,
@@ -82,7 +104,7 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
         firstName: official.firstName || user.firstName,
         lastName: official.lastName || user.lastName,
         middleName: official.middleName || user.middleName,
-        nin: `***-***-${nin.slice(-4)}`, // Masked NIN for privacy
+        nin: `***-***-${nin.slice(-4)}`, // Masked NIN in public user record for privacy
         dob: official.dob,
         ninData: verification.rawResponse || {},
         updatedAt: new Date(),
@@ -90,12 +112,12 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.id, user.id))
       .returning();
 
-    // Record successful verification audit log
+    // Record successful verification audit log (keep full nin for DB cache lookup)
     await db.insert(kycVerifications).values({
       userId: user.id,
-      nin: `***-***-${nin.slice(-4)}`,
+      nin,
       dob,
-      providerName: 'MONNIFY',
+      providerName: verification.cached ? 'DATABASE_CACHE' : 'MONNIFY',
       status: KycStatus.VERIFIED,
       matchScore: verification.matchScore,
       photoExtracted: verification.photoExtracted,
