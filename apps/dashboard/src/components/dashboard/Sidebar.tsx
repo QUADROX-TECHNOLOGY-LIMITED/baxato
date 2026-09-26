@@ -141,33 +141,20 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Business Selector Pill */}
-        <div className="px-5 py-3.5 bg-slate-50/70 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
-                <Building className="w-3.5 h-3.5" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
-                  {businessName || 'Business Workspace'}
-                </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
-                  {isVerified ? 'Production Tier' : 'Testing Environment'}
-                </span>
-              </div>
+        {/* Business Workspace */}
+        <div className="px-5 py-3 bg-slate-50/70 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
+              <Building className="w-3.5 h-3.5" />
             </div>
-            {isVerified ? (
-              <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 flex items-center gap-1 shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Live
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
+                {businessName || 'Business Workspace'}
               </span>
-            ) : (
-              <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 flex items-center gap-1 shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                Sandbox
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                Merchant Gateway
               </span>
-            )}
+            </div>
           </div>
         </div>
 

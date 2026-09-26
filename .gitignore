@@ -50,5 +50,7 @@ scripts/
 
 # Architecture Designs & Documentation (Private)
 *.md
+!BAXATO_GUIDELINES.md
+!.agents/**/*.md
 docs/
 
