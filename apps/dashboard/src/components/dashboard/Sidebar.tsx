@@ -55,7 +55,7 @@ export default function Sidebar({
       ],
     },
     {
-      title: 'VENDING SERVICES',
+      title: 'SERVICES',
       items: [
         { label: 'Airtime Top-up', href: '/dashboard/airtime', icon: Smartphone },
         { label: 'Data Bundles', href: '/dashboard/data', icon: Wifi },
@@ -173,7 +173,21 @@ export default function Sidebar({
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={() => onClose()}
+                      onClick={(e) => {
+                        onClose();
+                        if (
+                          !isVerified &&
+                          (item.href.startsWith('/dashboard/airtime') ||
+                            item.href.startsWith('/dashboard/data') ||
+                            item.href.startsWith('/dashboard/electricity') ||
+                            item.href.startsWith('/dashboard/cable') ||
+                            item.href.startsWith('/dashboard/education') ||
+                            item.href.startsWith('/dashboard/wallets'))
+                        ) {
+                          e.preventDefault();
+                          onOpenKycModal();
+                        }
+                      }}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                         isActive
                           ? 'bg-[#126BEB] text-white shadow-md shadow-blue-500/25 font-bold'

@@ -52,7 +52,23 @@ This document specifies non-negotiable guidelines, architectural constraints, an
 
 ---
 
-## 6. Deployment & Workflow
+## 6. Iconography & Visual Assets (No AI Glassy Renders)
+
+- **NEVER use AI-generated 3D glassy orbs, plastic spheres, or synthetic renderings for product categories.**
+  - Product and service categories must use crisp, authentic, native UI vector iconography (e.g. Lucide SVGs in high-end tailored accent containers) combined with authentic, genuine operator brand logos (MTN, Airtel, Glo, 9mobile, IKEDC, EKEDC, DStv, GOtv, WAEC, JAMB, etc.).
+  - Never display artificial tags like *"Instant Vending"* or robotic headings like *"Vending Services"*. Use standard professional titles like *"Quick Services"* or *"Bill Payments & Top-up"*.
+
+---
+
+## 7. Mandatory KYC Gating on Wallet Funding
+
+- **Unverified accounts (`kycStatus !== 'VERIFIED'`) MUST NOT be allowed to fund wallets or initiate transactions.**
+  - Clicking **"Fund Wallet"** (or attempting to access settlement funding routes) must immediately intercept and open the KYC Identity Verification modal.
+  - Identity verification with NIMC must precede all wallet deposits and live payouts.
+
+---
+
+## 8. Deployment & Workflow
 
 - All changes must pass TypeScript validation and unit tests (`pnpm vitest run`).
 - Once verified, commit clean changes and push directly to GitHub (`origin/main`).

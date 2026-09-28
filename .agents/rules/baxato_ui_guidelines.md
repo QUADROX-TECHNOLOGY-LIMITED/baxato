@@ -15,5 +15,11 @@ globs: apps/dashboard/**/*, apps/api/**/*
 4. **Sleek Proportions & No Box-in-a-Box Clutter**:
    - Wallet card and metrics must be horizontally balanced and shrunken vertically.
    - Avoid heavy redundant card wrappers around sections (e.g. Recent Transactions should be clean and native to the page flow).
-5. **Git Workflow**:
+5. **No AI-Generated 3D Glassy Renders**:
+   - Use crisp, authentic native UI vector icons (e.g. Lucide icons with tailored container badges) and genuine provider logos. Never use 3D glassy orb renderings.
+6. **Mandatory KYC Gating on Wallet Funding**:
+   - Unverified accounts cannot fund wallets. Clicking "Fund Wallet" must immediately trigger the KYC Identity Verification modal.
+7. **Clean Terminology**:
+   - Avoid robotic phrases like "Vending Services" or "Instant Vending". Use "Quick Services" or "Bill Payments & Top-up".
+8. **Git Workflow**:
    - Push completed, verified commits directly to GitHub.

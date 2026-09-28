@@ -13,6 +13,11 @@ import {
   EyeOff,
   Plus,
   Key,
+  Smartphone,
+  Wifi,
+  Zap,
+  Tv,
+  GraduationCap,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -81,6 +86,15 @@ export default function DashboardOverviewPage() {
     router.push(serviceRoute);
   };
 
+  const handleFundWalletClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (kycStatus !== 'VERIFIED') {
+      setIsKycModalOpen(true);
+      return;
+    }
+    router.push('/dashboard/wallets');
+  };
+
   const isVerified = kycStatus === 'VERIFIED';
 
   const getGreeting = () => {
@@ -96,7 +110,8 @@ export default function DashboardOverviewPage() {
       name: 'Airtime Recharge',
       desc: 'MTN, Airtel, Glo & 9mobile',
       route: '/dashboard/airtime',
-      image: '/logos/categories/airtime.png',
+      icon: Smartphone,
+      iconColor: 'bg-blue-500/10 text-[#126BEB] dark:bg-blue-500/15 dark:text-[#38BDF8] border-blue-500/20',
       providers: [
         { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
         { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
@@ -109,7 +124,8 @@ export default function DashboardOverviewPage() {
       name: 'Data Bundles',
       desc: 'SME, Corporate & Direct gifting',
       route: '/dashboard/data',
-      image: '/logos/categories/data.png',
+      icon: Wifi,
+      iconColor: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-500/20',
       providers: [
         { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
         { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
@@ -122,7 +138,8 @@ export default function DashboardOverviewPage() {
       name: 'Electricity Tokens',
       desc: 'Prepaid tokens & postpaid bills',
       route: '/dashboard/electricity',
-      image: '/logos/categories/electricity.png',
+      icon: Zap,
+      iconColor: 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400 border-amber-500/20',
       providers: [
         { name: 'IKEDC', logo: '/logos/electricity/ikedc.png' },
         { name: 'EKEDC', logo: '/logos/electricity/ekedc.png' },
@@ -135,7 +152,8 @@ export default function DashboardOverviewPage() {
       name: 'Cable TV (PayTV)',
       desc: 'DStv, GOtv, StarTimes & Showmax',
       route: '/dashboard/cable',
-      image: '/logos/categories/cable.png',
+      icon: Tv,
+      iconColor: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400 border-purple-500/20',
       providers: [
         { name: 'DStv', logo: '/logos/cable/dstv.svg' },
         { name: 'GOtv', logo: '/logos/cable/gotv.png' },
@@ -148,7 +166,8 @@ export default function DashboardOverviewPage() {
       name: 'Exam PINs',
       desc: 'WAEC, JAMB, NECO & NABTEB',
       route: '/dashboard/education',
-      image: '/logos/categories/exam.png',
+      icon: GraduationCap,
+      iconColor: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-500/20',
       providers: [
         { name: 'WAEC', logo: '/logos/education/waec.png' },
         { name: 'JAMB', logo: '/logos/education/jamb.png' },
@@ -249,13 +268,14 @@ export default function DashboardOverviewPage() {
                 </span>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <Link
-                    href="/dashboard/wallets"
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white flex items-center gap-1 shadow-xs transition-colors"
+                  <button
+                    type="button"
+                    onClick={handleFundWalletClick}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Fund Wallet</span>
-                  </Link>
+                  </button>
                   <Link
                     href="/dashboard/developer"
                     className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 flex items-center gap-1 border border-white/10 transition-colors"
@@ -281,21 +301,20 @@ export default function DashboardOverviewPage() {
                 </div>
               </div>
 
-              <div className="pt-2.5 mt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+              <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-400">
                 <span>Real-time wallet settlement</span>
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Instant Vending</span>
               </div>
             </div>
           </div>
 
-          {/* Vending Services Grid */}
+          {/* Quick Services Grid */}
           <div className="space-y-3">
             <div>
               <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                Vending Services
+                Quick Services
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Select a service to start vending
+                Airtime, data bundles, utility bills, cable TV, and exam PINs
               </p>
             </div>
 
@@ -316,17 +335,12 @@ export default function DashboardOverviewPage() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    {/* 3D Category Icon */}
-                    <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden shadow-xs bg-[#070D18]">
-                      <Image
-                        src={svc.image}
-                        alt={svc.name}
-                        fill
-                        sizes="48px"
-                        priority
-                        className="object-cover"
-                      />
+                  <div className="space-y-2.5">
+                    {/* Native Vector Category Icon Badge (Crisp & Authentic) */}
+                    <div
+                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center border shadow-xs transition-transform duration-200 group-hover:scale-105 ${svc.iconColor}`}
+                    >
+                      <svc.icon className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
 
                     <div>
