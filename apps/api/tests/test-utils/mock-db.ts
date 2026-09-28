@@ -302,6 +302,19 @@ function isApiKeysTable(t: unknown): boolean {
   return false;
 }
 
+function isProvidersTable(t: unknown): boolean {
+  if (t === 'providers') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      ('failureRate' in obj || 'failure_rate' in obj || 'isPrimary' in obj || 'is_primary' in obj) &&
+      !('balance' in obj) &&
+      !('role' in obj)
+    ) || obj._name === 'providers' || obj.name === 'providers';
+  }
+  return false;
+}
+
 function isWebhookDeliveriesTable(t: unknown): boolean {
   if (t === 'webhook_deliveries' || t === 'webhookDeliveries') return true;
   if (typeof t === 'object' && t !== null) {
@@ -648,6 +661,14 @@ export function createMockDatabase() {
       responseBody: 'response_body',
       createdAt: 'created_at',
     },
+    providers: {
+      id: 'id',
+      name: 'name',
+      status: 'status',
+      failureRate: 'failure_rate',
+      isPrimary: 'is_primary',
+      config: 'config',
+    },
     desc: (col: unknown) => ({ type: 'desc', col }),
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
     eq: (col: unknown, val: unknown) => ({ type: 'eq', col: getColName(col), val }),
@@ -877,6 +898,27 @@ export function createMockDatabase() {
                 }
               }
               return inMemoryDb.webhookDeliveries;
+            }
+
+            if (isProvidersTable(table)) {
+              return [
+                {
+                  id: 'prv_isw',
+                  name: 'INTERSWITCH',
+                  status: 'ACTIVE',
+                  failureRate: 0,
+                  isPrimary: true,
+                  config: {},
+                },
+                {
+                  id: 'prv_monnify',
+                  name: 'MONNIFY',
+                  status: 'ACTIVE',
+                  failureRate: 0,
+                  isPrimary: false,
+                  config: {},
+                },
+              ];
             }
 
             return [];

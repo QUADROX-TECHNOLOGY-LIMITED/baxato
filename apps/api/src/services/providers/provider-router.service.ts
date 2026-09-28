@@ -5,7 +5,7 @@ import {
   AppError,
 } from '@baxato/common';
 import { Env, env } from '@baxato/config';
-import { Database, providerTransactions, db } from '@baxato/database';
+import { Database, providerTransactions, providers, db } from '@baxato/database';
 import {
   ProviderAdapter,
   CustomerValidationRequest,
@@ -182,14 +182,83 @@ export class ProviderRouterService {
   }
 
   /**
+   * Dynamically resolves the active provider for a service from PostgreSQL `providers` table.
+   * Allows live hot-switching via TablePlus or DB admin tools.
+   */
+  public async resolveDynamicRouting(
+    serviceType: ServiceType,
+  ): Promise<{ primaryName: ProviderName; fallbackName?: ProviderName; allowFailover: boolean }> {
+    const config = this.getRoutingConfig(serviceType)[0];
+    let primaryName = config?.primaryProvider ?? ProviderName.INTERSWITCH;
+    let fallbackName = config?.fallbackProvider;
+    let allowFailover = config?.allowFailover ?? true;
+    let source = 'In-Memory Configuration';
+
+    if (this.db) {
+      try {
+        const dbProviders = await this.db.select().from(providers);
+
+        // 1. Check if any provider has service-specific flag in its JSON config (e.g. { "airtime": true })
+        let matchedServiceConfig = false;
+        for (const p of dbProviders) {
+          if (p.status === 'ACTIVE' && p.config && typeof p.config === 'object') {
+            const cfg = p.config as Record<string, unknown>;
+            const serviceKey = serviceType.toLowerCase();
+            const isMatch =
+              cfg[serviceKey] === true ||
+              cfg[serviceType] === true ||
+              (Array.isArray(cfg.services) &&
+                (cfg.services.includes(serviceType) || cfg.services.includes(serviceKey)));
+
+            if (isMatch) {
+              primaryName = p.name as ProviderName;
+              matchedServiceConfig = true;
+              source = `PostgreSQL "providers" table (config.${serviceKey}=true on ${p.name})`;
+              const fallbackCandidate = dbProviders.find(
+                (o) => o.name !== primaryName && o.status === 'ACTIVE',
+              );
+              fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
+              break;
+            }
+          }
+        }
+
+        // 2. If no service-specific config, check isPrimary = true on active providers
+        if (!matchedServiceConfig) {
+          const primaryFromDb = dbProviders.find(
+            (p) => p.isPrimary && p.status === 'ACTIVE',
+          );
+          if (primaryFromDb) {
+            primaryName = primaryFromDb.name as ProviderName;
+            source = `PostgreSQL "providers" table (is_primary=true on ${primaryFromDb.name})`;
+            const fallbackCandidate = dbProviders.find(
+              (o) => o.name !== primaryName && o.status === 'ACTIVE',
+            );
+            fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
+          }
+        }
+      } catch (err) {
+        // Fall back gracefully if DB query error
+      }
+    }
+
+    console.log('\n================================================================');
+    console.log(`[PROVIDER ROUTING DEBUG] Dynamic Resolution for ${serviceType}`);
+    console.log(`-> Active Provider : ${primaryName}`);
+    console.log(`-> Fallback Provider: ${fallbackName || 'None'}`);
+    console.log(`-> Routing Source   : ${source}`);
+    console.log('================================================================\n');
+
+    return { primaryName, fallbackName, allowFailover };
+  }
+
+  /**
    * Validate customer with automatic failover support
    */
   public async validateCustomer(
     request: CustomerValidationRequest,
   ): Promise<CustomerValidationResult> {
-    const config = this.getRoutingConfig(request.serviceType)[0];
-    const primaryName = config?.primaryProvider ?? ProviderName.INTERSWITCH;
-    const fallbackName = config?.fallbackProvider;
+    const { primaryName, fallbackName, allowFailover } = await this.resolveDynamicRouting(request.serviceType);
 
     const primaryBreaker = this.getCircuitBreaker(primaryName);
     const primaryProvider = this.getProvider(primaryName);
@@ -203,14 +272,14 @@ export class ProviderRouterService {
         if (result.isValid) return result;
       } catch (_error) {
         // If failover is disabled or no fallback, throw error
-        if (!config?.allowFailover || !fallbackName) {
+        if (!allowFailover || !fallbackName) {
           throw _error;
         }
       }
     }
 
     // Failover to secondary provider if configured
-    if (config?.allowFailover && fallbackName) {
+    if (allowFailover && fallbackName) {
       const fallbackBreaker = this.getCircuitBreaker(fallbackName);
       const fallbackProvider = this.getProvider(fallbackName);
 
@@ -234,9 +303,7 @@ export class ProviderRouterService {
     request: ServiceVendingRequest,
     transactionId?: string,
   ): Promise<ServiceVendingResult> {
-    const config = this.getRoutingConfig(request.serviceType)[0];
-    const primaryName = config?.primaryProvider ?? ProviderName.INTERSWITCH;
-    const fallbackName = config?.fallbackProvider;
+    const { primaryName, fallbackName, allowFailover } = await this.resolveDynamicRouting(request.serviceType);
 
     const primaryBreaker = this.getCircuitBreaker(primaryName);
     const primaryProvider = this.getProvider(primaryName);
@@ -247,6 +314,8 @@ export class ProviderRouterService {
 
     const startTime = Date.now();
 
+    console.log(`[PROVIDER DISPATCH] Dispatching ${request.serviceType} via ${primaryName}... (Customer: ${request.customerId}, Amount: ₦${(Number(request.amountKobo) / 100).toFixed(2)}, Ref: ${request.requestReference})`);
+
     // 1. Try Primary Provider if Circuit Breaker is available
     if (primaryBreaker.isAvailable()) {
       try {
@@ -255,6 +324,7 @@ export class ProviderRouterService {
         );
 
         if (result.status === TransactionStatus.SUCCESSFUL) {
+          console.log(`[PROVIDER VEND SUCCESS] ${primaryName} completed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
           await this.auditProviderTransaction(
             transactionId,
             primaryName,
@@ -267,11 +337,13 @@ export class ProviderRouterService {
         }
       } catch (err) {
         caughtError = err as Error;
+        console.warn(`[PROVIDER VEND ATTEMPT FAILED] ${primaryName} failed: ${(err as Error).message}`);
       }
     }
 
     // 2. Automatic Failover to Fallback Provider
-    if (config?.allowFailover && fallbackName) {
+    if (allowFailover && fallbackName) {
+      console.log(`[PROVIDER FAILOVER] Attempting failover to secondary provider: ${fallbackName}...`);
       executedProvider = fallbackName;
       const fallbackBreaker = this.getCircuitBreaker(fallbackName);
       const fallbackProvider = this.getProvider(fallbackName);
@@ -281,6 +353,8 @@ export class ProviderRouterService {
         result = await fallbackBreaker.execute(() =>
           fallbackProvider.vendService(request),
         );
+
+        console.log(`[PROVIDER FAILOVER SUCCESS] Fallback ${fallbackName} completed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
 
         await this.auditProviderTransaction(
           transactionId,
@@ -293,6 +367,7 @@ export class ProviderRouterService {
 
         return result;
       } catch (fallbackErr) {
+        console.error(`[PROVIDER FAILOVER FAILED] Fallback ${fallbackName} also failed: ${(fallbackErr as Error).message}`);
         await this.auditProviderTransaction(
           transactionId,
           fallbackName,
