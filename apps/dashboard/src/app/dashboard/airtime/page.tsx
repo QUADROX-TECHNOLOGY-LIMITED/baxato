@@ -8,7 +8,6 @@ import {
   Smartphone,
   CheckCircle2,
   AlertCircle,
-  AlertTriangle,
   Loader2,
   ArrowRight,
   ArrowLeft,
@@ -247,7 +246,7 @@ export default function AirtimeVendingPage() {
           onRefresh={handleRefresh}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-6">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-5">
           {/* Identity Verification Warning Banner */}
           <KycBanner
             kycStatus={kycStatus}
@@ -299,31 +298,25 @@ export default function AirtimeVendingPage() {
             </div>
           )}
 
-          {/* Centered Airtime Purchase Card */}
-          <div className="max-w-xl mx-auto w-full pt-1">
-            <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-7 shadow-xs">
-              <form onSubmit={handleOpenConfirm} className="space-y-5">
-                {/* 1. Recipient Phone Number (Cleanly Partitioned Addon, No Overlap) */}
+          {/* Centered, Well-Proportioned Airtime Purchase Card */}
+          <div className="max-w-lg mx-auto w-full pt-1">
+            <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+              <form onSubmit={handleOpenConfirm} className="space-y-4">
+                {/* 1. Recipient Phone Number */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                     Phone Number
                   </label>
-                  <div className="flex items-center rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 transition-all overflow-hidden shadow-xs">
-                    <div className="px-3.5 py-3 bg-slate-100 dark:bg-[#0D1525] border-r border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 text-sm font-semibold flex items-center gap-1.5 select-none shrink-0">
-                      <span className="text-base leading-none">🇳🇬</span>
-                      <span className="tracking-tight">+234</span>
-                    </div>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={11}
-                      placeholder="08012345678"
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      className="w-full h-12 sm:h-13 px-4 bg-transparent text-slate-900 dark:text-white text-base sm:text-lg font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none tracking-normal"
-                      required
-                    />
-                  </div>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={11}
+                    placeholder="08012345678"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    className="w-full h-12 px-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-base font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
+                    required
+                  />
                 </div>
 
                 {/* 2. Mobile Network Operator Selection */}
@@ -340,7 +333,7 @@ export default function AirtimeVendingPage() {
                           key={network.id}
                           type="button"
                           onClick={() => setSelectedNetwork(network.id)}
-                          className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                          className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                             isSelected
                               ? `${network.borderActive} ${network.bgActive}`
                               : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070E1C]/50 hover:border-slate-300 dark:hover:border-slate-700'
@@ -363,14 +356,11 @@ export default function AirtimeVendingPage() {
                     })}
                   </div>
 
-                  {/* Network Mismatch Notice */}
+                  {/* Clean, short, neutral mismatch note */}
                   {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-                    <div className="mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <div className="leading-relaxed">
-                        The system detected this number prefix belongs to <strong>{detectedNetwork.name}</strong>, but you selected <strong>{activeNetworkConfig.name}</strong>. Please confirm if this line has been ported before completing the recharge.
-                      </div>
-                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">
+                      Prefix matches <span className="font-semibold text-slate-800 dark:text-slate-200">{detectedNetwork.name}</span>, but <span className="font-semibold text-slate-800 dark:text-slate-200">{activeNetworkConfig.name}</span> is selected.
+                    </p>
                   )}
                 </div>
 
@@ -380,14 +370,14 @@ export default function AirtimeVendingPage() {
                     Amount (₦)
                   </label>
 
-                  {/* Preset Amount Chips (Clean Sans Typography) */}
+                  {/* Preset Amount Chips */}
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                     {PRESET_AMOUNTS.map((val) => (
                       <button
                         key={val}
                         type="button"
                         onClick={() => setAmount(val.toString())}
-                        className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all cursor-pointer ${
+                        className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all cursor-pointer ${
                           numericAmount === val
                             ? 'bg-[#126BEB] text-white border-[#126BEB] shadow-xs'
                             : 'bg-slate-50 dark:bg-[#070E1C] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
@@ -398,24 +388,22 @@ export default function AirtimeVendingPage() {
                     ))}
                   </div>
 
-                  {/* Custom Amount Input with Dedicated Currency Addon */}
-                  <div className="mt-2">
-                    <div className="flex items-center rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 transition-all overflow-hidden shadow-xs">
-                      <span className="px-4 py-3 bg-slate-100 dark:bg-[#0D1525] border-r border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 text-base font-bold select-none shrink-0">
-                        ₦
-                      </span>
-                      <input
-                        type="number"
-                        min={50}
-                        max={50000}
-                        step={50}
-                        placeholder="Enter amount (50 - 50,000)"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        className="w-full h-12 sm:h-13 px-4 bg-transparent text-slate-900 dark:text-white text-base sm:text-lg font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none"
-                        required
-                      />
-                    </div>
+                  {/* Custom Amount Input */}
+                  <div className="relative mt-2">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-slate-400 select-none">
+                      ₦
+                    </span>
+                    <input
+                      type="number"
+                      min={50}
+                      max={50000}
+                      step={50}
+                      placeholder="Enter custom amount"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      className="w-full h-12 pl-9 pr-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-base font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
+                      required
+                    />
                   </div>
                 </div>
 
@@ -479,11 +467,11 @@ export default function AirtimeVendingPage() {
               </div>
             </div>
 
-            {/* Mismatch Warning in Modal */}
+            {/* Short Mismatch Notice in Modal */}
             {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
-                ⚠️ <strong>Notice:</strong> Prefix matches <strong>{detectedNetwork.name}</strong>, but recharging via <strong>{activeNetworkConfig.name}</strong>.
-              </div>
+              <p className="text-[11.5px] text-slate-500 dark:text-slate-400 text-center">
+                Note: Prefix matches {detectedNetwork.name}, recharging via {activeNetworkConfig.name}.
+              </p>
             )}
 
             <div className="flex items-center gap-3 pt-1">
