@@ -394,10 +394,10 @@ export default function DashboardOverviewPage() {
 
               <Link
                 href="/dashboard/ledger"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
               >
-                <span>View Full Ledger</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span>Full History</span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </Link>
             </div>
 
