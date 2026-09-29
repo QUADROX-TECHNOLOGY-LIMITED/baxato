@@ -8,6 +8,7 @@ import {
   Smartphone,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   ArrowRight,
   ArrowLeft,
@@ -117,7 +118,16 @@ export default function AirtimeVendingPage() {
 
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Auto-detect network silently from prefix as user types
+  // Detect network from prefix
+  const detectedNetwork = useMemo(() => {
+    if (phone.length >= 4) {
+      const prefix = phone.slice(0, 4);
+      return NETWORKS.find((net) => net.prefixes.includes(prefix)) || null;
+    }
+    return null;
+  }, [phone]);
+
+  // Auto-detect network silently as user types
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
     setPhone(raw);
@@ -272,10 +282,10 @@ export default function AirtimeVendingPage() {
             </div>
 
             {/* Compact Balance Indicator */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
               <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" />
               <span>Balance:</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <span className="font-bold text-slate-900 dark:text-white">
                 ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -290,18 +300,18 @@ export default function AirtimeVendingPage() {
           )}
 
           {/* Centered Airtime Purchase Card */}
-          <div className="max-w-xl mx-auto w-full pt-2">
+          <div className="max-w-xl mx-auto w-full pt-1">
             <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-7 shadow-xs">
               <form onSubmit={handleOpenConfirm} className="space-y-5">
-                {/* 1. Recipient Phone Number (AT THE TOP) */}
+                {/* 1. Recipient Phone Number (Cleanly Partitioned Addon, No Overlap) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                     Phone Number
                   </label>
-                  <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-xs text-slate-400 font-mono">
-                      <span>+234</span>
-                      <span className="text-slate-300 dark:text-slate-700">|</span>
+                  <div className="flex items-center rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 transition-all overflow-hidden shadow-xs">
+                    <div className="px-3.5 py-3 bg-slate-100 dark:bg-[#0D1525] border-r border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 text-sm font-semibold flex items-center gap-1.5 select-none shrink-0">
+                      <span className="text-base leading-none">🇳🇬</span>
+                      <span className="tracking-tight">+234</span>
                     </div>
                     <input
                       type="tel"
@@ -310,7 +320,7 @@ export default function AirtimeVendingPage() {
                       placeholder="08012345678"
                       value={phone}
                       onChange={handlePhoneChange}
-                      className="w-full h-11 pl-18 pr-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
+                      className="w-full h-12 sm:h-13 px-4 bg-transparent text-slate-900 dark:text-white text-base sm:text-lg font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none tracking-normal"
                       required
                     />
                   </div>
@@ -352,6 +362,16 @@ export default function AirtimeVendingPage() {
                       );
                     })}
                   </div>
+
+                  {/* Network Mismatch Notice */}
+                  {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div className="leading-relaxed">
+                        The system detected this number prefix belongs to <strong>{detectedNetwork.name}</strong>, but you selected <strong>{activeNetworkConfig.name}</strong>. Please confirm if this line has been ported before completing the recharge.
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Recharge Amount */}
@@ -360,17 +380,17 @@ export default function AirtimeVendingPage() {
                     Amount (₦)
                   </label>
 
-                  {/* Preset Amount Chips */}
+                  {/* Preset Amount Chips (Clean Sans Typography) */}
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                     {PRESET_AMOUNTS.map((val) => (
                       <button
                         key={val}
                         type="button"
                         onClick={() => setAmount(val.toString())}
-                        className={`py-2 px-2 rounded-lg text-xs font-mono font-semibold border transition-all cursor-pointer ${
+                        className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all cursor-pointer ${
                           numericAmount === val
                             ? 'bg-[#126BEB] text-white border-[#126BEB] shadow-xs'
-                            : 'bg-slate-50 dark:bg-[#070E1C] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                            : 'bg-slate-50 dark:bg-[#070E1C] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
                         ₦{val.toLocaleString()}
@@ -378,22 +398,24 @@ export default function AirtimeVendingPage() {
                     ))}
                   </div>
 
-                  {/* Custom Amount Input */}
-                  <div className="relative mt-2">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
-                      ₦
-                    </span>
-                    <input
-                      type="number"
-                      min={50}
-                      max={50000}
-                      step={50}
-                      placeholder="Enter custom amount"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="w-full h-11 pl-8 pr-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
-                      required
-                    />
+                  {/* Custom Amount Input with Dedicated Currency Addon */}
+                  <div className="mt-2">
+                    <div className="flex items-center rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 transition-all overflow-hidden shadow-xs">
+                      <span className="px-4 py-3 bg-slate-100 dark:bg-[#0D1525] border-r border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 text-base font-bold select-none shrink-0">
+                        ₦
+                      </span>
+                      <input
+                        type="number"
+                        min={50}
+                        max={50000}
+                        step={50}
+                        placeholder="Enter amount (50 - 50,000)"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full h-12 sm:h-13 px-4 bg-transparent text-slate-900 dark:text-white text-base sm:text-lg font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -402,7 +424,7 @@ export default function AirtimeVendingPage() {
                   <button
                     type="submit"
                     disabled={!phone || !numericAmount}
-                    className="w-full py-3 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-3.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span>Proceed to Recharge</span>
                     <ArrowRight className="w-4 h-4" />
@@ -425,13 +447,13 @@ export default function AirtimeVendingPage() {
               <button
                 onClick={() => setIsConfirmModalOpen(false)}
                 disabled={isSubmitting}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#070E1C] border border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070E1C] border border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Network:</span>
                 <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -447,15 +469,22 @@ export default function AirtimeVendingPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Recipient Phone:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{phone}</span>
+                <span className="font-semibold text-slate-900 dark:text-white text-sm">{phone}</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 text-sm">
                 <span className="font-bold text-slate-900 dark:text-white">Amount to Debit:</span>
-                <span className="font-mono font-bold text-[#126BEB] dark:text-[#38BDF8]">
+                <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
                   ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
+
+            {/* Mismatch Warning in Modal */}
+            {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
+                ⚠️ <strong>Notice:</strong> Prefix matches <strong>{detectedNetwork.name}</strong>, but recharging via <strong>{activeNetworkConfig.name}</strong>.
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-1">
               <button
@@ -506,11 +535,11 @@ export default function AirtimeVendingPage() {
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070E1C] border border-slate-100 dark:border-slate-800 text-xs space-y-2 text-left">
               <div className="flex justify-between">
                 <span className="text-slate-400">Reference:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{successReceipt.reference}</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{successReceipt.reference}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Recipient:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{successReceipt.phone}</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{successReceipt.phone}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Network:</span>
@@ -518,7 +547,7 @@ export default function AirtimeVendingPage() {
               </div>
               <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800 font-bold">
                 <span className="text-slate-900 dark:text-white">Amount Debited:</span>
-                <span className="font-mono text-[#126BEB] dark:text-[#38BDF8]">
+                <span className="text-[#126BEB] dark:text-[#38BDF8] text-sm">
                   ₦{successReceipt.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
               </div>
