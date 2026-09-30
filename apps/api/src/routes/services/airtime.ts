@@ -97,4 +97,27 @@ export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send(createSuccessResponse(history, request.id));
     },
   );
+
+  /**
+   * GET /services/airtime/status/:reference
+   * Returns live vending status for an airtime transaction, automatically requerying upstream if processing.
+   */
+  fastify.get(
+    '/status/:reference',
+    { preHandler: [requireTenantPermission(Permission.TENANT_TRANSACTIONS_READ)] },
+    async (request, reply) => {
+      const { reference } = request.params as { reference: string };
+
+      if (!reference) {
+        throw new ValidationError('Transaction reference is required.');
+      }
+
+      const receipt = await airtimeService.requeryAirtimeStatus(
+        reference,
+        request.businessId,
+      );
+
+      return reply.status(200).send(createSuccessResponse(receipt, request.id));
+    },
+  );
 };

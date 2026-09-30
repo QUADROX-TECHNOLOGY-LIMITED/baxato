@@ -8,6 +8,7 @@ import {
   generateInterswitchReference,
   generateTransactionReference,
   ValidationError,
+  NotFoundError,
   AppError,
   koboToNaira,
   formatNairaFromKobo,
@@ -19,6 +20,7 @@ import {
   wallets,
   eq,
   and,
+  or,
   desc,
 } from '@baxato/database';
 import { walletService } from './wallet.service';
@@ -301,99 +303,159 @@ export class AirtimeService {
         txnRow.id,
       );
 
-      if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
-        throw new AppError(
-          `Airtime vending failed with response code ${vendResult.responseCode}: ${vendResult.responseMessage}`,
-          502,
-          'PROVIDER_VEND_FAILED',
-        );
-      }
+      if (vendResult.status === TransactionStatus.SUCCESSFUL) {
+        // 6. Update transaction to SUCCESSFUL
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.SUCCESSFUL,
+            providerName: vendResult.providerName,
+            providerReference: vendResult.providerReference || requestReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
 
-      // 6. Update transaction to SUCCESSFUL
-      await db
-        .update(serviceTransactions)
-        .set({
-          status: TransactionStatus.SUCCESSFUL,
-          providerName: vendResult.providerName,
-          providerReference: vendResult.providerReference || requestReference,
-          updatedAt: new Date(),
-        })
-        .where(eq(serviceTransactions.id, txnRow.id));
-
-      // 7. Post balanced Zero-Sum Financial Ledger entry
-      await ledgerService.recordDoubleEntry({
-        businessId: input.businessId,
-        reference: clientRef,
-        type: LedgerEntryType.SERVICE_PAYMENT,
-        category: 'AIRTIME_PURCHASE',
-        description: `Airtime purchase: ${config.name} ₦${koboToNaira(faceAmountKobo)} to ${normalizedPhone}`,
-        transactionId: txnRow.id,
-        debit: {
-          walletId: mainWallet.id,
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo,
-          balanceAfterKobo,
-        },
-        credit: {
-          walletId: mainWallet.id, // Platform clearing balance
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo: 0n,
-          balanceAfterKobo: amountToDebitKobo,
-        },
-      });
-
-      const receipt: AirtimeReceiptDto = {
-        transactionId: txnRow.id,
-        status: TransactionStatus.SUCCESSFUL,
-        recipientPhone: normalizedPhone,
-        network,
-        networkName: config.name,
-        faceAmountKobo: faceAmountKobo.toString(),
-        faceAmountNaira: koboToNaira(faceAmountKobo),
-        formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
-        discountKobo: discountKobo.toString(),
-        discountNaira: koboToNaira(discountKobo),
-        formattedDiscount: formatNairaFromKobo(discountKobo),
-        amountDebitedKobo: amountToDebitKobo.toString(),
-        amountDebitedNaira: koboToNaira(amountToDebitKobo),
-        formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
-        reference: clientRef,
-        clientReference: clientRef,
-        providerReference: vendResult.providerReference,
-        providerName: vendResult.providerName,
-        createdAt: new Date(),
-      };
-
-      // 8. Record audit log entry
-      await auditService.log({
-        userId: input.userId,
-        businessId: input.businessId,
-        action: 'AIRTIME_PURCHASE',
-        resourceType: 'TRANSACTION',
-        resourceId: txnRow.id,
-        changes: {
-          clientReference: clientRef,
-          network,
-          recipient: normalizedPhone,
-          amountNaira: koboToNaira(faceAmountKobo),
-          provider: vendResult.providerName,
-          status: 'SUCCESSFUL',
-        },
-      });
-
-      // Save idempotency response if key provided
-      if (input.idempotencyKey) {
-        await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
-      }
-
-      // Outbound Webhook Dispatch (fire-and-forget / non-blocking)
-      webhookDispatcherService
-        .dispatch(input.businessId, WebhookEventType.TRANSACTION_SUCCESSFUL, receipt)
-        .catch((err) => {
-          console.error('[AirtimeService] Webhook dispatch failed:', err);
+        // 7. Post balanced Zero-Sum Financial Ledger entry
+        await ledgerService.recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'AIRTIME_PURCHASE',
+          description: `Airtime purchase: ${config.name} ₦${koboToNaira(faceAmountKobo)} to ${normalizedPhone}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing balance
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
         });
 
-      return receipt;
+        const receipt: AirtimeReceiptDto = {
+          transactionId: txnRow.id,
+          status: TransactionStatus.SUCCESSFUL,
+          recipientPhone: normalizedPhone,
+          network,
+          networkName: config.name,
+          faceAmountKobo: faceAmountKobo.toString(),
+          faceAmountNaira: koboToNaira(faceAmountKobo),
+          formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
+          discountKobo: discountKobo.toString(),
+          discountNaira: koboToNaira(discountKobo),
+          formattedDiscount: formatNairaFromKobo(discountKobo),
+          amountDebitedKobo: amountToDebitKobo.toString(),
+          amountDebitedNaira: koboToNaira(amountToDebitKobo),
+          formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+          reference: clientRef,
+          clientReference: clientRef,
+          providerReference: vendResult.providerReference,
+          providerName: vendResult.providerName,
+          createdAt: new Date(),
+        };
+
+        // 8. Record audit log entry
+        await auditService.log({
+          userId: input.userId,
+          businessId: input.businessId,
+          action: 'AIRTIME_PURCHASE',
+          resourceType: 'TRANSACTION',
+          resourceId: txnRow.id,
+          changes: {
+            clientReference: clientRef,
+            network,
+            recipient: normalizedPhone,
+            amountNaira: koboToNaira(faceAmountKobo),
+            provider: vendResult.providerName,
+            status: 'SUCCESSFUL',
+          },
+        });
+
+        // Save idempotency response if key provided
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
+        }
+
+        // Outbound Webhook Dispatch (fire-and-forget / non-blocking)
+        webhookDispatcherService
+          .dispatch(input.businessId, WebhookEventType.TRANSACTION_SUCCESSFUL, receipt)
+          .catch((err) => {
+            console.error('[AirtimeService] Webhook dispatch failed:', err);
+          });
+
+        return receipt;
+      }
+
+      if (
+        vendResult.status === TransactionStatus.PROCESSING ||
+        vendResult.status === TransactionStatus.PENDING
+      ) {
+        // Provider is processing top-up with mobile operator
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            providerName: vendResult.providerName,
+            providerReference: vendResult.providerReference || requestReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+
+        const receipt: AirtimeReceiptDto = {
+          transactionId: txnRow.id,
+          status: TransactionStatus.PROCESSING,
+          recipientPhone: normalizedPhone,
+          network,
+          networkName: config.name,
+          faceAmountKobo: faceAmountKobo.toString(),
+          faceAmountNaira: koboToNaira(faceAmountKobo),
+          formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
+          discountKobo: discountKobo.toString(),
+          discountNaira: koboToNaira(discountKobo),
+          formattedDiscount: formatNairaFromKobo(discountKobo),
+          amountDebitedKobo: amountToDebitKobo.toString(),
+          amountDebitedNaira: koboToNaira(amountToDebitKobo),
+          formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+          reference: clientRef,
+          clientReference: clientRef,
+          providerReference: vendResult.providerReference,
+          providerName: vendResult.providerName,
+          createdAt: new Date(),
+        };
+
+        await auditService.log({
+          userId: input.userId,
+          businessId: input.businessId,
+          action: 'AIRTIME_PURCHASE_PROCESSING',
+          resourceType: 'TRANSACTION',
+          resourceId: txnRow.id,
+          changes: {
+            clientReference: clientRef,
+            network,
+            recipient: normalizedPhone,
+            amountNaira: koboToNaira(faceAmountKobo),
+            provider: vendResult.providerName,
+            status: 'PROCESSING',
+          },
+        });
+
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
+        }
+
+        return receipt;
+      }
+
+      throw new AppError(
+        `Airtime vending failed with response code ${vendResult.responseCode}: ${vendResult.responseMessage}`,
+        502,
+        'PROVIDER_VEND_FAILED',
+      );
     } catch (error) {
       // 9. Unrecoverable Failure: Rollback wallet deduction & record reversal
       await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
@@ -450,6 +512,202 @@ export class AirtimeService {
   }
 
   /**
+   * Helper to map a serviceTransactions database row to AirtimeReceiptDto.
+   */
+  public mapRowToReceiptDto(r: any): AirtimeReceiptDto {
+    const meta = (r.metadata || {}) as Record<string, string>;
+    const network = (meta.network || TelecomNetwork.MTN) as TelecomNetwork;
+    const config = TELCO_CONFIGS[network] || TELCO_CONFIGS[TelecomNetwork.MTN];
+
+    return {
+      transactionId: r.id,
+      status: r.status as TransactionStatus,
+      recipientPhone: r.recipient,
+      network,
+      networkName: config.name,
+      faceAmountKobo: r.amount.toString(),
+      faceAmountNaira: koboToNaira(r.amount),
+      formattedFaceAmount: formatNairaFromKobo(r.amount),
+      discountKobo: r.discount.toString(),
+      discountNaira: koboToNaira(r.discount),
+      formattedDiscount: formatNairaFromKobo(r.discount),
+      amountDebitedKobo: r.totalAmount.toString(),
+      amountDebitedNaira: koboToNaira(r.totalAmount),
+      formattedAmountDebited: formatNairaFromKobo(r.totalAmount),
+      reference: r.clientReference || r.requestReference || r.id,
+      clientReference: r.clientReference || undefined,
+      providerReference: r.providerReference || undefined,
+      providerName: r.providerName,
+      createdAt: r.createdAt,
+    };
+  }
+
+  /**
+   * Retrieves single airtime transaction by client reference or transaction ID.
+   */
+  public async getAirtimeTransaction(
+    reference: string,
+    businessId?: string,
+  ): Promise<AirtimeReceiptDto> {
+    const conditions = [
+      or(
+        eq(serviceTransactions.clientReference, reference),
+        eq(serviceTransactions.requestReference, reference),
+        eq(serviceTransactions.id, reference),
+      ),
+      eq(serviceTransactions.serviceType, ServiceType.AIRTIME),
+    ];
+
+    if (businessId) {
+      conditions.push(eq(serviceTransactions.businessId, businessId));
+    }
+
+    const [row] = await db
+      .select()
+      .from(serviceTransactions)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundError(`Airtime transaction '${reference}' was not found.`);
+    }
+
+    return this.mapRowToReceiptDto(row);
+  }
+
+  /**
+   * Requeries live status of an in-flight or processing airtime transaction from upstream provider.
+   */
+  public async requeryAirtimeStatus(
+    reference: string,
+    businessId?: string,
+  ): Promise<AirtimeReceiptDto> {
+    const conditions = [
+      or(
+        eq(serviceTransactions.clientReference, reference),
+        eq(serviceTransactions.requestReference, reference),
+        eq(serviceTransactions.id, reference),
+      ),
+      eq(serviceTransactions.serviceType, ServiceType.AIRTIME),
+    ];
+
+    if (businessId) {
+      conditions.push(eq(serviceTransactions.businessId, businessId));
+    }
+
+    const [row] = await db
+      .select()
+      .from(serviceTransactions)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundError(`Airtime transaction '${reference}' was not found.`);
+    }
+
+    // If transaction already finalized in terminal state, return current receipt
+    if (
+      row.status === TransactionStatus.SUCCESSFUL ||
+      row.status === TransactionStatus.FAILED ||
+      row.status === TransactionStatus.REVERSED
+    ) {
+      return this.mapRowToReceiptDto(row);
+    }
+
+    // Otherwise, actively ping provider for status update
+    try {
+      const requeryResult = await this.router.requeryTransaction(
+        row.providerName,
+        row.requestReference || row.clientReference || row.id,
+        row.providerReference || undefined,
+      );
+
+      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.SUCCESSFUL,
+            providerReference: requeryResult.providerReference || row.providerReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, row.id));
+
+        // Ensure double-entry ledger is committed if not already recorded
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: row.businessId,
+            reference: row.clientReference || row.requestReference || row.id,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'AIRTIME_PURCHASE',
+            description: `Airtime purchase confirmed: ₦${koboToNaira(row.amount)} to ${row.recipient}`,
+            transactionId: row.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: row.totalAmount,
+              balanceBeforeKobo: BigInt(mainWallet.balanceKobo),
+              balanceAfterKobo: BigInt(mainWallet.balanceKobo),
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: row.totalAmount,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: row.totalAmount,
+            },
+          })
+          .catch(() => {});
+
+        const updatedRow = {
+          ...row,
+          status: TransactionStatus.SUCCESSFUL,
+          providerReference: requeryResult.providerReference || row.providerReference,
+        };
+        const receipt = this.mapRowToReceiptDto(updatedRow);
+
+        webhookDispatcherService
+          .dispatch(row.businessId, WebhookEventType.TRANSACTION_SUCCESSFUL, receipt)
+          .catch(() => {});
+
+        return receipt;
+      }
+
+      if (requeryResult.status === TransactionStatus.FAILED) {
+        // Confirmed failed: reverse wallet deduction
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await walletService.creditWallet(mainWallet.id, row.totalAmount);
+
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.FAILED,
+            errorMessage: requeryResult.responseMessage || 'Airtime vending failed upstream',
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, row.id));
+
+        const updatedRow = {
+          ...row,
+          status: TransactionStatus.FAILED,
+          errorMessage: requeryResult.responseMessage,
+        };
+        const receipt = this.mapRowToReceiptDto(updatedRow);
+
+        webhookDispatcherService
+          .dispatch(row.businessId, WebhookEventType.TRANSACTION_FAILED, receipt)
+          .catch(() => {});
+
+        return receipt;
+      }
+
+      // Still in PROCESSING state
+      return this.mapRowToReceiptDto(row);
+    } catch (err) {
+      console.warn(`[AirtimeService] Requery attempt failed for ${row.id}:`, err);
+      return this.mapRowToReceiptDto(row);
+    }
+  }
+
+  /**
    * Retrieves paginated airtime purchase history for a business.
    */
   public async getAirtimeHistory(
@@ -470,33 +728,7 @@ export class AirtimeService {
       .limit(limit)
       .offset(offset);
 
-    const transactions: AirtimeReceiptDto[] = rows.map((r) => {
-      const meta = (r.metadata || {}) as Record<string, string>;
-      const network = (meta.network || TelecomNetwork.MTN) as TelecomNetwork;
-      const config = TELCO_CONFIGS[network] || TELCO_CONFIGS[TelecomNetwork.MTN];
-
-      return {
-        transactionId: r.id,
-        status: r.status as TransactionStatus,
-        recipientPhone: r.recipient,
-        network,
-        networkName: config.name,
-        faceAmountKobo: r.amount.toString(),
-        faceAmountNaira: koboToNaira(r.amount),
-        formattedFaceAmount: formatNairaFromKobo(r.amount),
-        discountKobo: r.discount.toString(),
-        discountNaira: koboToNaira(r.discount),
-        formattedDiscount: formatNairaFromKobo(r.discount),
-        amountDebitedKobo: r.totalAmount.toString(),
-        amountDebitedNaira: koboToNaira(r.totalAmount),
-        formattedAmountDebited: formatNairaFromKobo(r.totalAmount),
-        reference: r.clientReference || r.requestReference || r.id,
-        clientReference: r.clientReference || undefined,
-        providerReference: r.providerReference || undefined,
-        providerName: r.providerName,
-        createdAt: r.createdAt,
-      };
-    });
+    const transactions: AirtimeReceiptDto[] = rows.map((r) => this.mapRowToReceiptDto(r));
 
     return {
       transactions,

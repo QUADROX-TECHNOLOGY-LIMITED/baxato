@@ -18,6 +18,9 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import TransactionReceiptModal, {
+  TransactionReceiptData,
+} from '@/components/dashboard/TransactionReceiptModal';
 
 interface NetworkOption {
   id: string;
@@ -26,6 +29,7 @@ interface NetworkOption {
   prefixes: string[];
   borderActive: string;
   bgActive: string;
+  discountBps: number;
 }
 
 const NETWORKS: NetworkOption[] = [
@@ -36,6 +40,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
     borderActive: 'border-amber-400 ring-2 ring-amber-400/20',
     bgActive: 'bg-amber-400/5',
+    discountBps: 250, // 2.5%
   },
   {
     id: 'AIRTEL',
@@ -44,6 +49,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
     borderActive: 'border-red-500 ring-2 ring-red-500/20',
     bgActive: 'bg-red-500/5',
+    discountBps: 250, // 2.5%
   },
   {
     id: 'GLO',
@@ -52,6 +58,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
     borderActive: 'border-emerald-500 ring-2 ring-emerald-500/20',
     bgActive: 'bg-emerald-500/5',
+    discountBps: 350, // 3.5%
   },
   {
     id: '9MOBILE',
@@ -60,18 +67,11 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
     borderActive: 'border-teal-500 ring-2 ring-teal-500/20',
     bgActive: 'bg-teal-500/5',
+    discountBps: 300, // 3.0%
   },
 ];
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
-
-interface AirtimeReceipt {
-  reference: string;
-  network: string;
-  phone: string;
-  amount: number;
-  date: string;
-}
 
 export default function AirtimeVendingPage() {
   const router = useRouter();
@@ -95,7 +95,8 @@ export default function AirtimeVendingPage() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successReceipt, setSuccessReceipt] = useState<AirtimeReceipt | null>(null);
+  const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
   const loadWallets = async () => {
     try {
@@ -242,17 +243,43 @@ export default function AirtimeVendingPage() {
         throw new Error(msg);
       }
 
-      const receiptData: AirtimeReceipt = {
-        reference: result.data?.reference || result.data?.clientReference || `BXT-AIR-${Date.now().toString().slice(-8)}`,
-        network: activeNetworkConfig.name,
-        phone,
-        amount: numericAmount,
-        date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      const data = result.data;
+      const faceVal = data?.faceAmountNaira ?? numericAmount;
+      const discountVal =
+        data?.discountNaira !== undefined
+          ? data.discountNaira
+          : (numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000;
+      const debitedVal = data?.amountDebitedNaira ?? (faceVal - discountVal);
+
+      const receiptItem: TransactionReceiptData = {
+        transactionId: data?.transactionId || data?.id || `txn_${Date.now()}`,
+        reference: data?.reference || data?.clientReference || `BXT-AIR-${Date.now().toString().slice(-8)}`,
+        clientReference: data?.clientReference,
+        providerReference: data?.providerReference,
+        providerName: data?.providerName,
+        serviceType: 'AIRTIME',
+        status: data?.status || 'SUCCESSFUL',
+        recipient: phone,
+        network: selectedNetwork,
+        networkName: activeNetworkConfig.name,
+        networkLogo: activeNetworkConfig.logo,
+        faceAmountNaira: faceVal,
+        discountNaira: discountVal,
+        amountDebitedNaira: debitedVal,
+        date: new Date().toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        businessName,
       };
 
-      setSuccessReceipt(receiptData);
+      setReceiptData(receiptItem);
       setIsConfirmModalOpen(false);
-      setPhone('');
+      setIsReceiptModalOpen(true);
       loadWallets();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction could not be completed.';
@@ -511,10 +538,27 @@ export default function AirtimeVendingPage() {
                 <span className="text-slate-500 dark:text-slate-400">Recipient Phone</span>
                 <span className="font-semibold text-slate-900 dark:text-white text-sm">{phone}</span>
               </div>
-              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
-                <span className="font-bold text-slate-900 dark:text-white">Amount to Debit</span>
-                <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-slate-400">Airtime Face Value</span>
+                <span className="font-semibold text-slate-900 dark:text-white text-sm">
                   ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {((numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000) > 0 && (
+                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>Merchant Discount ({((activeNetworkConfig.discountBps || 250) / 100).toFixed(1)}%)</span>
+                  <span>
+                    -₦{((numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-white block">Amount to Debit</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">From Main Wallet</span>
+                </div>
+                <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
+                  ₦{(numericAmount - (numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -555,54 +599,22 @@ export default function AirtimeVendingPage() {
         </div>
       )}
 
-      {/* Clean Unified Success Receipt Modal */}
-      {successReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-6 shadow-2xl text-center space-y-4 text-slate-900 dark:text-white">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20">
-              <CheckCircle2 className="w-7 h-7" />
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Recharge Successful
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Airtime has been delivered to {successReceipt.phone}
-              </p>
-            </div>
-
-            <div className="space-y-2.5 py-1 text-xs text-left">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Transaction ID</span>
-                <span className="font-semibold font-mono text-[11px] text-slate-900 dark:text-white">{successReceipt.reference}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Recipient</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{successReceipt.phone}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Network</span>
-                <span className="font-bold text-slate-900 dark:text-white">{successReceipt.network}</span>
-              </div>
-              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80 font-bold">
-                <span className="text-slate-900 dark:text-white">Amount Debited</span>
-                <span className="text-[#126BEB] dark:text-[#38BDF8] text-sm">
-                  ₦{successReceipt.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setSuccessReceipt(null)}
-              className="w-full py-2.5 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              Recharge Another Number
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Sleek Enterprise BAXATO Transaction Receipt Modal with Live Auto-Pinging & PDF Export */}
+      <TransactionReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        receipt={receiptData}
+        onRechargeAnother={() => {
+          setIsReceiptModalOpen(false);
+          setPhone('');
+          loadWallets();
+        }}
+        onStatusUpdated={(updated) => {
+          setReceiptData(updated);
+          loadWallets();
+        }}
+        pollingEndpoint="/api/services/airtime/status/"
+      />
 
       {/* KYC Verification Modal */}
       <KycModal
