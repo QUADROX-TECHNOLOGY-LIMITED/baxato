@@ -451,8 +451,9 @@ export class AirtimeService {
         return receipt;
       }
 
+      const userFriendlyMessage = this.cleanErrorMessage(vendResult.responseMessage);
       throw new AppError(
-        `Airtime vending failed with response code ${vendResult.responseCode}: ${vendResult.responseMessage}`,
+        userFriendlyMessage,
         502,
         'PROVIDER_VEND_FAILED',
       );
@@ -734,6 +735,24 @@ export class AirtimeService {
       transactions,
       total: transactions.length,
     };
+  }
+
+  private cleanErrorMessage(rawMessage?: string): string {
+    if (!rawMessage) {
+      return 'The telecom network operator was unable to complete the recharge at this time. Your wallet has not been charged.';
+    }
+    // Strip technical upstream provider codes, terminal IDs, and internal delimiter pipes
+    let cleaned = rawMessage
+      .replace(/(-?[A-Z0-9]{2,}\|[^.]+)/gi, '')
+      .replace(/(interswitch|monnify|quickteller|orion|vtpass)/gi, 'network operator')
+      .replace(/terminal\s*id[:\s]*\w+/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleaned.length < 5 || /bad credentials|unauthorized|502|failed/i.test(cleaned)) {
+      return 'The telecom network operator was temporarily unavailable. Please verify the recipient number and try again.';
+    }
+    return cleaned;
   }
 }
 

@@ -22,8 +22,6 @@ export interface TransactionReceiptData {
   transactionId: string;
   reference: string;
   clientReference?: string;
-  providerReference?: string;
-  providerName?: string;
   serviceType: 'AIRTIME' | 'DATA' | 'CABLE' | 'ELECTRICITY' | 'EDUCATION';
   status: 'SUCCESSFUL' | 'PROCESSING' | 'PENDING' | 'FAILED' | 'REVERSED';
   
@@ -113,8 +111,6 @@ export default function TransactionReceiptModal({
             const updated: TransactionReceiptData = {
               ...currentReceipt,
               status: remoteStatus,
-              providerReference: remoteData.providerReference || currentReceipt.providerReference,
-              providerName: remoteData.providerName || currentReceipt.providerName,
             };
 
             setCurrentReceipt(updated);
@@ -169,13 +165,11 @@ export default function TransactionReceiptModal({
         : []),
       `Amount Debited:     ₦${currentReceipt.amountDebitedNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
       `Transaction Ref:    ${currentReceipt.reference}`,
-      ...(currentReceipt.providerReference
-        ? [`Provider Session:   ${currentReceipt.providerReference}`]
-        : []),
       `Date & Time:        ${currentReceipt.date}`,
       'Payment Wallet:     BAXATO Main Balance',
       '================================',
-      'Digitally Cleared via BAXATO Infrastructure',
+      'Thank you for using BAXATO',
+      'Support: support@baxato.com',
     ].join('\n');
   };
 
@@ -444,16 +438,6 @@ export default function TransactionReceiptModal({
               </button>
             </div>
 
-            {/* Provider Reference (if available) */}
-            {currentReceipt.providerReference && (
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Session ID</span>
-                <span className="font-mono text-[10.5px] text-slate-600 dark:text-slate-300">
-                  {currentReceipt.providerReference}
-                </span>
-              </div>
-            )}
-
             {/* Date and Time */}
             <div className="flex justify-between items-center">
               <span className="text-slate-500 dark:text-slate-400">Date &amp; Time</span>
@@ -515,9 +499,9 @@ export default function TransactionReceiptModal({
             )}
           </div>
 
-          {/* Security & Verification Footer */}
-          <div className="pt-2 text-center text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60">
-            Digitally cleared by BAXATO Telecom Gateway &bull; Regulated VAS Node
+          {/* Receipt Brand & Support Footer */}
+          <div className="pt-2 text-center text-[10.5px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60">
+            Thank you for using BAXATO &bull; support@baxato.com
           </div>
         </div>
       </div>

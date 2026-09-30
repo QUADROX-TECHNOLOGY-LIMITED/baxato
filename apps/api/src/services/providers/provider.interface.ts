@@ -8,6 +8,7 @@ export interface CustomerValidationRequest {
   paymentCode: string;
   customerId: string; // phone number, meter number, smartcard number
   amountKobo?: bigint;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -35,6 +36,7 @@ export interface ServiceVendingRequest {
   paymentCode: string;
   customerId: string;      // recipient phone, meter, or smartcard
   customerMobile?: string;  // purchaser / notification phone
+  customerName?: string;
   customerEmail?: string;
   amountKobo: bigint;
   requestReference: string; // 12-to-20 alphanumeric reference

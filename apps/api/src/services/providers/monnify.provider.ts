@@ -148,18 +148,20 @@ export class MonnifyProvider implements ProviderAdapter {
   /**
    * Customer / Meter / Smartcard validation
    */
+  /**
+   * Customer / Meter / Smartcard validation using official Monnify Bills Payment API:
+   * POST /api/v1/vas/bills-payment/validate-customer
+   */
   public async validateCustomer(
     request: CustomerValidationRequest,
   ): Promise<CustomerValidationResult> {
     const token = await this.getAccessToken();
 
-    let endpoint = '';
-    if (request.serviceType === ServiceType.ELECTRICITY) {
-      endpoint = `${this.config.baseUrl}/api/v1/vas/electricity/validate?meterNumber=${encodeURIComponent(request.customerId)}&billerCode=${encodeURIComponent(request.paymentCode)}`;
-    } else if (request.serviceType === ServiceType.CABLE_TV) {
-      endpoint = `${this.config.baseUrl}/api/v1/vas/cable-tv/validate?smartCardNumber=${encodeURIComponent(request.customerId)}&billerCode=${encodeURIComponent(request.paymentCode)}`;
-    } else {
-      // Airtime/Data phone validation
+    if (
+      request.serviceType !== ServiceType.ELECTRICITY &&
+      request.serviceType !== ServiceType.CABLE_TV
+    ) {
+      // Airtime/Data phone validation is typically bypassed or passed through
       return {
         isValid: true,
         customerId: request.customerId,
@@ -168,12 +170,20 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     }
 
+    const endpoint = `${this.config.baseUrl}/api/v1/vas/bills-payment/validate-customer`;
+    const payload = {
+      customerNumber: request.customerId,
+      billerCode: request.paymentCode,
+      productCode: (request.metadata?.productCode as string) || request.paymentCode,
+    };
+
     const res = await fetch(endpoint, {
-      method: 'GET',
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload),
     });
 
     const rawData = await safeParseResponse(res);
@@ -186,10 +196,11 @@ export class MonnifyProvider implements ProviderAdapter {
         address?: string;
         accountNumber?: string;
         outstandingAmount?: number;
+        validationReference?: string;
       };
     };
 
-    const isSuccess = Boolean(data?.requestSuccessful && data?.responseCode === '0');
+    const isSuccess = Boolean(data?.requestSuccessful && (data?.responseCode === '0' || data?.responseCode === '00'));
 
     return {
       isValid: isSuccess,
@@ -199,7 +210,7 @@ export class MonnifyProvider implements ProviderAdapter {
       outstandingBalanceKobo: data?.responseBody?.outstandingAmount
         ? BigInt(Math.round(data.responseBody.outstandingAmount * 100))
         : undefined,
-      responseCode: data?.responseCode || 'UNKNOWN',
+      responseCode: data?.responseCode || String(res.status),
       responseMessage: data?.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),
       rawResponse: data as Record<string, unknown>,
     };
@@ -207,69 +218,42 @@ export class MonnifyProvider implements ProviderAdapter {
 
   /**
    * Vend Service (Airtime, Data, Cable TV, Electricity)
+   * Official Monnify Bills Payment API:
+   * POST /api/v1/vas/bills-payment/vend
    */
   public async vendService(request: ServiceVendingRequest): Promise<ServiceVendingResult> {
     const token = await this.getAccessToken();
 
     // Convert Kobo to Naira string for Monnify payload
     const amountInNaira = (Number(request.amountKobo) / 100).toFixed(2);
+    const numericNaira = parseFloat(amountInNaira);
 
-    let endpoint = '';
-    let body: Record<string, unknown> = {};
+    const endpoint = `${this.config.baseUrl}/api/v1/vas/bills-payment/vend`;
+    let billerCode = request.paymentCode;
+    let productCode = (request.metadata?.productCode as string) || request.paymentCode;
 
     switch (request.serviceType) {
       case ServiceType.AIRTIME: {
-        endpoint = `${this.config.baseUrl}/api/v1/vas/airtime/purchase`;
         const resolvedCode =
           (request.metadata?.monnifyNetworkCode as string) ||
           (request.metadata?.network as string) ||
           INTERSWITCH_TO_MONNIFY_AIRTIME[request.paymentCode] ||
           request.paymentCode;
-
-        body = {
-          amount: parseFloat(amountInNaira),
-          customerNumber: request.customerId,
-          networkCode: String(resolvedCode).toUpperCase(),
-          paymentReference: request.requestReference,
-        };
+        billerCode = String(resolvedCode).toUpperCase();
+        productCode = String(resolvedCode).toUpperCase() + '_AIRTIME';
         break;
       }
 
       case ServiceType.DATA: {
-        endpoint = `${this.config.baseUrl}/api/v1/vas/data/purchase`;
-        const packageCode =
-          (request.metadata?.monnifyPlanCode as string) ||
-          request.paymentCode;
-
-        body = {
-          amount: parseFloat(amountInNaira),
-          customerNumber: request.customerId,
-          packageCode: String(packageCode),
-          paymentReference: request.requestReference,
-        };
+        billerCode = (request.metadata?.network as string)?.toUpperCase() || request.paymentCode;
+        productCode = (request.metadata?.monnifyPlanCode as string) || request.paymentCode;
         break;
       }
 
       case ServiceType.CABLE_TV:
-        endpoint = `${this.config.baseUrl}/api/v1/vas/cable-tv/purchase`;
-        body = {
-          amount: parseFloat(amountInNaira),
-          smartCardNumber: request.customerId,
-          packageCode: request.paymentCode,
-          customerPhone: request.customerMobile || request.customerId,
-          paymentReference: request.requestReference,
-        };
-        break;
-
       case ServiceType.ELECTRICITY:
-        endpoint = `${this.config.baseUrl}/api/v1/vas/electricity/purchase`;
-        body = {
-          amount: parseFloat(amountInNaira),
-          meterNumber: request.customerId,
-          billerCode: request.paymentCode,
-          customerPhone: request.customerMobile || request.customerId,
-          paymentReference: request.requestReference,
-        };
+        billerCode = request.paymentCode;
+        productCode = (request.metadata?.productCode as string) || request.paymentCode;
         break;
 
       default:
@@ -281,13 +265,24 @@ export class MonnifyProvider implements ProviderAdapter {
         );
     }
 
+    const payload = {
+      amount: numericNaira,
+      customerName: request.customerName || request.customerId,
+      customerMobileNumber: request.customerMobile || request.customerId,
+      billerCode,
+      productCode,
+      productAmount: numericNaira,
+      paymentReference: request.requestReference,
+      validationReference: (request.metadata?.validationReference as string) || request.requestReference,
+    };
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     const rawData = await safeParseResponse(res);
@@ -311,7 +306,7 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const isSuccess = Boolean(data?.requestSuccessful && data?.responseCode === '0');
+    const isSuccess = Boolean(data?.requestSuccessful && (data?.responseCode === '0' || data?.responseCode === '00'));
     const status = isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED;
 
     return {
@@ -338,7 +333,8 @@ export class MonnifyProvider implements ProviderAdapter {
   }
 
   /**
-   * Re-query transaction status
+   * Re-query transaction status using official Monnify Bills Payment API:
+   * GET /api/v1/vas/bills-payment/requery?paymentReference=...
    */
   public async requeryTransaction(
     requestReference: string,
@@ -347,7 +343,7 @@ export class MonnifyProvider implements ProviderAdapter {
     const token = await this.getAccessToken();
 
     const res = await fetch(
-      `${this.config.baseUrl}/api/v1/vas/transactions/${encodeURIComponent(requestReference)}`,
+      `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?paymentReference=${encodeURIComponent(requestReference)}`,
       {
         method: 'GET',
         headers: {
@@ -371,7 +367,7 @@ export class MonnifyProvider implements ProviderAdapter {
 
     const isSuccess = Boolean(
       data?.requestSuccessful &&
-        (data?.responseBody?.paymentStatus === 'PAID' || data?.responseCode === '0'),
+        (data?.responseBody?.paymentStatus === 'PAID' || data?.responseCode === '0' || data?.responseCode === '00'),
     );
 
     return {

@@ -255,8 +255,6 @@ export default function AirtimeVendingPage() {
         transactionId: data?.transactionId || data?.id || `txn_${Date.now()}`,
         reference: data?.reference || data?.clientReference || `BXT-AIR-${Date.now().toString().slice(-8)}`,
         clientReference: data?.clientReference,
-        providerReference: data?.providerReference,
-        providerName: data?.providerName,
         serviceType: 'AIRTIME',
         status: data?.status || 'SUCCESSFUL',
         recipient: phone,
