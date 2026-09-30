@@ -11,7 +11,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
     "dev:api": "pnpm --filter @baxato/api dev",
-    "dev:dashboard": "pnpm --filter @baxato/dashboard dev"
+    "dev:dashboard": "pnpm --filter @baxato/dashboard dev",
+    "db:seed": "pnpm --filter @baxato/database db:seed"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",

@@ -35,9 +35,34 @@ export default function DashboardOverviewPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
+  const [walletBalance, setWalletBalance] = useState<string>('₦0.00');
   const [transactions, setTransactions] = useState<any[]>([]);
 
+  const loadWallets = async () => {
+    try {
+      const authToken = localStorage.getItem('bx_auth_token') || '';
+      if (!authToken) return;
+
+      const res = await fetch('/api/wallets', {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data?.wallets)) {
+        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
+        if (main) {
+          setWalletBalance(
+            main.formattedBalance ||
+              `₦${(main.balanceNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
+          );
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
+    loadWallets();
     try {
       const storedUser = localStorage.getItem('bx_user');
       const storedBiz = localStorage.getItem('bx_business');
@@ -69,6 +94,7 @@ export default function DashboardOverviewPage() {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    loadWallets();
     setTimeout(() => setIsRefreshing(false), 700);
   };
 
@@ -256,8 +282,8 @@ export default function DashboardOverviewPage() {
                     {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <div className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-white mt-0.5">
-                  {showBalance ? '₦0.00' : '••••••••'}
+                <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-0.5">
+                  {showBalance ? walletBalance : '••••••••'}
                 </div>
               </div>
 
@@ -294,7 +320,7 @@ export default function DashboardOverviewPage() {
                   Today&apos;s Volume
                 </span>
                 <div className="mt-1.5">
-                  <div className="text-2xl sm:text-3xl font-mono font-bold text-slate-900 dark:text-white">
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
                     ₦0.00
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">0 transactions completed today</p>

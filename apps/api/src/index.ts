@@ -1,17 +1,18 @@
 import { buildServer } from './server.js';
 import { env, getSanitizedEnv } from '@baxato/config';
-import { runMigrations } from '@baxato/database';
+import { runMigrations, seedProviders } from '@baxato/database';
 
 async function bootstrap() {
   const app = buildServer();
 
   try {
-    // 1. Ensure all database tables, columns, indexes, and constraints exist
+    // 1. Ensure all database tables, columns, indexes, and default providers exist
     try {
       await runMigrations();
-      app.log.info('✅ PostgreSQL schemas and migrations verified successfully');
+      await seedProviders();
+      app.log.info('✅ PostgreSQL schemas verified and default providers seeded successfully');
     } catch (migErr) {
-      app.log.error({ err: migErr }, '⚠️ Database auto-migration reported an error (continuing server startup)');
+      app.log.error({ err: migErr }, '⚠️ Database auto-migration or provider seed reported an error (continuing server startup)');
     }
 
     const address = await app.listen({

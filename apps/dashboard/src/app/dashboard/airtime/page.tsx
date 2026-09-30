@@ -96,8 +96,29 @@ export default function AirtimeVendingPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successReceipt, setSuccessReceipt] = useState<AirtimeReceipt | null>(null);
 
-  // Load user details
+  const loadWallets = async () => {
+    try {
+      const authToken = localStorage.getItem('bx_auth_token') || '';
+      if (!authToken) return;
+
+      const res = await fetch('/api/wallets', {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data?.wallets)) {
+        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
+        if (main) {
+          setWalletBalance(main.balanceNaira || 0);
+        }
+      }
+    } catch {}
+  };
+
+  // Load user details & wallet balance
   useEffect(() => {
+    loadWallets();
     try {
       const storedUser = localStorage.getItem('bx_user');
       const storedBiz = localStorage.getItem('bx_business');
@@ -209,6 +230,7 @@ export default function AirtimeVendingPage() {
       setSuccessReceipt(receiptData);
       setIsConfirmModalOpen(false);
       setPhone('');
+      loadWallets();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction could not be completed.';
       setErrorMessage(msg);
@@ -220,6 +242,7 @@ export default function AirtimeVendingPage() {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    loadWallets();
     setTimeout(() => setIsRefreshing(false), 600);
   };
 

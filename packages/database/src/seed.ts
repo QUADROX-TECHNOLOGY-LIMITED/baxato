@@ -2,10 +2,7 @@ import { db, closeDatabasePool } from './client.js';
 import { users, businesses, wallets, providers } from './schema/index.js';
 import { UserRole, WalletType, ProviderName } from '@baxato/common';
 
-export async function seedDatabase() {
-  console.log('🌱 Starting BAXATO database seeding...');
-
-  // 1. Seed Providers
+export async function seedProviders() {
   console.log('  -> Seeding providers (Interswitch & Monnify)...');
   await db
     .insert(providers)
@@ -33,6 +30,13 @@ export async function seedDatabase() {
       },
     ])
     .onConflictDoNothing();
+}
+
+export async function seedDatabase() {
+  console.log('🌱 Starting BAXATO database seeding...');
+
+  // 1. Seed Providers
+  await seedProviders();
 
   // 2. Seed Default Admin User
   console.log('  -> Seeding platform admin user...');
