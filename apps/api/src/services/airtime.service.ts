@@ -292,6 +292,11 @@ export class AirtimeService {
           customerId: normalizedPhone,
           amountKobo: faceAmountKobo,
           requestReference,
+          metadata: {
+            network,
+            networkName: config.name,
+            monnifyNetworkCode: config.monnifyNetworkCode,
+          },
         },
         txnRow.id,
       );

@@ -525,6 +525,10 @@ export class DataService {
           customerId: normalizedPhone,
           amountKobo: faceAmountKobo,
           requestReference,
+          metadata: {
+            network: plan.network,
+            monnifyPlanCode: plan.monnifyPlanCode,
+          },
         },
         txnRow.id,
       );

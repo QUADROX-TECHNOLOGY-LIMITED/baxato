@@ -29,6 +29,29 @@ interface CachedToken {
   expiresAt: number;
 }
 
+async function safeParseResponse(res: any): Promise<any> {
+  try {
+    if (typeof res.text === 'function') {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        if (typeof res.json === 'function') {
+          return await res.json().catch(() => null);
+        }
+        return null;
+      }
+    }
+    if (typeof res.json === 'function') {
+      return await res.json().catch(() => null);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export class InterswitchProvider implements ProviderAdapter {
   public readonly providerName = ProviderName.INTERSWITCH;
 
@@ -68,8 +91,14 @@ export class InterswitchProvider implements ProviderAdapter {
       body: 'grant_type=client_credentials',
     });
 
+    const rawData = await safeParseResponse(res);
+
     if (!res.ok) {
-      const errorText = await res.text();
+      const errorText =
+        rawData?.error_description ||
+        rawData?.message ||
+        (typeof res.text === 'function' ? await res.text().catch(() => '') : '') ||
+        `HTTP ${res.status}`;
       throw new AppError(
         `Interswitch Passport OAuth failed [${res.status}]: ${errorText}`,
         502,
@@ -79,7 +108,7 @@ export class InterswitchProvider implements ProviderAdapter {
       );
     }
 
-    const data = (await res.json()) as { access_token: string; expires_in?: number };
+    const data = (rawData || {}) as { access_token: string; expires_in?: number };
     const expiresInSeconds = data.expires_in ?? 3600;
 
     this.tokenCache = {
@@ -121,7 +150,8 @@ export class InterswitchProvider implements ProviderAdapter {
       },
     );
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {}) as {
       ResponseCode?: string;
       Customers?: Array<{
         PaymentCode: string;
@@ -178,7 +208,11 @@ export class InterswitchProvider implements ProviderAdapter {
       body: JSON.stringify(payload),
     });
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {
+      ResponseCode: '90099',
+      ResponseDescription: `Provider response was not valid JSON (${res.status} ${res.statusText || ''})`,
+    }) as {
       ResponseCode?: string;
       ResponseDescription?: string;
       TransactionRef?: string;
@@ -248,7 +282,8 @@ export class InterswitchProvider implements ProviderAdapter {
       },
     );
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {}) as {
       ResponseCode?: string;
       ResponseDescription?: string;
       TransactionRef?: string;

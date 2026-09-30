@@ -54,10 +54,34 @@ export default function LoginPage() {
 
       if (signInResult.status === 'complete' && signInResult.createdSessionId) {
         await clerk.setActive({ session: signInResult.createdSessionId });
-        router.push('/dashboard');
-      } else {
-        router.push('/dashboard');
       }
+
+      // Exchange credentials with Baxato backend API to cache token & user profile in localStorage
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.toLowerCase().trim(),
+            password,
+          }),
+        });
+        const text = await res.text();
+        const loginData = text ? JSON.parse(text) : null;
+        if (res.ok && loginData?.data?.token) {
+          localStorage.setItem('bx_auth_token', loginData.data.token);
+          if (loginData.data.user) {
+            localStorage.setItem('bx_user', JSON.stringify(loginData.data.user));
+          }
+          if (loginData.data.business) {
+            localStorage.setItem('bx_business', JSON.stringify(loginData.data.business));
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend login token exchange failed:', backendErr);
+      }
+
+      router.push('/dashboard');
     } catch (err: unknown) {
       const clerkErr = err as { errors?: Array<{ message?: string; longMessage?: string }> };
       const msg = clerkErr?.errors?.[0]?.longMessage || clerkErr?.errors?.[0]?.message || 'Invalid email or password.';

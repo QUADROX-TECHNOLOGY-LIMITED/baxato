@@ -196,26 +196,39 @@ export function buildServer(): FastifyInstance {
     return reply.status(404).send(response);
   });
 
-  // 5. Register Internal Application & Onboarding Routes (NO /v1 prefix)
+  // 5. Register Internal Application & Onboarding Routes (both default and /v1 prefixes)
   app.register(healthRoutes, { prefix: '' });
-  app.register(healthRoutes, { prefix: '/v1' }); // keep /v1/health for container liveness probes
+  app.register(healthRoutes, { prefix: '/v1' });
   app.register(authRoutes, { prefix: '/auth' });
   app.register(authRoutes, { prefix: '/v1/auth' });
   app.register(kycRoutes, { prefix: '/kyc' });
   app.register(kycRoutes, { prefix: '/v1/kyc' });
   app.register(userRoutes, { prefix: '/users' });
+  app.register(userRoutes, { prefix: '/v1/users' });
   app.register(businessRoutes, { prefix: '/businesses' });
+  app.register(businessRoutes, { prefix: '/v1/businesses' });
   app.register(walletRoutes, { prefix: '/wallets' });
+  app.register(walletRoutes, { prefix: '/v1/wallets' });
   app.register(ledgerRoutes, { prefix: '/ledger' });
+  app.register(ledgerRoutes, { prefix: '/v1/ledger' });
   app.register(webhookRoutes, { prefix: '/webhooks' });
+  app.register(webhookRoutes, { prefix: '/v1/webhooks' });
   app.register(providerRoutes, { prefix: '/providers' });
+  app.register(providerRoutes, { prefix: '/v1/providers' });
   app.register(apiKeyRoutes, { prefix: '/developer/keys' });
+  app.register(apiKeyRoutes, { prefix: '/v1/developer/keys' });
   app.register(developerWebhookRoutes, { prefix: '/developer/webhooks' });
+  app.register(developerWebhookRoutes, { prefix: '/v1/developer/webhooks' });
   app.register(airtimeRoutes, { prefix: '/services/airtime' });
+  app.register(airtimeRoutes, { prefix: '/v1/services/airtime' });
   app.register(dataRoutes, { prefix: '/services/data' });
+  app.register(dataRoutes, { prefix: '/v1/services/data' });
   app.register(cableRoutes, { prefix: '/services/cable' });
+  app.register(cableRoutes, { prefix: '/v1/services/cable' });
   app.register(electricityRoutes, { prefix: '/services/electricity' });
+  app.register(electricityRoutes, { prefix: '/v1/services/electricity' });
   app.register(educationRoutes, { prefix: '/services/education' });
+  app.register(educationRoutes, { prefix: '/v1/services/education' });
 
   return app;
 }

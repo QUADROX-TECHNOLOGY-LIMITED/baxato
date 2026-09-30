@@ -28,6 +28,41 @@ interface CachedMonnifyToken {
   expiresAt: number;
 }
 
+const INTERSWITCH_TO_MONNIFY_AIRTIME: Record<string, string> = {
+  '10901': 'MTN',
+  '109': 'MTN',
+  '90102': 'AIRTEL',
+  '901': 'AIRTEL',
+  '40201': 'GLO',
+  '402': 'GLO',
+  '10801': '9MOBILE',
+  '108': '9MOBILE',
+  'MTN': 'MTN',
+  'AIRTEL': 'AIRTEL',
+  'GLO': 'GLO',
+  '9MOBILE': '9MOBILE',
+};
+
+async function safeParseResponse(res: any): Promise<any> {
+  try {
+    if (typeof res.text === 'function') {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof res.json === 'function') {
+      return await res.json().catch(() => null);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export class MonnifyProvider implements ProviderAdapter {
   public readonly providerName = ProviderName.MONNIFY;
 
@@ -65,8 +100,13 @@ export class MonnifyProvider implements ProviderAdapter {
       },
     });
 
+    const rawData = await safeParseResponse(res);
+
     if (!res.ok) {
-      const errorText = await res.text();
+      const errorText =
+        rawData?.responseMessage ||
+        (typeof res.text === 'function' ? await res.text().catch(() => '') : '') ||
+        `HTTP ${res.status}`;
       throw new AppError(
         `Monnify Auth login failed [${res.status}]: ${errorText}`,
         502,
@@ -76,7 +116,7 @@ export class MonnifyProvider implements ProviderAdapter {
       );
     }
 
-    const data = (await res.json()) as {
+    const data = rawData as {
       requestSuccessful: boolean;
       responseMessage: string;
       responseCode: string;
@@ -86,9 +126,9 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    if (!data.requestSuccessful || !data.responseBody?.accessToken) {
+    if (!data?.requestSuccessful || !data?.responseBody?.accessToken) {
       throw new AppError(
-        `Monnify token exchange rejected: ${data.responseMessage}`,
+        `Monnify token exchange rejected: ${data?.responseMessage || 'Unknown error'}`,
         502,
         'EXTERNAL_SERVICE_ERROR',
         true,
@@ -136,7 +176,8 @@ export class MonnifyProvider implements ProviderAdapter {
       },
     });
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {}) as {
       requestSuccessful: boolean;
       responseMessage: string;
       responseCode: string;
@@ -148,18 +189,18 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const isSuccess = data.requestSuccessful && data.responseCode === '0';
+    const isSuccess = Boolean(data?.requestSuccessful && data?.responseCode === '0');
 
     return {
       isValid: isSuccess,
       customerId: request.customerId,
-      customerName: data.responseBody?.customerName,
-      customerAddress: data.responseBody?.address,
-      outstandingBalanceKobo: data.responseBody?.outstandingAmount
+      customerName: data?.responseBody?.customerName,
+      customerAddress: data?.responseBody?.address,
+      outstandingBalanceKobo: data?.responseBody?.outstandingAmount
         ? BigInt(Math.round(data.responseBody.outstandingAmount * 100))
         : undefined,
-      responseCode: data.responseCode || 'UNKNOWN',
-      responseMessage: data.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),
+      responseCode: data?.responseCode || 'UNKNOWN',
+      responseMessage: data?.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),
       rawResponse: data as Record<string, unknown>,
     };
   }
@@ -177,25 +218,37 @@ export class MonnifyProvider implements ProviderAdapter {
     let body: Record<string, unknown> = {};
 
     switch (request.serviceType) {
-      case ServiceType.AIRTIME:
+      case ServiceType.AIRTIME: {
         endpoint = `${this.config.baseUrl}/api/v1/vas/airtime/purchase`;
-        body = {
-          amount: parseFloat(amountInNaira),
-          customerNumber: request.customerId,
-          networkCode: request.paymentCode,
-          paymentReference: request.requestReference,
-        };
-        break;
+        const resolvedCode =
+          (request.metadata?.monnifyNetworkCode as string) ||
+          (request.metadata?.network as string) ||
+          INTERSWITCH_TO_MONNIFY_AIRTIME[request.paymentCode] ||
+          request.paymentCode;
 
-      case ServiceType.DATA:
-        endpoint = `${this.config.baseUrl}/api/v1/vas/data/purchase`;
         body = {
           amount: parseFloat(amountInNaira),
           customerNumber: request.customerId,
-          packageCode: request.paymentCode,
+          networkCode: String(resolvedCode).toUpperCase(),
           paymentReference: request.requestReference,
         };
         break;
+      }
+
+      case ServiceType.DATA: {
+        endpoint = `${this.config.baseUrl}/api/v1/vas/data/purchase`;
+        const packageCode =
+          (request.metadata?.monnifyPlanCode as string) ||
+          request.paymentCode;
+
+        body = {
+          amount: parseFloat(amountInNaira),
+          customerNumber: request.customerId,
+          packageCode: String(packageCode),
+          paymentReference: request.requestReference,
+        };
+        break;
+      }
 
       case ServiceType.CABLE_TV:
         endpoint = `${this.config.baseUrl}/api/v1/vas/cable-tv/purchase`;
@@ -237,7 +290,12 @@ export class MonnifyProvider implements ProviderAdapter {
       body: JSON.stringify(body),
     });
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {
+      requestSuccessful: false,
+      responseCode: String(res.status || '502'),
+      responseMessage: `Provider response was not valid JSON (${res.status} ${res.statusText || ''})`,
+    }) as {
       requestSuccessful: boolean;
       responseMessage: string;
       responseCode: string;
@@ -253,23 +311,23 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const isSuccess = data.requestSuccessful && data.responseCode === '0';
+    const isSuccess = Boolean(data?.requestSuccessful && data?.responseCode === '0');
     const status = isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED;
 
     return {
       status,
       providerName: this.providerName,
-      providerReference: data.responseBody?.transactionReference,
+      providerReference: data?.responseBody?.transactionReference,
       requestReference: request.requestReference,
       amountKobo: request.amountKobo,
-      responseCode: data.responseCode || 'UNKNOWN',
-      responseMessage: data.responseMessage || (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
-      token: data.responseBody?.token,
-      units: data.responseBody?.units,
-      tariff: data.responseBody?.tariff,
-      customerAddress: data.responseBody?.address,
-      customerName: data.responseBody?.customerName,
-      pinData: data.responseBody?.token
+      responseCode: data?.responseCode || 'UNKNOWN',
+      responseMessage: data?.responseMessage || (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
+      token: data?.responseBody?.token,
+      units: data?.responseBody?.units,
+      tariff: data?.responseBody?.tariff,
+      customerAddress: data?.responseBody?.address,
+      customerName: data?.responseBody?.customerName,
+      pinData: data?.responseBody?.token
         ? {
             pin: data.responseBody.token,
             instructions: 'Load token into your prepaid meter keypad followed by Enter.',
@@ -299,7 +357,8 @@ export class MonnifyProvider implements ProviderAdapter {
       },
     );
 
-    const data = (await res.json()) as {
+    const rawData = await safeParseResponse(res);
+    const data = (rawData || {}) as {
       requestSuccessful: boolean;
       responseMessage: string;
       responseCode: string;
@@ -310,20 +369,21 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const isSuccess =
-      data.requestSuccessful &&
-      (data.responseBody?.paymentStatus === 'PAID' || data.responseCode === '0');
+    const isSuccess = Boolean(
+      data?.requestSuccessful &&
+        (data?.responseBody?.paymentStatus === 'PAID' || data?.responseCode === '0'),
+    );
 
     return {
       status: isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED,
       providerName: this.providerName,
-      providerReference: data.responseBody?.transactionReference,
+      providerReference: data?.responseBody?.transactionReference,
       requestReference,
-      amountKobo: data.responseBody?.amount
+      amountKobo: data?.responseBody?.amount
         ? BigInt(Math.round(data.responseBody.amount * 100))
         : undefined,
-      responseCode: data.responseCode || 'UNKNOWN',
-      responseMessage: data.responseMessage || (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
+      responseCode: data?.responseCode || 'UNKNOWN',
+      responseMessage: data?.responseMessage || (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
       rawResponse: data as Record<string, unknown>,
     };
   }

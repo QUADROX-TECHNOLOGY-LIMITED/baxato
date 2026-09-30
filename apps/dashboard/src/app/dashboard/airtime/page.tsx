@@ -204,13 +204,17 @@ export default function AirtimeVendingPage() {
 
     try {
       const authToken = localStorage.getItem('bx_auth_token') || '';
+      if (!authToken) {
+        throw new Error('Your session has expired or you are not signed in. Please sign in again.');
+      }
+
       const amountKobo = Math.round(numericAmount * 100);
 
       const response = await fetch('/api/services/airtime/purchase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           phone,
@@ -220,10 +224,21 @@ export default function AirtimeVendingPage() {
         }),
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      let result: any = null;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        result = {
+          success: false,
+          error: {
+            message: `Server returned an unexpected response (${response.status}: ${response.statusText || 'Error'}). Please try again.`,
+          },
+        };
+      }
 
-      if (!response.ok || !result.success) {
-        const msg = result.error?.message || result.message || 'Airtime vending failed. Please try again.';
+      if (!response.ok || !result?.success) {
+        const msg = result?.error?.message || result?.message || 'Airtime vending failed. Please try again.';
         throw new Error(msg);
       }
 
@@ -336,7 +351,7 @@ export default function AirtimeVendingPage() {
           {/* Centered, Well-Proportioned Airtime Purchase Card */}
           <div className="max-w-lg mx-auto w-full pt-1">
             <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-              <form onSubmit={handleOpenConfirm} className="space-y-4">
+              <form onSubmit={handleOpenConfirm} noValidate className="space-y-4">
                 {/* 1. Recipient Phone Number */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
@@ -432,7 +447,7 @@ export default function AirtimeVendingPage() {
                       type="number"
                       min={50}
                       max={50000}
-                      step={50}
+                      step="any"
                       placeholder="Enter custom amount"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
