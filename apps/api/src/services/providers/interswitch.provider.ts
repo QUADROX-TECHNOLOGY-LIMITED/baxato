@@ -229,10 +229,13 @@ export class InterswitchProvider implements ProviderAdapter {
     const isSuccess =
       data.ResponseCode === '90000' ||
       (data.ResponseCode === '70022' && !!parsedMeta.token);
+    const isProcessing = data.ResponseCode === '900A0' || data.ResponseCode === '900A1';
 
     const transactionStatus = isSuccess
       ? TransactionStatus.SUCCESSFUL
-      : TransactionStatus.FAILED;
+      : isProcessing
+        ? TransactionStatus.PROCESSING
+        : TransactionStatus.FAILED;
 
     return {
       status: transactionStatus,

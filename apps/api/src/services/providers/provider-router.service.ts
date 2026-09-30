@@ -198,14 +198,27 @@ export class ProviderRouterService {
     if (this.db) {
       try {
         const dbProviders = await this.db.select().from(providers);
-
         const serviceKey = serviceType.toLowerCase();
 
-        // Check active providers from database
+        // 1. Only consider providers whose status is 'ACTIVE' in TablePlus
         const activeDbProviders = dbProviders.filter((p) => p.status === 'ACTIVE');
 
-        // Providers enabling this service
-        const enabledProviders = activeDbProviders.filter((p) => {
+        // 2. Providers explicitly disabled for this service by admin in TablePlus (config.<service> = false)
+        const disabledProviderNames = new Set(
+          activeDbProviders
+            .filter((p) => {
+              if (!p.config || typeof p.config !== 'object') return false;
+              const cfg = p.config as Record<string, unknown>;
+              return cfg[serviceKey] === false || cfg[serviceType] === false;
+            })
+            .map((p) => p.name),
+        );
+
+        // 3. Eligible providers: Active and not explicitly turned off for this service
+        const eligibleProviders = activeDbProviders.filter((p) => !disabledProviderNames.has(p.name));
+
+        // 4. Providers explicitly turned ON for this service (config.<service> = true)
+        const explicitlyEnabled = eligibleProviders.filter((p) => {
           if (!p.config || typeof p.config !== 'object') return false;
           const cfg = p.config as Record<string, unknown>;
           return (
@@ -216,43 +229,20 @@ export class ProviderRouterService {
           );
         });
 
-        // For Telecom & Utilities (Airtime, Data, Cable, Electricity), Monnify is the primary aggregator
-        const isDualService = [
-          ServiceType.AIRTIME,
-          ServiceType.DATA,
-          ServiceType.CABLE_TV,
-          ServiceType.ELECTRICITY,
-        ].includes(serviceType);
+        const pool = explicitlyEnabled.length > 0 ? explicitlyEnabled : eligibleProviders;
 
-        if (isDualService) {
-          const monnifyInDb = activeDbProviders.find((p) => p.name === ProviderName.MONNIFY);
-          const interswitchInDb = activeDbProviders.find((p) => p.name === ProviderName.INTERSWITCH);
-
-          if (monnifyInDb) {
-            primaryName = ProviderName.MONNIFY;
-            fallbackName = interswitchInDb ? ProviderName.INTERSWITCH : undefined;
-            source = `Dynamic Priority: MONNIFY primary with INTERSWITCH failover for ${serviceType}`;
-          } else if (interswitchInDb) {
-            primaryName = ProviderName.INTERSWITCH;
-            fallbackName = undefined;
-            source = `PostgreSQL "providers" table (${primaryName})`;
-          }
-        } else if (enabledProviders.length > 0) {
-          const primaryCandidate =
-            enabledProviders.find((p) => p.isPrimary) || enabledProviders[0]!;
+        if (pool.length > 0) {
+          // The provider marked is_primary = true in TablePlus is chosen first, otherwise the first in pool
+          const primaryCandidate = pool.find((p) => p.isPrimary) || pool[0]!;
           primaryName = primaryCandidate.name as ProviderName;
-          source = `PostgreSQL "providers" table (config.${serviceKey}=true on ${primaryName})`;
 
-          const fallbackCandidate = activeDbProviders.find((o) => o.name !== primaryName);
+          // Fallback provider is another eligible provider in pool (or eligibleProviders)
+          const fallbackCandidate =
+            pool.find((p) => p.name !== primaryName) ||
+            eligibleProviders.find((p) => p.name !== primaryName);
+
           fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
-        } else {
-          const primaryFromDb = activeDbProviders.find((p) => p.isPrimary) || activeDbProviders[0];
-          if (primaryFromDb) {
-            primaryName = primaryFromDb.name as ProviderName;
-            source = `PostgreSQL "providers" table (is_primary=true on ${primaryFromDb.name})`;
-            const fallbackCandidate = activeDbProviders.find((o) => o.name !== primaryName);
-            fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
-          }
+          source = `PostgreSQL "providers" table (${primaryName}${fallbackName ? ` -> ${fallbackName}` : ''})`;
         }
       } catch (err) {
         // Fall back gracefully if DB query error
@@ -340,8 +330,12 @@ export class ProviderRouterService {
           primaryProvider.vendService(request),
         );
 
-        if (result.status === TransactionStatus.SUCCESSFUL) {
-          console.log(`[PROVIDER VEND SUCCESS] ${primaryName} completed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
+        if (
+          result.status === TransactionStatus.SUCCESSFUL ||
+          result.status === TransactionStatus.PROCESSING ||
+          result.status === TransactionStatus.PENDING
+        ) {
+          console.log(`[PROVIDER VEND ${result.status}] ${primaryName} processed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
           await this.auditProviderTransaction(
             transactionId,
             primaryName,
@@ -371,18 +365,24 @@ export class ProviderRouterService {
           fallbackProvider.vendService(request),
         );
 
-        console.log(`[PROVIDER FAILOVER SUCCESS] Fallback ${fallbackName} completed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
+        if (
+          result.status === TransactionStatus.SUCCESSFUL ||
+          result.status === TransactionStatus.PROCESSING ||
+          result.status === TransactionStatus.PENDING
+        ) {
+          console.log(`[PROVIDER FAILOVER ${result.status}] Fallback ${fallbackName} completed successfully. (Ref: ${result.providerReference || request.requestReference}, Code: ${result.responseCode})`);
 
-        await this.auditProviderTransaction(
-          transactionId,
-          fallbackName,
-          request,
-          result,
-          result.responseCode,
-          Date.now() - fallbackStart,
-        );
+          await this.auditProviderTransaction(
+            transactionId,
+            fallbackName,
+            request,
+            result,
+            result.responseCode,
+            Date.now() - fallbackStart,
+          );
 
-        return result;
+          return result;
+        }
       } catch (fallbackErr) {
         console.error(`[PROVIDER FAILOVER FAILED] Fallback ${fallbackName} also failed: ${(fallbackErr as Error).message}`);
         await this.auditProviderTransaction(

@@ -321,13 +321,24 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
+    const vendStatus = data?.responseBody?.vendStatus?.toUpperCase();
+    const isProcessing = Boolean(
+      data?.requestSuccessful &&
+        (vendStatus === 'PENDING' ||
+          vendStatus === 'PROCESSING' ||
+          vendStatus === 'IN_PROGRESS'),
+    );
     const isSuccess = Boolean(
       data?.requestSuccessful &&
-        (data?.responseCode === '0' ||
-          data?.responseCode === '00' ||
-          data?.responseBody?.vendStatus === 'SUCCESS'),
+        (vendStatus === 'SUCCESS' ||
+          data?.responseCode === '0' ||
+          data?.responseCode === '00'),
     );
-    const status = isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED;
+    const status = isProcessing
+      ? TransactionStatus.PROCESSING
+      : isSuccess
+        ? TransactionStatus.SUCCESSFUL
+        : TransactionStatus.FAILED;
 
     return {
       status,

@@ -68,7 +68,7 @@ export async function seedProviders() {
             },
           })
           .where(eq(providers.id, p.id));
-      } else if (p.name === ProviderName.MONNIFY && (cfg.airtime === false || cfg.airtime === undefined)) {
+      } else if (p.name === ProviderName.MONNIFY && cfg.airtime === undefined) {
         await db
           .update(providers)
           .set({
