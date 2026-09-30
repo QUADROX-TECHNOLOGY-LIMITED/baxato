@@ -43,6 +43,14 @@ const INTERSWITCH_TO_MONNIFY_AIRTIME: Record<string, string> = {
   '9MOBILE': '9MOBILE',
 };
 
+const MONNIFY_AIRTIME_PRODUCT_CODES: Record<string, string> = {
+  MTN: '13',
+  AIRTEL: '11',
+  GLO: '12',
+  '9MOBILE': '14',
+};
+
+
 async function safeParseResponse(res: any): Promise<any> {
   try {
     if (typeof res.text === 'function') {
@@ -240,7 +248,7 @@ export class MonnifyProvider implements ProviderAdapter {
           INTERSWITCH_TO_MONNIFY_AIRTIME[request.paymentCode] ||
           request.paymentCode;
         billerCode = String(resolvedCode).toUpperCase();
-        productCode = String(resolvedCode).toUpperCase() + '_AIRTIME';
+        productCode = MONNIFY_AIRTIME_PRODUCT_CODES[billerCode] || '13';
         break;
       }
 
@@ -265,16 +273,20 @@ export class MonnifyProvider implements ProviderAdapter {
         );
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       amount: numericNaira,
+      customerId: request.customerId,
       customerName: request.customerName || request.customerId,
       customerMobileNumber: request.customerMobile || request.customerId,
       billerCode,
       productCode,
       productAmount: numericNaira,
       paymentReference: request.requestReference,
-      validationReference: (request.metadata?.validationReference as string) || request.requestReference,
     };
+
+    if (request.metadata?.validationReference) {
+      payload.validationReference = request.metadata.validationReference;
+    }
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -296,7 +308,10 @@ export class MonnifyProvider implements ProviderAdapter {
       responseCode: string;
       responseBody?: {
         transactionReference?: string;
+        vendReference?: string;
         paymentReference?: string;
+        vendStatus?: string;
+        description?: string;
         token?: string;
         units?: string;
         tokenAmount?: number;
@@ -306,17 +321,26 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const isSuccess = Boolean(data?.requestSuccessful && (data?.responseCode === '0' || data?.responseCode === '00'));
+    const isSuccess = Boolean(
+      data?.requestSuccessful &&
+        (data?.responseCode === '0' ||
+          data?.responseCode === '00' ||
+          data?.responseBody?.vendStatus === 'SUCCESS'),
+    );
     const status = isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED;
 
     return {
       status,
       providerName: this.providerName,
-      providerReference: data?.responseBody?.transactionReference,
+      providerReference:
+        data?.responseBody?.vendReference || data?.responseBody?.transactionReference,
       requestReference: request.requestReference,
       amountKobo: request.amountKobo,
       responseCode: data?.responseCode || 'UNKNOWN',
-      responseMessage: data?.responseMessage || (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
+      responseMessage:
+        data?.responseBody?.description ||
+        data?.responseMessage ||
+        (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
       token: data?.responseBody?.token,
       units: data?.responseBody?.units,
       tariff: data?.responseBody?.tariff,
@@ -360,26 +384,36 @@ export class MonnifyProvider implements ProviderAdapter {
       responseCode: string;
       responseBody?: {
         transactionReference?: string;
+        vendReference?: string;
+        vendStatus?: string;
         paymentStatus?: string;
+        description?: string;
         amount?: number;
       };
     };
 
     const isSuccess = Boolean(
       data?.requestSuccessful &&
-        (data?.responseBody?.paymentStatus === 'PAID' || data?.responseCode === '0' || data?.responseCode === '00'),
+        (data?.responseBody?.vendStatus === 'SUCCESS' ||
+          data?.responseBody?.paymentStatus === 'PAID' ||
+          data?.responseCode === '0' ||
+          data?.responseCode === '00'),
     );
 
     return {
       status: isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED,
       providerName: this.providerName,
-      providerReference: data?.responseBody?.transactionReference,
+      providerReference:
+        data?.responseBody?.vendReference || data?.responseBody?.transactionReference,
       requestReference,
       amountKobo: data?.responseBody?.amount
         ? BigInt(Math.round(data.responseBody.amount * 100))
         : undefined,
       responseCode: data?.responseCode || 'UNKNOWN',
-      responseMessage: data?.responseMessage || (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
+      responseMessage:
+        data?.responseBody?.description ||
+        data?.responseMessage ||
+        (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
       rawResponse: data as Record<string, unknown>,
     };
   }
