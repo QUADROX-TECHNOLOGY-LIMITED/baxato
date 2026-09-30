@@ -30,20 +30,20 @@ export async function seedProviders() {
       {
         name: ProviderName.MONNIFY,
         status: 'ACTIVE',
-        isPrimary: false,
+        isPrimary: true,
         failureRate: 0,
         config: {
-          airtime: false,
-          data: false,
-          electricity: false,
-          cable: false,
+          airtime: true,
+          data: true,
+          electricity: true,
+          cable: true,
           exam_pin: false,
         },
       },
     ])
     .onConflictDoNothing();
 
-  // If providers already exist in DB without service flags, backfill them
+  // If providers already exist in DB, ensure Monnify has services active
   try {
     const existing = await db.select().from(providers);
     for (const p of existing) {
@@ -68,16 +68,17 @@ export async function seedProviders() {
             },
           })
           .where(eq(providers.id, p.id));
-      } else if (p.name === ProviderName.MONNIFY && cfg.airtime === undefined) {
+      } else if (p.name === ProviderName.MONNIFY && (cfg.airtime === false || cfg.airtime === undefined)) {
         await db
           .update(providers)
           .set({
+            isPrimary: true,
             config: {
               ...cfg,
-              airtime: false,
-              data: false,
-              electricity: false,
-              cable: false,
+              airtime: true,
+              data: true,
+              electricity: true,
+              cable: true,
               exam_pin: false,
             },
           })

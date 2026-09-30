@@ -201,9 +201,12 @@ export class ProviderRouterService {
 
         const serviceKey = serviceType.toLowerCase();
 
-        // Providers explicitly enabling this service
-        const enabledProviders = dbProviders.filter((p) => {
-          if (p.status !== 'ACTIVE' || !p.config || typeof p.config !== 'object') return false;
+        // Check active providers from database
+        const activeDbProviders = dbProviders.filter((p) => p.status === 'ACTIVE');
+
+        // Providers enabling this service
+        const enabledProviders = activeDbProviders.filter((p) => {
+          if (!p.config || typeof p.config !== 'object') return false;
           const cfg = p.config as Record<string, unknown>;
           return (
             cfg[serviceKey] === true ||
@@ -213,40 +216,41 @@ export class ProviderRouterService {
           );
         });
 
-        // Providers explicitly disabling this service
-        const disabledProviderNames = new Set(
-          dbProviders
-            .filter((p) => {
-              if (!p.config || typeof p.config !== 'object') return false;
-              const cfg = p.config as Record<string, unknown>;
-              return cfg[serviceKey] === false || cfg[serviceType] === false;
-            })
-            .map((p) => p.name),
-        );
+        // For Telecom & Utilities (Airtime, Data, Cable, Electricity), Monnify is the primary aggregator
+        const isDualService = [
+          ServiceType.AIRTIME,
+          ServiceType.DATA,
+          ServiceType.CABLE_TV,
+          ServiceType.ELECTRICITY,
+        ].includes(serviceType);
 
-        if (enabledProviders.length > 0) {
-          // If multiple are enabled, prefer the primary provider if among them, else first
+        if (isDualService) {
+          const monnifyInDb = activeDbProviders.find((p) => p.name === ProviderName.MONNIFY);
+          const interswitchInDb = activeDbProviders.find((p) => p.name === ProviderName.INTERSWITCH);
+
+          if (monnifyInDb) {
+            primaryName = ProviderName.MONNIFY;
+            fallbackName = interswitchInDb ? ProviderName.INTERSWITCH : undefined;
+            source = `Dynamic Priority: MONNIFY primary with INTERSWITCH failover for ${serviceType}`;
+          } else if (interswitchInDb) {
+            primaryName = ProviderName.INTERSWITCH;
+            fallbackName = undefined;
+            source = `PostgreSQL "providers" table (${primaryName})`;
+          }
+        } else if (enabledProviders.length > 0) {
           const primaryCandidate =
             enabledProviders.find((p) => p.isPrimary) || enabledProviders[0]!;
           primaryName = primaryCandidate.name as ProviderName;
           source = `PostgreSQL "providers" table (config.${serviceKey}=true on ${primaryName})`;
 
-          // Fallback provider must be active and not explicitly disabled for this service
-          const fallbackCandidate = dbProviders.find(
-            (o) => o.name !== primaryName && o.status === 'ACTIVE' && !disabledProviderNames.has(o.name),
-          );
+          const fallbackCandidate = activeDbProviders.find((o) => o.name !== primaryName);
           fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
         } else {
-          // Fall back to is_primary = true among providers not explicitly disabled
-          const primaryFromDb = dbProviders.find(
-            (p) => p.isPrimary && p.status === 'ACTIVE' && !disabledProviderNames.has(p.name),
-          );
+          const primaryFromDb = activeDbProviders.find((p) => p.isPrimary) || activeDbProviders[0];
           if (primaryFromDb) {
             primaryName = primaryFromDb.name as ProviderName;
             source = `PostgreSQL "providers" table (is_primary=true on ${primaryFromDb.name})`;
-            const fallbackCandidate = dbProviders.find(
-              (o) => o.name !== primaryName && o.status === 'ACTIVE' && !disabledProviderNames.has(o.name),
-            );
+            const fallbackCandidate = activeDbProviders.find((o) => o.name !== primaryName);
             fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
           }
         }
