@@ -1,6 +1,7 @@
 import { db, closeDatabasePool } from './client.js';
 import { users, businesses, wallets, providers } from './schema/index.js';
 import { UserRole, WalletType, ProviderName } from '@baxato/common';
+import { eq } from 'drizzle-orm';
 
 export async function seedProviders() {
   console.log('  -> Seeding providers (Interswitch & Monnify)...');
@@ -13,6 +14,11 @@ export async function seedProviders() {
         isPrimary: true,
         failureRate: 0,
         config: {
+          airtime: true,
+          data: true,
+          electricity: true,
+          cable: true,
+          exam_pin: true,
           billerIds: {
             airtel: '901',
             mtn: '109',
@@ -26,10 +32,61 @@ export async function seedProviders() {
         status: 'ACTIVE',
         isPrimary: false,
         failureRate: 0,
-        config: {},
+        config: {
+          airtime: false,
+          data: false,
+          electricity: false,
+          cable: false,
+          exam_pin: false,
+        },
       },
     ])
     .onConflictDoNothing();
+
+  // If providers already exist in DB without service flags, backfill them
+  try {
+    const existing = await db.select().from(providers);
+    for (const p of existing) {
+      const cfg = (p.config || {}) as Record<string, unknown>;
+      if (p.name === ProviderName.INTERSWITCH && cfg.airtime === undefined) {
+        await db
+          .update(providers)
+          .set({
+            config: {
+              ...cfg,
+              airtime: true,
+              data: true,
+              electricity: true,
+              cable: true,
+              exam_pin: true,
+              billerIds: cfg.billerIds || {
+                airtel: '901',
+                mtn: '109',
+                glo: '908',
+                nineMobile: '908',
+              },
+            },
+          })
+          .where(eq(providers.id, p.id));
+      } else if (p.name === ProviderName.MONNIFY && cfg.airtime === undefined) {
+        await db
+          .update(providers)
+          .set({
+            config: {
+              ...cfg,
+              airtime: false,
+              data: false,
+              electricity: false,
+              cable: false,
+              exam_pin: false,
+            },
+          })
+          .where(eq(providers.id, p.id));
+      }
+    }
+  } catch (_e) {
+    // Non-blocking on provider config backfill
+  }
 }
 
 export async function seedDatabase() {

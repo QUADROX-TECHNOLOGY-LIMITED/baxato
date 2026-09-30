@@ -84,6 +84,7 @@ export default function AirtimeVendingPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
 
   // Form State
   const [phone, setPhone] = useState<string>('');
@@ -98,8 +99,12 @@ export default function AirtimeVendingPage() {
 
   const loadWallets = async () => {
     try {
+      setIsLoadingBalance(true);
       const authToken = localStorage.getItem('bx_auth_token') || '';
-      if (!authToken) return;
+      if (!authToken) {
+        setIsLoadingBalance(false);
+        return;
+      }
 
       const res = await fetch('/api/wallets', {
         headers: {
@@ -113,7 +118,10 @@ export default function AirtimeVendingPage() {
           setWalletBalance(main.balanceNaira || 0);
         }
       }
-    } catch {}
+    } catch {
+    } finally {
+      setIsLoadingBalance(false);
+    }
   };
 
   // Load user details & wallet balance
@@ -208,7 +216,7 @@ export default function AirtimeVendingPage() {
           phone,
           amountKobo,
           network: selectedNetwork,
-          clientReference: `AIR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+          clientReference: `BXT-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
         }),
       });
 
@@ -220,7 +228,7 @@ export default function AirtimeVendingPage() {
       }
 
       const receiptData: AirtimeReceipt = {
-        reference: result.data?.reference || `AIR-${Date.now().toString().slice(-6)}`,
+        reference: result.data?.reference || result.data?.clientReference || `BXT-AIR-${Date.now().toString().slice(-8)}`,
         network: activeNetworkConfig.name,
         phone,
         amount: numericAmount,
@@ -307,9 +315,13 @@ export default function AirtimeVendingPage() {
             <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
               <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" />
               <span>Balance:</span>
-              <span className="font-bold text-slate-900 dark:text-white">
-                ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-              </span>
+              {isLoadingBalance ? (
+                <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+              ) : (
+                <span className="font-bold text-slate-900 dark:text-white">
+                  ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
           </div>
 
@@ -447,26 +459,28 @@ export default function AirtimeVendingPage() {
         </main>
       </div>
 
-      {/* Clean Confirmation Modal */}
+      {/* Clean Unified Confirmation Modal */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white dark:bg-[#0A1220] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4 text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Confirm Airtime Recharge
               </h3>
               <button
+                type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
                 disabled={isSubmitting}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070E1C] border border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
+            {/* Clean, unified detail rows with seamless styling */}
+            <div className="space-y-3 py-1 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Network:</span>
+                <span className="text-slate-500 dark:text-slate-400">Network</span>
                 <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <Image
                     src={activeNetworkConfig.logo}
@@ -479,11 +493,11 @@ export default function AirtimeVendingPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Recipient Phone:</span>
+                <span className="text-slate-500 dark:text-slate-400">Recipient Phone</span>
                 <span className="font-semibold text-slate-900 dark:text-white text-sm">{phone}</span>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 text-sm">
-                <span className="font-bold text-slate-900 dark:text-white">Amount to Debit:</span>
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <span className="font-bold text-slate-900 dark:text-white">Amount to Debit</span>
                 <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
                   ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
@@ -497,12 +511,12 @@ export default function AirtimeVendingPage() {
               </p>
             )}
 
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
                 disabled={isSubmitting}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -526,11 +540,11 @@ export default function AirtimeVendingPage() {
         </div>
       )}
 
-      {/* Success Receipt Modal */}
+      {/* Clean Unified Success Receipt Modal */}
       {successReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white dark:bg-[#0A1220] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xl text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-6 shadow-2xl text-center space-y-4 text-slate-900 dark:text-white">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20">
               <CheckCircle2 className="w-7 h-7" />
             </div>
 
@@ -543,21 +557,21 @@ export default function AirtimeVendingPage() {
               </p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070E1C] border border-slate-100 dark:border-slate-800 text-xs space-y-2 text-left">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Reference:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{successReceipt.reference}</span>
+            <div className="space-y-2.5 py-1 text-xs text-left">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-slate-400">Transaction ID</span>
+                <span className="font-semibold font-mono text-[11px] text-slate-900 dark:text-white">{successReceipt.reference}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Recipient:</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-slate-400">Recipient</span>
                 <span className="font-semibold text-slate-900 dark:text-white">{successReceipt.phone}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Network:</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 dark:text-slate-400">Network</span>
                 <span className="font-bold text-slate-900 dark:text-white">{successReceipt.network}</span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-800 font-bold">
-                <span className="text-slate-900 dark:text-white">Amount Debited:</span>
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80 font-bold">
+                <span className="text-slate-900 dark:text-white">Amount Debited</span>
                 <span className="text-[#126BEB] dark:text-[#38BDF8] text-sm">
                   ₦{successReceipt.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>

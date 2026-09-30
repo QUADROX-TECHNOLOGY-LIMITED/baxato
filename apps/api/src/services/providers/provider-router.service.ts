@@ -20,6 +20,7 @@ import {
 import { InterswitchProvider } from './interswitch.provider';
 import { MonnifyProvider } from './monnify.provider';
 import { CircuitBreaker, CircuitBreakerMetrics } from './circuit-breaker';
+import { sanitizeForJson } from '../audit.service';
 
 export interface ProviderRouterOptions {
   env: Env;
@@ -198,41 +199,53 @@ export class ProviderRouterService {
       try {
         const dbProviders = await this.db.select().from(providers);
 
-        // 1. Check if any provider has service-specific flag in its JSON config (e.g. { "airtime": true })
-        let matchedServiceConfig = false;
-        for (const p of dbProviders) {
-          if (p.status === 'ACTIVE' && p.config && typeof p.config === 'object') {
-            const cfg = p.config as Record<string, unknown>;
-            const serviceKey = serviceType.toLowerCase();
-            const isMatch =
-              cfg[serviceKey] === true ||
-              cfg[serviceType] === true ||
-              (Array.isArray(cfg.services) &&
-                (cfg.services.includes(serviceType) || cfg.services.includes(serviceKey)));
+        const serviceKey = serviceType.toLowerCase();
 
-            if (isMatch) {
-              primaryName = p.name as ProviderName;
-              matchedServiceConfig = true;
-              source = `PostgreSQL "providers" table (config.${serviceKey}=true on ${p.name})`;
-              const fallbackCandidate = dbProviders.find(
-                (o) => o.name !== primaryName && o.status === 'ACTIVE',
-              );
-              fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
-              break;
-            }
-          }
-        }
+        // Providers explicitly enabling this service
+        const enabledProviders = dbProviders.filter((p) => {
+          if (p.status !== 'ACTIVE' || !p.config || typeof p.config !== 'object') return false;
+          const cfg = p.config as Record<string, unknown>;
+          return (
+            cfg[serviceKey] === true ||
+            cfg[serviceType] === true ||
+            (Array.isArray(cfg.services) &&
+              (cfg.services.includes(serviceType) || cfg.services.includes(serviceKey)))
+          );
+        });
 
-        // 2. If no service-specific config, check isPrimary = true on active providers
-        if (!matchedServiceConfig) {
+        // Providers explicitly disabling this service
+        const disabledProviderNames = new Set(
+          dbProviders
+            .filter((p) => {
+              if (!p.config || typeof p.config !== 'object') return false;
+              const cfg = p.config as Record<string, unknown>;
+              return cfg[serviceKey] === false || cfg[serviceType] === false;
+            })
+            .map((p) => p.name),
+        );
+
+        if (enabledProviders.length > 0) {
+          // If multiple are enabled, prefer the primary provider if among them, else first
+          const primaryCandidate =
+            enabledProviders.find((p) => p.isPrimary) || enabledProviders[0]!;
+          primaryName = primaryCandidate.name as ProviderName;
+          source = `PostgreSQL "providers" table (config.${serviceKey}=true on ${primaryName})`;
+
+          // Fallback provider must be active and not explicitly disabled for this service
+          const fallbackCandidate = dbProviders.find(
+            (o) => o.name !== primaryName && o.status === 'ACTIVE' && !disabledProviderNames.has(o.name),
+          );
+          fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
+        } else {
+          // Fall back to is_primary = true among providers not explicitly disabled
           const primaryFromDb = dbProviders.find(
-            (p) => p.isPrimary && p.status === 'ACTIVE',
+            (p) => p.isPrimary && p.status === 'ACTIVE' && !disabledProviderNames.has(p.name),
           );
           if (primaryFromDb) {
             primaryName = primaryFromDb.name as ProviderName;
             source = `PostgreSQL "providers" table (is_primary=true on ${primaryFromDb.name})`;
             const fallbackCandidate = dbProviders.find(
-              (o) => o.name !== primaryName && o.status === 'ACTIVE',
+              (o) => o.name !== primaryName && o.status === 'ACTIVE' && !disabledProviderNames.has(o.name),
             );
             fallbackName = fallbackCandidate ? (fallbackCandidate.name as ProviderName) : undefined;
           }
@@ -467,13 +480,13 @@ export class ProviderRouterService {
       await this.db.insert(providerTransactions).values({
         transactionId,
         providerName,
-        requestPayload: (request ?? {}) as Record<string, unknown>,
-        responsePayload: (response ?? {}) as Record<string, unknown>,
-        statusCode,
+        requestPayload: sanitizeForJson(request),
+        responsePayload: sanitizeForJson(response),
+        statusCode: statusCode ? String(statusCode) : 'UNKNOWN',
         durationMs,
       });
-    } catch (_err) {
-      // Non-blocking logging failure to avoid rolling back transaction
+    } catch (err) {
+      console.error('[ProviderRouterService] Failed to record provider transaction audit:', err);
     }
   }
 }

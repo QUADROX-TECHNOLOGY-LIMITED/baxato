@@ -19,6 +19,7 @@ import { env } from '@baxato/config';
 import { whatsAppService } from '../services/whatsapp.service';
 import { zeptoMailService } from '../services/zeptomail.service';
 import { generateToken } from '../plugins/auth.plugin';
+import { auditService } from '../services/audit.service';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -188,6 +189,22 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       role: newUser.role as UserRole,
       businessId: newBusiness?.id,
       kycStatus: newUser.kycStatus as KycStatus,
+    });
+
+    // 7. Record registration in audit_logs
+    await auditService.log({
+      userId: newUser.id,
+      businessId: newBusiness?.id,
+      action: 'USER_REGISTERED',
+      resourceType: 'USER',
+      resourceId: newUser.id,
+      ipAddress: request.ip,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: {
+        email: newUser.email,
+        businessName: newBusiness?.name,
+        role: newUser.role,
+      },
     });
 
     return reply.status(201).send(
@@ -420,6 +437,21 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       role: user.role as UserRole,
       businessId: biz?.id,
       kycStatus: user.kycStatus as KycStatus,
+    });
+
+    // Record login in audit_logs
+    await auditService.log({
+      userId: user.id,
+      businessId: biz?.id,
+      action: 'USER_LOGIN',
+      resourceType: 'USER',
+      resourceId: user.id,
+      ipAddress: request.ip,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: {
+        email: user.email,
+        role: user.role,
+      },
     });
 
     return reply.status(200).send(

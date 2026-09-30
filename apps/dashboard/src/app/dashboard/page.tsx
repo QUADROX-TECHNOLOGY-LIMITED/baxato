@@ -36,12 +36,17 @@ export default function DashboardOverviewPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [walletBalance, setWalletBalance] = useState<string>('₦0.00');
+  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   const loadWallets = async () => {
     try {
+      setIsLoadingBalance(true);
       const authToken = localStorage.getItem('bx_auth_token') || '';
-      if (!authToken) return;
+      if (!authToken) {
+        setIsLoadingBalance(false);
+        return;
+      }
 
       const res = await fetch('/api/wallets', {
         headers: {
@@ -58,7 +63,10 @@ export default function DashboardOverviewPage() {
           );
         }
       }
-    } catch {}
+    } catch {
+    } finally {
+      setIsLoadingBalance(false);
+    }
   };
 
   useEffect(() => {
@@ -282,8 +290,14 @@ export default function DashboardOverviewPage() {
                     {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-0.5">
-                  {showBalance ? walletBalance : '••••••••'}
+                <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-0.5 min-h-[36px] flex items-center">
+                  {isLoadingBalance ? (
+                    <div className="h-8 w-44 bg-white/15 rounded-lg animate-pulse" />
+                  ) : showBalance ? (
+                    walletBalance
+                  ) : (
+                    '••••••••'
+                  )}
                 </div>
               </div>
 

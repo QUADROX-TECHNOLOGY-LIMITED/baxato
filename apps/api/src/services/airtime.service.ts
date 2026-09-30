@@ -29,6 +29,7 @@ import {
   providerRouterService,
   ProviderRouterService,
 } from './providers';
+import { auditService } from './audit.service';
 
 export interface TelcoNetworkConfig {
   network: TelecomNetwork;
@@ -351,12 +352,29 @@ export class AirtimeService {
         amountDebitedKobo: amountToDebitKobo.toString(),
         amountDebitedNaira: koboToNaira(amountToDebitKobo),
         formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
-        reference: requestReference,
+        reference: clientRef,
         clientReference: clientRef,
         providerReference: vendResult.providerReference,
         providerName: vendResult.providerName,
         createdAt: new Date(),
       };
+
+      // 8. Record audit log entry
+      await auditService.log({
+        userId: input.userId,
+        businessId: input.businessId,
+        action: 'AIRTIME_PURCHASE',
+        resourceType: 'TRANSACTION',
+        resourceId: txnRow.id,
+        changes: {
+          clientReference: clientRef,
+          network,
+          recipient: normalizedPhone,
+          amountNaira: koboToNaira(faceAmountKobo),
+          provider: vendResult.providerName,
+          status: 'SUCCESSFUL',
+        },
+      });
 
       // Save idempotency response if key provided
       if (input.idempotencyKey) {
@@ -372,7 +390,7 @@ export class AirtimeService {
 
       return receipt;
     } catch (error) {
-      // 8. Unrecoverable Failure: Rollback wallet deduction & record reversal
+      // 9. Unrecoverable Failure: Rollback wallet deduction & record reversal
       await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
 
       await db
@@ -388,6 +406,23 @@ export class AirtimeService {
         await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
       }
 
+      // Record failure audit log
+      await auditService.log({
+        userId: input.userId,
+        businessId: input.businessId,
+        action: 'AIRTIME_PURCHASE_FAILED',
+        resourceType: 'TRANSACTION',
+        resourceId: txnRow.id,
+        changes: {
+          clientReference: clientRef,
+          network,
+          recipient: normalizedPhone,
+          amountNaira: koboToNaira(faceAmountKobo),
+          error: (error as Error).message,
+          status: 'FAILED',
+        },
+      });
+
       // Outbound Webhook Dispatch for Failure (fire-and-forget / non-blocking)
       webhookDispatcherService
         .dispatch(input.businessId, WebhookEventType.TRANSACTION_FAILED, {
@@ -397,7 +432,7 @@ export class AirtimeService {
           errorMessage: (error as Error).message,
           recipient: normalizedPhone,
           faceAmountKobo: faceAmountKobo.toString(),
-          reference: requestReference,
+          reference: clientRef,
           clientReference: clientRef,
           timestamp: new Date().toISOString(),
         })
@@ -450,7 +485,7 @@ export class AirtimeService {
         amountDebitedKobo: r.totalAmount.toString(),
         amountDebitedNaira: koboToNaira(r.totalAmount),
         formattedAmountDebited: formatNairaFromKobo(r.totalAmount),
-        reference: r.requestReference || r.id,
+        reference: r.clientReference || r.requestReference || r.id,
         clientReference: r.clientReference || undefined,
         providerReference: r.providerReference || undefined,
         providerName: r.providerName,
