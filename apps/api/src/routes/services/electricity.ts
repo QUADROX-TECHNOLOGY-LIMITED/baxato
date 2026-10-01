@@ -65,6 +65,12 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
         amountKobo,
       });
 
+      if (!result.isValid) {
+        throw new ValidationError(
+          result.responseMessage || 'Meter number could not be verified by electricity distribution company.',
+        );
+      }
+
       return reply.status(200).send(createSuccessResponse(result, request.id));
     },
   );
