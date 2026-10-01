@@ -21,6 +21,13 @@ import KycModal from '@/components/dashboard/KycModal';
 import TransactionReceiptModal, {
   TransactionReceiptData,
 } from '@/components/dashboard/TransactionReceiptModal';
+import {
+  getStoredAuthToken,
+  getStoredUser,
+  getStoredBusiness,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 interface NetworkOption {
   id: string;
@@ -79,7 +86,7 @@ export default function AirtimeVendingPage() {
   // User & Business State
   const [merchantName, setMerchantName] = useState('Merchant');
   const [businessName, setBusinessName] = useState('My Business');
-  const [kycStatus, setKycStatus] = useState('UNVERIFIED');
+  const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -102,9 +109,9 @@ export default function AirtimeVendingPage() {
   const loadWallets = async () => {
     try {
       setIsLoadingBalance(true);
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
       if (!authToken) {
-        setIsLoadingBalance(false);
+        clearSessionAndRedirect('expired');
         return;
       }
 
@@ -113,8 +120,13 @@ export default function AirtimeVendingPage() {
           Authorization: `Bearer ${authToken}`,
         },
       });
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data?.wallets)) {
+      const data = await res.json().catch(() => null);
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
+
+      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
         const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
         if (main) {
           setWalletBalance(main.balanceNaira || 0);
@@ -128,14 +140,37 @@ export default function AirtimeVendingPage() {
 
   // Load user details & wallet balance
   useEffect(() => {
+    const token = getStoredAuthToken();
+    if (!token) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
+    try {
+      const storedUser = getStoredUser();
+      const storedBiz = getStoredBusiness();
+
+      if (storedUser) {
+        if (storedUser.firstName) setMerchantName(storedUser.firstName);
+        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
+        else setKycStatus('UNVERIFIED');
+      } else {
+        setKycStatus('UNVERIFIED');
+      }
+
+      if (storedBiz?.name) {
+        setBusinessName(storedBiz.name);
+      }
+    } catch {}
+
     loadWallets();
 
     // Fetch dynamic network directory with admin-configured discount rates
     const loadNetworksCatalog = async () => {
       try {
         const res = await fetch('/api/services/airtime/networks');
-        const data = await res.json();
-        if (res.ok && data.success && Array.isArray(data.data)) {
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && Array.isArray(data.data)) {
           setNetworksList((prev) =>
             prev.map((net) => {
               const matched = data.data.find((n: any) => n.network === net.id);
@@ -149,22 +184,6 @@ export default function AirtimeVendingPage() {
       } catch {}
     };
     loadNetworksCatalog();
-
-    try {
-      const storedUser = localStorage.getItem('bx_user');
-      const storedBiz = localStorage.getItem('bx_business');
-
-      if (storedUser) {
-        const u = JSON.parse(storedUser);
-        if (u.firstName) setMerchantName(u.firstName);
-        if (u.kycStatus) setKycStatus(u.kycStatus);
-      }
-
-      if (storedBiz) {
-        const b = JSON.parse(storedBiz);
-        if (b.name) setBusinessName(b.name);
-      }
-    } catch {}
   }, []);
 
   const isVerified = kycStatus === 'VERIFIED';
@@ -226,9 +245,10 @@ export default function AirtimeVendingPage() {
     setErrorMessage(null);
 
     try {
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
       if (!authToken) {
-        throw new Error('Your session has expired or you are not signed in. Please sign in again.');
+        clearSessionAndRedirect('expired');
+        return;
       }
 
       const amountKobo = Math.round(numericAmount * 100);
@@ -258,6 +278,10 @@ export default function AirtimeVendingPage() {
             message: `Server returned an unexpected response (${response.status}: ${response.statusText || 'Error'}). Please try again.`,
           },
         };
+      }
+
+      if (handleAuthResponse(response, result)) {
+        return;
       }
 
       if (!response.ok || !result?.success) {

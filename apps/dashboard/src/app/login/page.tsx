@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,23 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('expired') === 'true') {
+          setIsSessionExpired(true);
+          try {
+            localStorage.removeItem('bx_auth_token');
+            localStorage.removeItem('bx_user');
+            localStorage.removeItem('bx_business');
+          } catch {}
+        }
+      }
+    } catch {}
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,6 +191,17 @@ export default function LoginPage() {
               Access your BAXATO merchant operations console.
             </p>
           </div>
+
+          {isSessionExpired && !errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs font-semibold flex items-center gap-2.5 mb-6 shadow-xs"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Your session has expired. Please sign in again to continue.</span>
+            </motion.div>
+          )}
 
           {errorMessage && (
             <motion.div

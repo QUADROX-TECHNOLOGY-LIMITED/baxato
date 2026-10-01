@@ -9,7 +9,7 @@ interface KycBannerProps {
 }
 
 export default function KycBanner({ kycStatus, onOpenKycModal }: KycBannerProps) {
-  if (kycStatus === 'VERIFIED') {
+  if (!kycStatus || kycStatus === 'VERIFIED' || kycStatus === 'INITIALIZING' || kycStatus === 'LOADING') {
     return null;
   }
 

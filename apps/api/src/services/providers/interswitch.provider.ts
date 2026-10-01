@@ -30,6 +30,7 @@ interface CachedToken {
 }
 
 export const MONNIFY_TO_INTERSWITCH_ELECTRICITY: Record<string, string> = {
+  // Direct DISCO Enum keys
   IBEDC_PREPAID: '053413501',
   IBEDC_POSTPAID: '053413401',
   IKEDC_PREPAID: '053396201',
@@ -54,12 +55,70 @@ export const MONNIFY_TO_INTERSWITCH_ELECTRICITY: Record<string, string> = {
   YEDC_POSTPAID: '053406401',
   APLE_PREPAID: '053403501',
   APLE_POSTPAID: '053403401',
+
+  // Monnify Product Codes (for seamless failover)
+  'product-ibedc-pre': '053413501',
+  'product-ibedc-post': '053413401',
+  'product-ikedc-pre': '053396201',
+  'product-ikedc-post': '053396301',
+  'product-ekedc-pre': '053396401',
+  'product-ekedc-post': '053396501',
+  'product-aedc-pre': '053394801',
+  'product-aedc-post': '053394901',
+  'product-eedc-pre': '053395101',
+  'product-eedc-post': '0578501',
+  'product-kedc-pre': '053396701',
+  'product-kedc-post': '053396801',
+  'product-jedc-pre': '053396101',
+  'product-jedc-post': '053396001',
+  'product-phedc-pre': '053394401',
+  'product-phedc-post': '0586001',
+  'bedc_prepaid': '0576701',
+  'bedc_postpaid': '0564601',
+  'product-knedc-pre': '053394501',
+  'product-knedc-post': '053394601',
+  'product-yola-pre': '053406301',
+  'product-yola-post': '053406401',
+  'prd-aba-pre': '053403501',
+  'prd-aba-post': '053403401',
+
+  // Monnify Biller Codes
+  'biller-ibedc-pre': '053413501',
+  'biller-ibedc-post': '053413401',
+  'biller-ikedc-pre': '053396201',
+  'biller-ikedc-post': '053396301',
+  'biller-ekedc-pre': '053396401',
+  'biller-ekedc-post': '053396501',
+  'biller-aedc-pre': '053394801',
+  'biller-aedc-post': '053394901',
+  'biller-eedc-pre': '053395101',
+  'biller-eedc-post': '0578501',
+  'biller-kedc-pre': '053396701',
+  'biller-jedc-pre': '053396101',
+  'biller-jedc-post': '053396001',
+  'biller-phedc-pre': '053394401',
+  'biller-phedc-post': '0586001',
+  'bedc': '0576701',
+  'biller-knedc-pre': '053394501',
+  'biller-knedc-post': '053394601',
+  'biller-yola-pre': '053406301',
+  'biller-yola-post': '053406401',
+  'biller-aba-pre': '053403501',
+  'biller-aba-post': '053403401',
 };
 
 export const MONNIFY_TO_INTERSWITCH_CABLE: Record<string, string> = {
   DSTV: '104154',
   GOTV: '459137',
   STARTIMES: '24019',
+};
+
+export const MONNIFY_TO_INTERSWITCH_TELCO: Record<string, string> = {
+  MTN: '10901',
+  AIRTEL: '90102',
+  GLO: '40201',
+  '9MOBILE': '10801',
+  NINEMOBILE: '10801',
 };
 
 async function safeParseResponse(res: any): Promise<any> {
@@ -164,6 +223,7 @@ export class InterswitchProvider implements ProviderAdapter {
       (request.metadata?.interswitchPaymentCode as string) ||
       MONNIFY_TO_INTERSWITCH_ELECTRICITY[request.paymentCode] ||
       MONNIFY_TO_INTERSWITCH_CABLE[request.paymentCode] ||
+      MONNIFY_TO_INTERSWITCH_TELCO[request.paymentCode] ||
       request.paymentCode;
 
     const payload = {
@@ -226,6 +286,7 @@ export class InterswitchProvider implements ProviderAdapter {
       (request.metadata?.interswitchPaymentCode as string) ||
       MONNIFY_TO_INTERSWITCH_ELECTRICITY[request.paymentCode] ||
       MONNIFY_TO_INTERSWITCH_CABLE[request.paymentCode] ||
+      MONNIFY_TO_INTERSWITCH_TELCO[request.paymentCode] ||
       request.paymentCode;
 
     // Ensure request reference conforms to Interswitch prefix if not already formatted
@@ -386,7 +447,17 @@ export class InterswitchProvider implements ProviderAdapter {
     additionalInfo?: Record<string, string>,
     miscData?: string,
   ) {
-    let token: string | undefined = additionalInfo?.Pin || additionalInfo?.pin;
+    let token: string | undefined =
+      additionalInfo?.Pin ||
+      additionalInfo?.pin ||
+      additionalInfo?.Token ||
+      additionalInfo?.token ||
+      additionalInfo?.STDToken ||
+      additionalInfo?.stdToken ||
+      additionalInfo?.TokenData ||
+      additionalInfo?.tokenData ||
+      additionalInfo?.PinNumber ||
+      additionalInfo?.pinNumber;
     let serialNumber: string | undefined =
       additionalInfo?.SerialNumber ||
       additionalInfo?.serialNumber ||
@@ -419,7 +490,7 @@ export class InterswitchProvider implements ProviderAdapter {
         const key = k?.trim().toLowerCase();
         const val = v.join(':').trim();
 
-        if (key === 'pin' && !token) token = val;
+        if ((key === 'pin' || key === 'token' || key === 'stdtoken') && !token) token = val;
         if ((key === 'serialnumber' || key === 'serial') && !serialNumber) serialNumber = val;
         if (key === 'unitscount' && !units) units = val;
         if (key === 'tariffcode' && !tariff) tariff = val;

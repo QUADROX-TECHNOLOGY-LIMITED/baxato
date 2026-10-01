@@ -23,6 +23,13 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import {
+  getStoredAuthToken,
+  getStoredUser,
+  getStoredBusiness,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 export default function DashboardOverviewPage() {
   const router = useRouter();
@@ -30,21 +37,21 @@ export default function DashboardOverviewPage() {
   const [userFirstName, setUserFirstName] = useState('');
   const [userLastName, setUserLastName] = useState('');
   const [businessName, setBusinessName] = useState('My Business');
-  const [kycStatus, setKycStatus] = useState('UNVERIFIED');
+  const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
-  const [walletBalance, setWalletBalance] = useState<string>('₦0.00');
+  const [walletBalance, setWalletBalance] = useState<string>('');
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   const loadWallets = async () => {
     try {
       setIsLoadingBalance(true);
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
       if (!authToken) {
-        setIsLoadingBalance(false);
+        clearSessionAndRedirect('expired');
         return;
       }
 
@@ -53,8 +60,13 @@ export default function DashboardOverviewPage() {
           Authorization: `Bearer ${authToken}`,
         },
       });
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data?.wallets)) {
+      const data = await res.json().catch(() => null);
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
+
+      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
         const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
         if (main) {
           setWalletBalance(
@@ -70,34 +82,37 @@ export default function DashboardOverviewPage() {
   };
 
   useEffect(() => {
-    loadWallets();
+    const token = getStoredAuthToken();
+    if (!token) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
     try {
-      const storedUser = localStorage.getItem('bx_user');
-      const storedBiz = localStorage.getItem('bx_business');
+      const storedUser = getStoredUser();
+      const storedBiz = getStoredBusiness();
 
       if (storedUser) {
-        const u = JSON.parse(storedUser);
-        if (u.firstName) {
-          setMerchantName(u.firstName);
-          setUserFirstName(u.firstName);
+        if (storedUser.firstName) {
+          setMerchantName(storedUser.firstName);
+          setUserFirstName(storedUser.firstName);
         }
-        if (u.lastName) setUserLastName(u.lastName);
-        if (u.kycStatus) {
-          setKycStatus(u.kycStatus);
-          if (u.kycStatus !== 'VERIFIED') {
-            const timer = setTimeout(() => {
-              setIsKycModalOpen(true);
-            }, 600);
-            return () => clearTimeout(timer);
-          }
+        if (storedUser.lastName) setUserLastName(storedUser.lastName);
+        if (storedUser.kycStatus) {
+          setKycStatus(storedUser.kycStatus);
+        } else {
+          setKycStatus('UNVERIFIED');
         }
+      } else {
+        setKycStatus('UNVERIFIED');
       }
 
-      if (storedBiz) {
-        const b = JSON.parse(storedBiz);
-        if (b.name) setBusinessName(b.name);
+      if (storedBiz?.name) {
+        setBusinessName(storedBiz.name);
       }
     } catch {}
+
+    loadWallets();
   }, []);
 
   const handleRefresh = () => {

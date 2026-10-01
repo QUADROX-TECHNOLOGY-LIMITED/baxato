@@ -14,7 +14,6 @@ import {
   ArrowRight,
   ShieldCheck,
   RotateCw,
-  Sparkles,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -23,6 +22,13 @@ import KycModal from '@/components/dashboard/KycModal';
 import ElectricityReceiptModal, {
   ElectricityReceiptData,
 } from '@/components/dashboard/ElectricityReceiptModal';
+import {
+  getStoredAuthToken,
+  getStoredUser,
+  getStoredBusiness,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 export type MeterType = 'PREPAID' | 'POSTPAID';
 
@@ -49,7 +55,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'IBEDC_POSTPAID',
@@ -60,7 +66,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 2. IKEDC
@@ -73,7 +79,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'IKEDC_POSTPAID',
@@ -84,7 +90,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 3. EKEDC
@@ -97,7 +103,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'EKEDC_POSTPAID',
@@ -108,7 +114,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 4. AEDC
@@ -121,7 +127,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'AEDC_POSTPAID',
@@ -132,7 +138,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 5. EEDC
@@ -145,7 +151,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'EEDC_POSTPAID',
@@ -156,7 +162,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 6. PHED
@@ -169,7 +175,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'PHED_POSTPAID',
@@ -180,7 +186,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 7. KEDCO
@@ -193,7 +199,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'KEDCO_POSTPAID',
@@ -204,7 +210,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 8. KAEDCO
@@ -217,7 +223,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'KAEDCO_POSTPAID',
@@ -228,7 +234,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 9. JED
@@ -241,7 +247,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'JED_POSTPAID',
@@ -252,7 +258,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 10. BEDC
@@ -265,7 +271,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'BEDC_POSTPAID',
@@ -276,7 +282,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 11. YEDC
@@ -289,7 +295,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'YEDC_POSTPAID',
@@ -300,7 +306,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 
   // 12. ABA
@@ -313,7 +319,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
   {
     id: 'ABA_POSTPAID',
@@ -324,11 +330,11 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
     discountBps: 0,
-    minAmountNaira: 1000,
+    minAmountNaira: 500,
   },
 ];
 
-const PRESET_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
+const PRESET_AMOUNTS = [500, 1000, 2000, 5000, 10000, 20000];
 
 interface VerifiedMeter {
   meterNumber: string;
@@ -343,7 +349,7 @@ export default function ElectricityPage() {
   // Navigation & User State
   const [merchantName, setMerchantName] = useState('Merchant');
   const [businessName, setBusinessName] = useState('My Business');
-  const [kycStatus, setKycStatus] = useState('UNVERIFIED');
+  const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -383,17 +389,22 @@ export default function ElectricityPage() {
   const loadWallets = async () => {
     try {
       setIsLoadingBalance(true);
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
       if (!authToken) {
-        setIsLoadingBalance(false);
+        clearSessionAndRedirect('expired');
         return;
       }
 
       const res = await fetch('/api/wallets', {
         headers: { Authorization: `Bearer ${authToken}` },
       });
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data?.wallets)) {
+      const data = await res.json().catch(() => null);
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
+
+      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
         const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
         if (main) {
           setWalletBalance(main.balanceNaira || 0);
@@ -406,19 +417,45 @@ export default function ElectricityPage() {
   };
 
   useEffect(() => {
+    const token = getStoredAuthToken();
+    if (!token) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
+    try {
+      const storedUser = getStoredUser();
+      const storedBiz = getStoredBusiness();
+
+      if (storedUser) {
+        if (storedUser.firstName) setMerchantName(storedUser.firstName);
+        if (storedUser.phone) setCustomerPhone(storedUser.phone);
+        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
+        else setKycStatus('UNVERIFIED');
+      } else {
+        setKycStatus('UNVERIFIED');
+      }
+
+      if (storedBiz?.name) setBusinessName(storedBiz.name);
+    } catch {}
+
     loadWallets();
 
-    // Fetch dynamic DISCO directory with admin-configured discount rates
+    // Fetch dynamic DISCO directory with admin-configured discount rates and minimum amounts
     const loadDiscosCatalog = async () => {
       try {
         const res = await fetch('/api/services/electricity/discos');
-        const data = await res.json();
-        if (res.ok && data.success && Array.isArray(data.data)) {
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && Array.isArray(data.data)) {
           setDiscosList((prev) =>
             prev.map((disco) => {
               const matched = data.data.find((d: any) => d.code === disco.code);
-              if (matched && typeof matched.discountBps === 'number') {
-                return { ...disco, discountBps: matched.discountBps };
+              if (matched) {
+                return {
+                  ...disco,
+                  discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : disco.discountBps,
+                  minAmountNaira: typeof matched.minimumAmountNaira === 'number' ? matched.minimumAmountNaira : disco.minAmountNaira,
+                };
               }
               return disco;
             }),
@@ -436,23 +473,6 @@ export default function ElectricityPage() {
         if (providerParam && ALL_DISCOS.some((d) => d.id === providerParam)) {
           setSelectedOptionId(providerParam);
         }
-      }
-    } catch {}
-
-    try {
-      const storedUser = localStorage.getItem('bx_user');
-      const storedBiz = localStorage.getItem('bx_business');
-
-      if (storedUser) {
-        const u = JSON.parse(storedUser);
-        if (u.firstName) setMerchantName(u.firstName);
-        if (u.phone) setCustomerPhone(u.phone);
-        if (u.kycStatus) setKycStatus(u.kycStatus);
-      }
-
-      if (storedBiz) {
-        const b = JSON.parse(storedBiz);
-        if (b.name) setBusinessName(b.name);
       }
     } catch {}
 
@@ -512,7 +532,12 @@ export default function ElectricityPage() {
     setSubmitError(null);
 
     try {
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
+      if (!authToken) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
+
       const res = await fetch('/api/services/electricity/validate', {
         method: 'POST',
         headers: {
@@ -526,11 +551,16 @@ export default function ElectricityPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.data?.isValid) {
+      const data = await res.json().catch(() => null);
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
+
+      if (!res.ok || !data?.success || !data?.data?.isValid) {
         throw new Error(
-          data.data?.responseMessage ||
-          data.error?.message ||
+          data?.data?.responseMessage ||
+          data?.error?.message ||
           'Meter verification failed. Please check the meter number with the selected provider.'
         );
       }
@@ -675,9 +705,10 @@ export default function ElectricityPage() {
     setSubmitError(null);
 
     try {
-      const authToken = localStorage.getItem('bx_auth_token') || '';
+      const authToken = getStoredAuthToken();
       if (!authToken) {
-        throw new Error('Your session has expired. Please sign in again.');
+        clearSessionAndRedirect('expired');
+        return;
       }
 
       const clientReference = `BXT-ELEC-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -699,9 +730,14 @@ export default function ElectricityPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || 'Transaction could not be completed.');
+      const data = await res.json().catch(() => null);
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error?.message || 'Transaction could not be completed.');
       }
 
       const payload = data.data;
@@ -951,9 +987,13 @@ export default function ElectricityPage() {
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-[11px] font-medium text-slate-600 dark:text-slate-300">
                   <Wallet className="w-3 h-3 text-amber-500" />
                   <span>Balance:</span>
-                  <span className="font-extrabold text-slate-900 dark:text-white">
-                    ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                  </span>
+                  {isLoadingBalance ? (
+                    <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                  ) : (
+                    <span className="font-extrabold text-slate-900 dark:text-white">
+                      ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1055,16 +1095,16 @@ export default function ElectricityPage() {
                       </div>
                     </div>
 
-                    {/* Typing digit counter & auto-verify feedback */}
+                    {/* Typing digit counter & verification feedback */}
                     {meterNumber.length > 0 && !verifiedMeter && !isVerifying && !verificationError && (
                       <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 pt-0.5">
                         <span>{meterNumber.length}/11 digits entered</span>
                         {meterNumber.length === 11 ? (
                           <span className="text-[#126BEB] dark:text-blue-400 font-semibold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> Auto-verifying meter with {selectedDisco.shortName}...
+                            <RotateCw className="w-3 h-3 animate-spin" /> Verifying meter...
                           </span>
                         ) : (
-                          <span className="text-slate-400">Auto-verifies upon 11 digits</span>
+                          <span className="text-slate-400">Enter 11 digits to verify</span>
                         )}
                       </div>
                     )}
@@ -1181,8 +1221,8 @@ export default function ElectricityPage() {
 
                     {discountAmount > 0 && selectedDisco && selectedDisco.discountBps > 0 && (
                       <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                        <span className="flex items-center gap-1 font-semibold">
-                          <Sparkles className="w-3 h-3" />
+                        <span className="flex items-center gap-1.5 font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           <span>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</span>
                         </span>
                         <span className="font-bold">

@@ -5,7 +5,7 @@
   "description": "BAXATO — High-Performance VTU & Bill Payments Interactive Dashboard",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "node --max-old-space-size=4096 ./node_modules/next/dist/bin/next build",
     "start": "next start -p 3000",
     "lint": "next lint"
   },
