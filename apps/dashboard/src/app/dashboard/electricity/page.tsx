@@ -11,8 +11,6 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  Copy,
-  Check,
   ArrowRight,
   ShieldCheck,
   RotateCw,
@@ -376,11 +374,6 @@ export default function ElectricityPage() {
   const [receiptData, setReceiptData] = useState<ElectricityReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // History State
-  const [historyList, setHistoryList] = useState<any[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [copiedTokenRef, setCopiedTokenRef] = useState<string | null>(null);
-
   const isVerified = kycStatus === 'VERIFIED';
 
   // Load Balance & Profile
@@ -409,29 +402,8 @@ export default function ElectricityPage() {
     }
   };
 
-  // Load Electricity History
-  const loadHistory = async () => {
-    try {
-      setIsLoadingHistory(true);
-      const authToken = localStorage.getItem('bx_auth_token') || '';
-      if (!authToken) return;
-
-      const res = await fetch('/api/services/electricity/history?limit=25', {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data?.transactions)) {
-        setHistoryList(data.data.transactions);
-      }
-    } catch {
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
   useEffect(() => {
     loadWallets();
-    loadHistory();
 
     // Sync provider from URL if present
     try {
@@ -470,7 +442,7 @@ export default function ElectricityPage() {
 
   const handleRefreshBalance = async () => {
     setIsRefreshing(true);
-    await Promise.all([loadWallets(), loadHistory()]);
+    await loadWallets();
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
@@ -536,7 +508,7 @@ export default function ElectricityPage() {
         throw new Error(
           data.data?.responseMessage ||
           data.error?.message ||
-          'Meter verification failed. Please verify the meter number with the selected provider.'
+          'Meter verification failed. Please check the meter number with the selected provider.'
         );
       }
 
@@ -736,7 +708,6 @@ export default function ElectricityPage() {
       setIsReceiptModalOpen(true);
 
       loadWallets();
-      loadHistory();
     } catch (err: any) {
       setSubmitError(err.message || 'Payment failed. Please try again.');
     } finally {
@@ -744,14 +715,8 @@ export default function ElectricityPage() {
     }
   };
 
-  const handleCopyHistoryToken = (token: string, ref: string) => {
-    navigator.clipboard.writeText(token);
-    setCopiedTokenRef(ref);
-    setTimeout(() => setCopiedTokenRef(null), 2500);
-  };
-
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-[#070E1C] overflow-hidden">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-[#070E1C]">
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
@@ -762,8 +727,8 @@ export default function ElectricityPage() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-72 overflow-y-auto">
+      {/* Main Content Area - normal document scrolling on mobile */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
@@ -771,9 +736,10 @@ export default function ElectricityPage() {
           kycStatus={kycStatus}
           isRefreshing={isRefreshing}
           onRefresh={handleRefreshBalance}
+          sticky={false}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
+        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-4">
           {/* Identity Verification Warning Banner */}
           <KycBanner
             kycStatus={kycStatus}
@@ -784,7 +750,7 @@ export default function ElectricityPage() {
           {/* VIEW 1: ALL BILLERS CATALOG (Displayed when no DISCO is selected) */}
           {/* ======================================================== */}
           {!selectedDisco ? (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Back to Dashboard & Refresh */}
               <div className="flex items-center justify-between">
                 <Link
@@ -806,26 +772,26 @@ export default function ElectricityPage() {
               </div>
 
               {/* Page Heading & Settlement Balance */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-500/20">
-                      <Zap className="w-5 h-5" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-500 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-500/20">
+                      <Zap className="w-4 h-4" />
                     </div>
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                       Electricity Bill Payment & Tokens
                     </h1>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                     Select your electricity distribution company to vend prepaid STS tokens or settle postpaid bills
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
-                  <Wallet className="w-4 h-4 text-amber-500" />
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
+                  <Wallet className="w-3.5 h-3.5 text-amber-500" />
                   <span>Settlement Balance:</span>
                   {isLoadingBalance ? (
-                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                    <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
                   ) : (
                     <span className="font-extrabold text-slate-900 dark:text-white">
                       ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
@@ -834,16 +800,16 @@ export default function ElectricityPage() {
                 </div>
               </div>
 
-              {/* Filters & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-[#0B1528] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              {/* Compact Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white dark:bg-[#0B1528] p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
                 {/* Tabs */}
-                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-[#070D18] rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-[#070D18] rounded-lg border border-slate-200 dark:border-slate-800">
                   {(['ALL', 'PREPAID', 'POSTPAID'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setFilterType(t)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                         filterType === t
                           ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -857,37 +823,37 @@ export default function ElectricityPage() {
                 </div>
 
                 {/* Search DISCO */}
-                <div className="relative flex-1 sm:max-w-md">
-                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="relative flex-1 sm:max-w-xs">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search by DISCO name, acronym or state..."
+                    placeholder="Search company or state..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-10 pl-9 pr-4 text-xs rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                    className="w-full h-8 pl-8 pr-3 text-xs rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
                   />
                 </div>
               </div>
 
-              {/* All Billers Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {/* COMPACT BILLERS GRID: Sleek, high-density tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
                 {filteredDiscos.map((opt) => {
                   const isPrepaid = opt.meterType === 'PREPAID';
                   return (
                     <div
                       key={opt.id}
                       onClick={() => handleSelectBiller(opt)}
-                      className="group relative p-4 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                      className="group relative p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] hover:shadow-sm transition-all duration-150 cursor-pointer flex flex-col justify-between"
                     >
                       <div>
-                        {/* Top: Logo & Badge */}
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0 group-hover:scale-105 transition-transform">
+                        {/* Top: Logo & Meter Tag */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2">
+                          <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center p-1 shrink-0 group-hover:scale-105 transition-transform">
                             <Image
                               src={opt.logo}
                               alt={opt.shortName}
-                              width={42}
-                              height={42}
+                              width={28}
+                              height={28}
                               className="object-contain"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
@@ -896,7 +862,7 @@ export default function ElectricityPage() {
                           </div>
 
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
                               isPrepaid
                                 ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                                 : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
@@ -907,26 +873,23 @@ export default function ElectricityPage() {
                         </div>
 
                         {/* Title & Coverage */}
-                        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors">
+                        <h3 className="font-extrabold text-xs text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors truncate">
                           {opt.shortName}
                         </h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-1">
-                          {opt.name}
-                        </p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 line-clamp-1">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                           {opt.coverage}
                         </p>
                       </div>
 
-                      {/* Bottom Footer: Cashback & Arrow leading to biller page */}
-                      <div className="pt-4 mt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                          1.2% Cashback
+                      {/* Footer: Cashback & Arrow leading to page */}
+                      <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          1.2% off
                         </span>
 
-                        <span className="inline-flex items-center gap-1 text-xs font-extrabold text-[#126BEB] group-hover:translate-x-1 transition-transform">
-                          <span>{isPrepaid ? 'Vend Token' : 'Pay Bill'}</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
+                        <span className="inline-flex items-center gap-0.5 font-bold text-[#126BEB] group-hover:translate-x-0.5 transition-transform">
+                          <span>Pay</span>
+                          <ArrowRight className="w-3 h-3" />
                         </span>
                       </div>
                     </div>
@@ -935,7 +898,7 @@ export default function ElectricityPage() {
               </div>
 
               {filteredDiscos.length === 0 && (
-                <div className="py-16 text-center text-slate-400 text-sm bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
                   No electricity distribution company matches &quot;{searchQuery}&quot;.
                 </div>
               )}
@@ -944,20 +907,20 @@ export default function ElectricityPage() {
             /* ======================================================== */
             /* VIEW 2: DEDICATED BILLER PAGE (e.g. IBEDC Prepaid Page) */
             /* ======================================================== */
-            <div className="space-y-6 max-w-4xl mx-auto">
+            <div className="space-y-4 max-w-xl mx-auto">
               {/* Back to All Providers Navigation Bar */}
               <div className="flex items-center justify-between">
                 <button
                   type="button"
                   onClick={handleBackToCatalog}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#126BEB] hover:text-[#126BEB] dark:hover:text-[#126BEB] transition-all shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#126BEB] hover:text-[#126BEB] dark:hover:text-[#126BEB] transition-all shadow-xs cursor-pointer"
                 >
-                  <ArrowLeft className="w-4 h-4 text-slate-500" />
-                  <span>Back to All Electricity Providers</span>
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Back to Providers</span>
                 </button>
 
-                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300">
-                  <Wallet className="w-3.5 h-3.5 text-amber-500" />
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  <Wallet className="w-3 h-3 text-amber-500" />
                   <span>Balance:</span>
                   <span className="font-extrabold text-slate-900 dark:text-white">
                     ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
@@ -965,25 +928,25 @@ export default function ElectricityPage() {
                 </div>
               </div>
 
-              {/* Dedicated Biller Hero Banner */}
-              <div className="p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-2 shrink-0">
+              {/* Compact Dedicated Biller Hero Banner */}
+              <div className="p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0">
                     <Image
                       src={selectedDisco.logo}
                       alt={selectedDisco.shortName}
-                      width={48}
-                      height={48}
+                      width={36}
+                      height={36}
                       className="object-contain"
                     />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h1 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
                         {selectedDisco.name}
                       </h1>
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
                           selectedDisco.meterType === 'PREPAID'
                             ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                             : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
@@ -992,31 +955,28 @@ export default function ElectricityPage() {
                         {selectedDisco.meterType}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Coverage: {selectedDisco.coverage}
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                      {selectedDisco.coverage}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    1.2% Merchant Cashback
-                  </span>
-                  <span className="text-[11px] text-slate-400">Instant Settlement</span>
-                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                  1.2% Cashback
+                </span>
               </div>
 
               {/* Dedicated Focused Vending Form Card */}
-              <div className="bg-white dark:bg-[#0B1528] rounded-2xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <form onSubmit={handleOpenConfirm} className="space-y-6">
+              <div className="bg-white dark:bg-[#0B1528] rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <form onSubmit={handleOpenConfirm} className="space-y-4">
                   
                   {/* 1. METER NUMBER INPUT WITH AUTO-VERIFICATION ON 11 DIGITS */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                         {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}
                       </label>
-                      <span className="text-[11px] text-slate-400 font-medium">Standard 11 digits</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Standard 11 digits</span>
                     </div>
 
                     <div className="relative">
@@ -1026,7 +986,7 @@ export default function ElectricityPage() {
                         value={meterNumber}
                         onChange={(e) => handleMeterChange(e.target.value)}
                         maxLength={13}
-                        className={`w-full h-12 pl-4 pr-32 rounded-xl bg-slate-50 dark:bg-[#070D18] border text-slate-900 dark:text-white text-base font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none transition-all shadow-xs ${
+                        className={`w-full h-11 pl-3.5 pr-28 rounded-xl bg-slate-50 dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none transition-all shadow-xs ${
                           verifiedMeter
                             ? 'border-emerald-500/60 ring-2 ring-emerald-500/15 bg-emerald-50/10'
                             : isVerifying
@@ -1039,15 +999,15 @@ export default function ElectricityPage() {
                       />
 
                       {/* State indicator / action inside input */}
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
                         {isVerifying ? (
-                          <div className="h-8 px-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[#126BEB] dark:text-blue-400 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                          <div className="h-8 px-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[#126BEB] dark:text-blue-400 text-xs font-bold flex items-center gap-1 shadow-xs">
                             <RotateCw className="w-3.5 h-3.5 animate-spin" />
                             <span>Verifying...</span>
                           </div>
                         ) : verifiedMeter ? (
-                          <div className="h-8 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <div className="h-8 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1 shadow-xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                             <span>Verified</span>
                           </div>
                         ) : (
@@ -1055,9 +1015,9 @@ export default function ElectricityPage() {
                             type="button"
                             onClick={handleVerifyMeter}
                             disabled={meterNumber.length < 8}
-                            className="h-8 px-3.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                            className="h-8 px-3 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
                           >
-                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <ShieldCheck className="w-3 h-3" />
                             <span>Verify</span>
                           </button>
                         )}
@@ -1066,11 +1026,11 @@ export default function ElectricityPage() {
 
                     {/* Typing digit counter & auto-verify feedback */}
                     {meterNumber.length > 0 && !verifiedMeter && !isVerifying && !verificationError && (
-                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1 pt-0.5">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 pt-0.5">
                         <span>{meterNumber.length}/11 digits entered</span>
                         {meterNumber.length === 11 ? (
                           <span className="text-[#126BEB] dark:text-blue-400 font-semibold flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5" /> Auto-verifying meter with {selectedDisco.shortName}...
+                            <Sparkles className="w-3 h-3" /> Auto-verifying meter with {selectedDisco.shortName}...
                           </span>
                         ) : (
                           <span className="text-slate-400">Auto-verifies upon 11 digits</span>
@@ -1080,9 +1040,9 @@ export default function ElectricityPage() {
 
                     {/* Verification Error Alert */}
                     {verificationError && (
-                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                      <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-150">
                         <div className="flex items-center gap-2 min-w-0">
-                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate">{verificationError}</span>
                         </div>
                         <button
@@ -1097,17 +1057,17 @@ export default function ElectricityPage() {
 
                     {/* VERIFIED ACCOUNT INFORMATION CARD (Real customer name returned from DISCO) */}
                     {verifiedMeter && (
-                      <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-2 animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1.5 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-extrabold text-[10px] uppercase tracking-wider">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                           <span>Verified Account Information</span>
                         </div>
 
-                        <div className="pt-1">
+                        <div className="pt-0.5">
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold uppercase">
                             Customer Account
                           </span>
-                          <span className="font-extrabold text-slate-900 dark:text-white uppercase text-sm block">
+                          <span className="font-extrabold text-slate-900 dark:text-white uppercase text-xs block">
                             {verifiedMeter.customerName || 'Validated & Active Meter'}
                           </span>
                         </div>
@@ -1117,7 +1077,7 @@ export default function ElectricityPage() {
                             <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold uppercase">
                               Service Address
                             </span>
-                            <span className="text-slate-700 dark:text-slate-300 text-xs">
+                            <span className="text-slate-700 dark:text-slate-300 text-[11px] line-clamp-2">
                               {verifiedMeter.customerAddress}
                             </span>
                           </div>
@@ -1127,12 +1087,12 @@ export default function ElectricityPage() {
                   </div>
 
                   {/* 2. RECHARGE AMOUNT (EMPTY BY DEFAULT - NEVER AUTO-SELECTED) */}
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                         Recharge Amount (₦)
                       </label>
-                      <span className="text-[11px] text-slate-400">Min: ₦{selectedDisco.minAmountNaira.toLocaleString()}</span>
+                      <span className="text-[10px] text-slate-400">Min: ₦{selectedDisco.minAmountNaira.toLocaleString()}</span>
                     </div>
 
                     <input
@@ -1142,18 +1102,18 @@ export default function ElectricityPage() {
                       onChange={(e) => setAmount(e.target.value)}
                       min={selectedDisco.minAmountNaira}
                       max={100000}
-                      className="w-full h-12 px-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-base font-extrabold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
+                      className="w-full h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm font-extrabold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                       required
                     />
 
                     {/* Preset Chips (Purely optional shortcuts - NONE auto-selected on load) */}
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-0.5">
                       {PRESET_AMOUNTS.map((val) => (
                         <button
                           key={val}
                           type="button"
                           onClick={() => setAmount(val.toString())}
-                          className={`py-2 px-1 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                          className={`py-1.5 px-1 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
                             numericAmount === val
                               ? 'bg-[#126BEB] text-white border-[#126BEB] shadow-xs'
                               : 'bg-slate-50 dark:bg-[#070D18] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
@@ -1166,7 +1126,7 @@ export default function ElectricityPage() {
                   </div>
 
                   {/* 3. CUSTOMER PHONE (OPTIONAL - CONTACT FOR RECEIPT RECORDS) */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                         Customer Mobile Number (Optional)
@@ -1178,15 +1138,15 @@ export default function ElectricityPage() {
                       placeholder="e.g. 08012345678"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-all shadow-xs"
+                      className="w-full h-10 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-all shadow-xs"
                     />
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[10px] text-slate-400">
                       Optional contact number for receipt generation and provider records.
                     </p>
                   </div>
 
                   {/* 4. FINANCIAL SUMMARY */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
                       <span>Recharge Face Value</span>
                       <span className="font-bold text-slate-900 dark:text-white">
@@ -1196,7 +1156,7 @@ export default function ElectricityPage() {
 
                     <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                       <span className="flex items-center gap-1 font-semibold">
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3 h-3" />
                         <span>Merchant Cashback (1.2%)</span>
                       </span>
                       <span className="font-bold">
@@ -1204,7 +1164,7 @@ export default function ElectricityPage() {
                       </span>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-black text-sm">
+                    <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-black text-xs">
                       <span>Amount to Debit Wallet</span>
                       <span className="text-[#126BEB] dark:text-[#38BDF8]">
                         {numericAmount > 0 ? `₦${amountToDebit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
@@ -1216,11 +1176,11 @@ export default function ElectricityPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < selectedDisco.minAmountNaira || amountToDebit > walletBalance}
-                    className="w-full h-13 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-extrabold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
+                    className="w-full h-11 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
                   >
                     {isSubmitting ? (
                       <>
-                        <RotateCw className="w-4 h-4 animate-spin" />
+                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
                         <span>Processing Transaction...</span>
                       </>
                     ) : !verifiedMeter ? (
@@ -1229,7 +1189,7 @@ export default function ElectricityPage() {
                       <span>Enter Recharge Amount to Proceed</span>
                     ) : (
                       <>
-                        <Zap className="w-4 h-4" />
+                        <Zap className="w-3.5 h-3.5" />
                         <span>
                           {selectedDisco.meterType === 'PREPAID'
                             ? `Vend ₦${numericAmount.toLocaleString()} Prepaid Token`
@@ -1241,8 +1201,8 @@ export default function ElectricityPage() {
 
                   {/* Submit Error Alert */}
                   {submitError && (
-                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
+                    <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                       <span>{submitError}</span>
                     </div>
                   )}
@@ -1250,153 +1210,6 @@ export default function ElectricityPage() {
               </div>
             </div>
           )}
-
-          {/* ======================================================== */}
-          {/* ELECTRICITY TRANSACTION HISTORY (Always accessible) */}
-          {/* ======================================================== */}
-          <div className="bg-white dark:bg-[#0B1528] rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-black text-slate-900 dark:text-white">
-                  Recent Electricity Transactions
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Audit log of STS prepaid tokens generated & postpaid bill payments
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={loadHistory}
-                disabled={isLoadingHistory}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                title="Refresh History"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHistory ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="pb-2.5">Date</th>
-                    <th className="pb-2.5">DISCO</th>
-                    <th className="pb-2.5">Meter Number</th>
-                    <th className="pb-2.5">Consumer</th>
-                    <th className="pb-2.5">Amount</th>
-                    <th className="pb-2.5">Token Generated</th>
-                    <th className="pb-2.5">Status</th>
-                    <th className="pb-2.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {historyList.map((tx) => {
-                    const isSuccess = tx.status === 'SUCCESSFUL';
-                    const isProcessing = tx.status === 'PROCESSING' || tx.status === 'PENDING';
-                    const cleanToken = tx.token?.replace(/\D/g, '') || '';
-                    const isCopied = copiedTokenRef === tx.reference;
-
-                    return (
-                      <tr key={tx.transactionId || tx.reference} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('en-NG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </td>
-                        <td className="py-3 font-semibold text-slate-800 dark:text-slate-200">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold mr-1.5 text-[10px]">
-                            {tx.disco}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{tx.meterType}</span>
-                        </td>
-                        <td className="py-3 font-mono font-bold text-slate-900 dark:text-white">
-                          {tx.meterNumber}
-                        </td>
-                        <td className="py-3 text-slate-700 dark:text-slate-300 max-w-[140px] truncate">
-                          {tx.customerName || 'Consumer'}
-                        </td>
-                        <td className="py-3 font-bold text-slate-900 dark:text-white">
-                          ₦{parseFloat(tx.faceAmountNaira || 0).toLocaleString()}
-                        </td>
-                        <td className="py-3">
-                          {cleanToken ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-extrabold text-amber-600 dark:text-amber-400 tracking-wider">
-                                {cleanToken.slice(0, 4)}••••{cleanToken.slice(-4)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyHistoryToken(cleanToken, tx.reference)}
-                                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                                title="Copy Full Token"
-                              >
-                                {isCopied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">
-                              {isProcessing ? 'Generating...' : 'None'}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3">
-                          {isSuccess && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/20">
-                              SUCCESS
-                            </span>
-                          )}
-                          {isProcessing && (
-                            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/20 animate-pulse">
-                              PROCESSING
-                            </span>
-                          )}
-                          {!isSuccess && !isProcessing && (
-                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-500/20">
-                              {tx.status}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReceiptData({
-                                transactionId: tx.transactionId || tx.reference,
-                                reference: tx.reference,
-                                clientReference: tx.clientReference,
-                                status: tx.status,
-                                disco: tx.disco,
-                                discoName: tx.discoName || tx.disco,
-                                meterNumber: tx.meterNumber,
-                                meterType: tx.meterType,
-                                customerName: tx.customerName,
-                                customerAddress: tx.customerAddress,
-                                token: tx.token,
-                                units: tx.units,
-                                faceAmountNaira: parseFloat(tx.faceAmountNaira || 0),
-                                discountNaira: parseFloat(tx.discountNaira || 0),
-                                amountDebitedNaira: parseFloat(tx.amountDebitedNaira || 0),
-                                date: tx.createdAt ? new Date(tx.createdAt).toLocaleString('en-NG') : new Date().toLocaleString(),
-                              });
-                              setIsReceiptModalOpen(true);
-                            }}
-                            className="text-[11px] font-bold text-[#126BEB] dark:text-[#38BDF8] hover:underline cursor-pointer"
-                          >
-                            View Slip
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {historyList.length === 0 && !isLoadingHistory && (
-                <div className="py-12 text-center text-slate-400 text-xs">
-                  No electricity transactions recorded yet.
-                </div>
-              )}
-            </div>
-          </div>
         </main>
       </div>
 

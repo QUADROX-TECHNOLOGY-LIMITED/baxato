@@ -19,6 +19,7 @@ interface HeaderProps {
   kycStatus: string;
   isRefreshing: boolean;
   onRefresh: () => void;
+  sticky?: boolean;
 }
 
 export default function Header({
@@ -28,11 +29,12 @@ export default function Header({
   kycStatus,
   isRefreshing,
   onRefresh,
+  sticky = true,
 }: HeaderProps) {
   const isVerified = kycStatus === 'VERIFIED';
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-150">
+    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-150`}>
       <div className="flex items-center justify-between gap-4">
         {/* Left Side: Mobile Menu Button & Search */}
         <div className="flex items-center gap-3 flex-1 max-w-md">

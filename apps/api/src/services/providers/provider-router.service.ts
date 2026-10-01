@@ -269,6 +269,7 @@ export class ProviderRouterService {
 
     const primaryBreaker = this.getCircuitBreaker(primaryName);
     const primaryProvider = this.getProvider(primaryName);
+    let lastResult: CustomerValidationResult | null = null;
 
     // If primary is available, try it
     if (primaryBreaker.isAvailable()) {
@@ -277,6 +278,7 @@ export class ProviderRouterService {
           primaryProvider.validateCustomer(request),
         );
         if (result.isValid) return result;
+        lastResult = result;
       } catch (_error) {
         // If failover is disabled or no fallback, throw error
         if (!allowFailover || !fallbackName) {
@@ -290,9 +292,18 @@ export class ProviderRouterService {
       const fallbackBreaker = this.getCircuitBreaker(fallbackName);
       const fallbackProvider = this.getProvider(fallbackName);
 
-      return fallbackBreaker.execute(() =>
-        fallbackProvider.validateCustomer(request),
-      );
+      try {
+        return await fallbackBreaker.execute(() =>
+          fallbackProvider.validateCustomer(request),
+        );
+      } catch (fallbackError) {
+        if (lastResult) return lastResult;
+        throw fallbackError;
+      }
+    }
+
+    if (lastResult) {
+      return lastResult;
     }
 
     throw new AppError(
