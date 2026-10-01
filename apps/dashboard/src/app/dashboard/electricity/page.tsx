@@ -48,7 +48,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -59,7 +59,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -72,7 +72,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -83,7 +83,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -96,7 +96,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -107,7 +107,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -120,7 +120,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -131,7 +131,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -144,7 +144,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -155,7 +155,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -168,7 +168,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -179,7 +179,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -192,7 +192,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -203,7 +203,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -216,7 +216,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -227,7 +227,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -240,7 +240,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -251,7 +251,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -264,7 +264,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -275,7 +275,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -288,7 +288,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -299,7 +299,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 
@@ -312,7 +312,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'PREPAID',
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
   {
@@ -323,7 +323,7 @@ const ALL_DISCOS: DiscoOption[] = [
     meterType: 'POSTPAID',
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
-    discountBps: 120,
+    discountBps: 0,
     minAmountNaira: 1000,
   },
 ];
@@ -349,6 +349,9 @@ export default function ElectricityPage() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Dynamic DISCO catalog with admin-configured discount margins
+  const [discosList, setDiscosList] = useState<DiscoOption[]>(ALL_DISCOS);
 
   // Filters & Selection
   const [filterType, setFilterType] = useState<'ALL' | 'PREPAID' | 'POSTPAID'>('ALL');
@@ -405,6 +408,26 @@ export default function ElectricityPage() {
   useEffect(() => {
     loadWallets();
 
+    // Fetch dynamic DISCO directory with admin-configured discount rates
+    const loadDiscosCatalog = async () => {
+      try {
+        const res = await fetch('/api/services/electricity/discos');
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.data)) {
+          setDiscosList((prev) =>
+            prev.map((disco) => {
+              const matched = data.data.find((d: any) => d.code === disco.code);
+              if (matched && typeof matched.discountBps === 'number') {
+                return { ...disco, discountBps: matched.discountBps };
+              }
+              return disco;
+            }),
+          );
+        }
+      } catch {}
+    };
+    loadDiscosCatalog();
+
     // Sync provider from URL if present
     try {
       if (typeof window !== 'undefined') {
@@ -449,12 +472,12 @@ export default function ElectricityPage() {
   // Selected Option Object (null when viewing all billers catalog)
   const selectedDisco = useMemo(() => {
     if (!selectedOptionId) return null;
-    return ALL_DISCOS.find((d) => d.id === selectedOptionId) || null;
-  }, [selectedOptionId]);
+    return discosList.find((d) => d.id === selectedOptionId) || null;
+  }, [selectedOptionId, discosList]);
 
   // Filtered DISCOs for Catalog View
   const filteredDiscos = useMemo(() => {
-    return ALL_DISCOS.filter((d) => {
+    return discosList.filter((d) => {
       if (filterType !== 'ALL' && d.meterType !== filterType) {
         return false;
       }
@@ -469,7 +492,7 @@ export default function ElectricityPage() {
       }
       return true;
     });
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, discosList]);
 
   // Core Meter Verification Executor
   const executeMeterVerification = async (targetMeter: string, targetDisco: DiscoOption) => {
@@ -881,11 +904,17 @@ export default function ElectricityPage() {
                         </p>
                       </div>
 
-                      {/* Footer: Cashback & Arrow leading to page */}
+                      {/* Footer: Discount (if set by admin) & Arrow leading to page */}
                       <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          1.2% off
-                        </span>
+                        {opt.discountBps > 0 ? (
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {(opt.discountBps / 100).toFixed(1)}% off
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                            Instant Token
+                          </span>
+                        )}
 
                         <span className="inline-flex items-center gap-0.5 font-bold text-[#126BEB] group-hover:translate-x-0.5 transition-transform">
                           <span>Pay</span>
@@ -961,9 +990,11 @@ export default function ElectricityPage() {
                   </div>
                 </div>
 
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                  1.2% Cashback
-                </span>
+                {selectedDisco.discountBps > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                    {(selectedDisco.discountBps / 100).toFixed(1)}% Cashback
+                  </span>
+                )}
               </div>
 
               {/* Dedicated Focused Vending Form Card */}
@@ -1125,14 +1156,11 @@ export default function ElectricityPage() {
                     </div>
                   </div>
 
-                  {/* 3. CUSTOMER PHONE (OPTIONAL - CONTACT FOR RECEIPT RECORDS) */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                        Customer Mobile Number (Optional)
-                      </label>
-                      <span className="text-[10px] text-slate-400">For transaction receipt</span>
-                    </div>
+                  {/* 3. CUSTOMER PHONE (OPTIONAL) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                      Customer phone number (Optional)
+                    </label>
                     <input
                       type="tel"
                       placeholder="e.g. 08012345678"
@@ -1140,9 +1168,6 @@ export default function ElectricityPage() {
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       className="w-full h-10 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-all shadow-xs"
                     />
-                    <p className="text-[10px] text-slate-400">
-                      Optional contact number for receipt generation and provider records.
-                    </p>
                   </div>
 
                   {/* 4. FINANCIAL SUMMARY */}
@@ -1154,15 +1179,17 @@ export default function ElectricityPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                      <span className="flex items-center gap-1 font-semibold">
-                        <Sparkles className="w-3 h-3" />
-                        <span>Merchant Cashback (1.2%)</span>
-                      </span>
-                      <span className="font-bold">
-                        {numericAmount > 0 ? `-₦${discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
-                      </span>
-                    </div>
+                    {discountAmount > 0 && selectedDisco && selectedDisco.discountBps > 0 && (
+                      <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                        <span className="flex items-center gap-1 font-semibold">
+                          <Sparkles className="w-3 h-3" />
+                          <span>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</span>
+                        </span>
+                        <span className="font-bold">
+                          {numericAmount > 0 ? `-₦${discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-black text-xs">
                       <span>Amount to Debit Wallet</span>

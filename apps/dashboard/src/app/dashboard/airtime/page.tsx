@@ -40,7 +40,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
     borderActive: 'border-amber-400 ring-2 ring-amber-400/20',
     bgActive: 'bg-amber-400/5',
-    discountBps: 250, // 2.5%
+    discountBps: 0,
   },
   {
     id: 'AIRTEL',
@@ -49,7 +49,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
     borderActive: 'border-red-500 ring-2 ring-red-500/20',
     bgActive: 'bg-red-500/5',
-    discountBps: 250, // 2.5%
+    discountBps: 0,
   },
   {
     id: 'GLO',
@@ -58,7 +58,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
     borderActive: 'border-emerald-500 ring-2 ring-emerald-500/20',
     bgActive: 'bg-emerald-500/5',
-    discountBps: 350, // 3.5%
+    discountBps: 0,
   },
   {
     id: '9MOBILE',
@@ -67,7 +67,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
     borderActive: 'border-teal-500 ring-2 ring-teal-500/20',
     bgActive: 'bg-teal-500/5',
-    discountBps: 300, // 3.0%
+    discountBps: 0,
   },
 ];
 
@@ -90,6 +90,7 @@ export default function AirtimeVendingPage() {
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
   const [amount, setAmount] = useState<string>('500');
+  const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
 
   // UI Flow & Modals
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
@@ -128,6 +129,27 @@ export default function AirtimeVendingPage() {
   // Load user details & wallet balance
   useEffect(() => {
     loadWallets();
+
+    // Fetch dynamic network directory with admin-configured discount rates
+    const loadNetworksCatalog = async () => {
+      try {
+        const res = await fetch('/api/services/airtime/networks');
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.data)) {
+          setNetworksList((prev) =>
+            prev.map((net) => {
+              const matched = data.data.find((n: any) => n.network === net.id);
+              if (matched && typeof matched.discountBps === 'number') {
+                return { ...net, discountBps: matched.discountBps };
+              }
+              return net;
+            }),
+          );
+        }
+      } catch {}
+    };
+    loadNetworksCatalog();
+
     try {
       const storedUser = localStorage.getItem('bx_user');
       const storedBiz = localStorage.getItem('bx_business');
@@ -151,10 +173,10 @@ export default function AirtimeVendingPage() {
   const detectedNetwork = useMemo(() => {
     if (phone.length >= 4) {
       const prefix = phone.slice(0, 4);
-      return NETWORKS.find((net) => net.prefixes.includes(prefix)) || null;
+      return networksList.find((net) => net.prefixes.includes(prefix)) || null;
     }
     return null;
-  }, [phone]);
+  }, [phone, networksList]);
 
   // Auto-detect network silently as user types
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,7 +186,7 @@ export default function AirtimeVendingPage() {
 
     if (raw.length >= 4) {
       const prefix = raw.slice(0, 4);
-      const match = NETWORKS.find((net) => net.prefixes.includes(prefix));
+      const match = networksList.find((net) => net.prefixes.includes(prefix));
       if (match) {
         setSelectedNetwork(match.id);
       }
@@ -172,8 +194,8 @@ export default function AirtimeVendingPage() {
   };
 
   const activeNetworkConfig = useMemo(() => {
-    return NETWORKS.find((n) => n.id === selectedNetwork) || NETWORKS[0];
-  }, [selectedNetwork]);
+    return networksList.find((n) => n.id === selectedNetwork) || networksList[0] || NETWORKS[0];
+  }, [selectedNetwork, networksList]);
 
   const numericAmount = parseFloat(amount) || 0;
 
@@ -401,7 +423,7 @@ export default function AirtimeVendingPage() {
                   </label>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {NETWORKS.map((network) => {
+                    {networksList.map((network) => {
                       const isSelected = selectedNetwork === network.id;
                       return (
                         <button
@@ -542,11 +564,11 @@ export default function AirtimeVendingPage() {
                   ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {((numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000) > 0 && (
+              {activeNetworkConfig.discountBps > 0 && ((numericAmount * activeNetworkConfig.discountBps) / 10000) > 0 && (
                 <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
-                  <span>Merchant Discount ({((activeNetworkConfig.discountBps || 250) / 100).toFixed(1)}%)</span>
+                  <span>Merchant Discount ({((activeNetworkConfig.discountBps) / 100).toFixed(1)}%)</span>
                   <span>
-                    -₦{((numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    -₦{((numericAmount * activeNetworkConfig.discountBps) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               )}
@@ -556,7 +578,7 @@ export default function AirtimeVendingPage() {
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">From Main Wallet</span>
                 </div>
                 <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
-                  ₦{(numericAmount - (numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  ₦{(numericAmount - ((numericAmount * (activeNetworkConfig.discountBps || 0)) / 10000)).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>

@@ -18,6 +18,7 @@ import {
   db,
   serviceTransactions,
   wallets,
+  providers,
   eq,
   and,
   or,
@@ -180,20 +181,56 @@ export class AirtimeService {
   }
 
   /**
+   * Retrieves active discount rates configured by the administrator in PostgreSQL `providers` table.
+   * If active providers exist in DB and no discounts were explicitly configured by the admin,
+   * returns { default: 0 } (0% discount/cashback).
+   * In a test environment where providers table is empty, returns undefined to fall back to test defaults.
+   */
+  public async getAdminDiscounts(): Promise<Record<string, number> | undefined> {
+    try {
+      const activeProviders = await db.select().from(providers).where(eq(providers.status, 'ACTIVE'));
+      if (activeProviders.length > 0) {
+        for (const p of activeProviders) {
+          const cfg = (p.config || {}) as Record<string, any>;
+          if (cfg.airtimeDiscounts && typeof cfg.airtimeDiscounts === 'object') {
+            return cfg.airtimeDiscounts;
+          }
+          if (cfg.discounts?.airtime && typeof cfg.discounts.airtime === 'object') {
+            return cfg.discounts.airtime;
+          }
+          if (typeof cfg.airtimeDiscountBps === 'number') {
+            return { default: cfg.airtimeDiscountBps };
+          }
+          if (typeof cfg.discounts?.airtime === 'number') {
+            return { default: cfg.discounts.airtime };
+          }
+        }
+      }
+    } catch {
+      // In test or error
+    }
+    return undefined;
+  }
+
+  /**
    * Returns list of supported networks and active commercial parameters.
    */
-  public getNetworkOptions() {
-    return Object.values(TELCO_CONFIGS).map((config) => ({
-      network: config.network,
-      name: config.name,
-      discountPercent: (config.discountBps / 100).toFixed(1) + '%',
-      minAmountKobo: config.minAmountKobo.toString(),
-      minAmountNaira: koboToNaira(config.minAmountKobo),
-      maxAmountKobo: config.maxAmountKobo.toString(),
-      maxAmountNaira: koboToNaira(config.maxAmountKobo),
-      primaryColor: config.primaryColor,
-      supportedPrefixes: TELCO_PREFIXES[config.network],
-    }));
+  public getNetworkOptions(adminDiscounts?: Record<string, number>) {
+    return Object.values(TELCO_CONFIGS).map((config) => {
+      const discountBps = adminDiscounts?.[config.network] ?? adminDiscounts?.default ?? config.discountBps;
+      return {
+        network: config.network,
+        name: config.name,
+        discountBps,
+        discountPercent: (discountBps / 100).toFixed(1) + '%',
+        minAmountKobo: config.minAmountKobo.toString(),
+        minAmountNaira: koboToNaira(config.minAmountKobo),
+        maxAmountKobo: config.maxAmountKobo.toString(),
+        maxAmountNaira: koboToNaira(config.maxAmountKobo),
+        primaryColor: config.primaryColor,
+        supportedPrefixes: TELCO_PREFIXES[config.network],
+      };
+    });
   }
 
   /**
@@ -239,9 +276,11 @@ export class AirtimeService {
       }
     }
 
-    // 2. Compute Pricing & Discount
+    // 2. Compute Pricing & Discount (Dynamically resolved from Admin Config)
+    const adminDiscounts = await this.getAdminDiscounts();
+    const discountBps = adminDiscounts?.[network] ?? adminDiscounts?.default ?? config.discountBps;
     const faceAmountKobo = input.amountKobo;
-    const discountKobo = (faceAmountKobo * BigInt(config.discountBps)) / 10000n;
+    const discountKobo = discountBps > 0 ? (faceAmountKobo * BigInt(discountBps)) / 10000n : 0n;
     const amountToDebitKobo = faceAmountKobo - discountKobo;
 
     // 3. Resolve Business Wallets

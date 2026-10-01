@@ -19,6 +19,7 @@ import {
   db,
   serviceTransactions,
   wallets,
+  providers,
   eq,
   and,
   or,
@@ -40,9 +41,13 @@ export interface DiscoInfo {
   coverageRegion: string;
   prepaidPaymentCode: string;
   postpaidPaymentCode?: string;
+  monnifyPrepaidBillerCode: string;
+  monnifyPrepaidProductCode: string;
+  monnifyPostpaidBillerCode?: string;
+  monnifyPostpaidProductCode?: string;
   monnifyPrepaidCode: string;
   monnifyPostpaidCode?: string;
-  discountBps: number; // 120 = 1.2%
+  discountBps: number; // 120 = 1.2% (fallback for unit tests)
   minKobo: bigint;     // 50,000 Kobo = ₦500
   maxKobo: bigint;     // 10,000,000 Kobo = ₦100,000
 }
@@ -55,8 +60,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Oyo, Ogun, Osun, Kwara, parts of Niger/Kogi',
     prepaidPaymentCode: '053413501',
     postpaidPaymentCode: '053413401',
-    monnifyPrepaidCode: 'IBEDC_PREPAID',
-    monnifyPostpaidCode: 'IBEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-ibedc-pre',
+    monnifyPrepaidProductCode: 'product-ibedc-pre',
+    monnifyPostpaidBillerCode: 'biller-ibedc-post',
+    monnifyPostpaidProductCode: 'product-ibedc-post',
+    monnifyPrepaidCode: 'product-ibedc-pre',
+    monnifyPostpaidCode: 'product-ibedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -68,8 +77,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
     prepaidPaymentCode: '053396201',
     postpaidPaymentCode: '053396301',
-    monnifyPrepaidCode: 'IKEDC_PREPAID',
-    monnifyPostpaidCode: 'IKEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-ikedc-pre',
+    monnifyPrepaidProductCode: 'product-ikedc-pre',
+    monnifyPostpaidBillerCode: 'biller-ikedc-post',
+    monnifyPostpaidProductCode: 'product-ikedc-post',
+    monnifyPrepaidCode: 'product-ikedc-pre',
+    monnifyPostpaidCode: 'product-ikedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -81,8 +94,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Lagos Island, Lekki, Victoria Island, Apapa, Festac',
     prepaidPaymentCode: '053396401',
     postpaidPaymentCode: '053396501',
-    monnifyPrepaidCode: 'EKEDC_PREPAID',
-    monnifyPostpaidCode: 'EKEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-ekedc-pre',
+    monnifyPrepaidProductCode: 'product-ekedc-pre',
+    monnifyPostpaidBillerCode: 'biller-ekedc-post',
+    monnifyPostpaidProductCode: 'product-ekedc-post',
+    monnifyPrepaidCode: 'product-ekedc-pre',
+    monnifyPostpaidCode: 'product-ekedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -94,8 +111,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'FCT Abuja, Nasarawa, Kogi, Niger',
     prepaidPaymentCode: '053394801',
     postpaidPaymentCode: '053394901',
-    monnifyPrepaidCode: 'AEDC_PREPAID',
-    monnifyPostpaidCode: 'AEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-aedc-pre',
+    monnifyPrepaidProductCode: 'product-aedc-pre',
+    monnifyPostpaidBillerCode: 'biller-aedc-post',
+    monnifyPostpaidProductCode: 'product-aedc-post',
+    monnifyPrepaidCode: 'product-aedc-pre',
+    monnifyPostpaidCode: 'product-aedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -107,8 +128,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Enugu, Abia, Imo, Anambra, Ebonyi',
     prepaidPaymentCode: '053395101',
     postpaidPaymentCode: '0578501',
-    monnifyPrepaidCode: 'EEDC_PREPAID',
-    monnifyPostpaidCode: 'EEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-eedc-pre',
+    monnifyPrepaidProductCode: 'product-eedc-pre',
+    monnifyPostpaidBillerCode: 'biller-eedc-post',
+    monnifyPostpaidProductCode: 'product-eedc-post',
+    monnifyPrepaidCode: 'product-eedc-pre',
+    monnifyPostpaidCode: 'product-eedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -120,8 +145,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Kano, Katsina, Jigawa',
     prepaidPaymentCode: '053396701',
     postpaidPaymentCode: '053396801',
-    monnifyPrepaidCode: 'KEDCO_PREPAID',
-    monnifyPostpaidCode: 'KEDCO_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-kedc-pre',
+    monnifyPrepaidProductCode: 'product-kedc-pre',
+    monnifyPostpaidBillerCode: 'biller-kedc-pre',
+    monnifyPostpaidProductCode: 'product-kedc-pre',
+    monnifyPrepaidCode: 'product-kedc-pre',
+    monnifyPostpaidCode: 'product-kedc-pre',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -133,8 +162,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Plateau, Bauchi, Benue, Gombe',
     prepaidPaymentCode: '053396101',
     postpaidPaymentCode: '053396001',
-    monnifyPrepaidCode: 'JED_PREPAID',
-    monnifyPostpaidCode: 'JED_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-jedc-pre',
+    monnifyPrepaidProductCode: 'product-jedc-pre',
+    monnifyPostpaidBillerCode: 'biller-jedc-post',
+    monnifyPostpaidProductCode: 'product-jedc-post',
+    monnifyPrepaidCode: 'product-jedc-pre',
+    monnifyPostpaidCode: 'product-jedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -146,8 +179,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
     prepaidPaymentCode: '053394401',
     postpaidPaymentCode: '0586001',
-    monnifyPrepaidCode: 'PHED_PREPAID',
-    monnifyPostpaidCode: 'PHED_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-phedc-pre',
+    monnifyPrepaidProductCode: 'product-phedc-pre',
+    monnifyPostpaidBillerCode: 'biller-phedc-post',
+    monnifyPostpaidProductCode: 'product-phedc-post',
+    monnifyPrepaidCode: 'product-phedc-pre',
+    monnifyPostpaidCode: 'product-phedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -159,8 +196,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Edo, Delta, Ondo, Ekiti',
     prepaidPaymentCode: '0576701',
     postpaidPaymentCode: '0564601',
-    monnifyPrepaidCode: 'BEDC_PREPAID',
-    monnifyPostpaidCode: 'BEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'bedc',
+    monnifyPrepaidProductCode: 'bedc_prepaid',
+    monnifyPostpaidBillerCode: 'bedc',
+    monnifyPostpaidProductCode: 'bedc_postpaid',
+    monnifyPrepaidCode: 'bedc_prepaid',
+    monnifyPostpaidCode: 'bedc_postpaid',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -172,8 +213,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Kaduna, Sokoto, Kebbi, Zamfara',
     prepaidPaymentCode: '053394501',
     postpaidPaymentCode: '053394601',
-    monnifyPrepaidCode: 'KAEDCO_PREPAID',
-    monnifyPostpaidCode: 'KAEDCO_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-knedc-pre',
+    monnifyPrepaidProductCode: 'product-knedc-pre',
+    monnifyPostpaidBillerCode: 'biller-knedc-post',
+    monnifyPostpaidProductCode: 'product-knedc-post',
+    monnifyPrepaidCode: 'product-knedc-pre',
+    monnifyPostpaidCode: 'product-knedc-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -185,8 +230,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Adamawa, Borno, Taraba, Yobe',
     prepaidPaymentCode: '053406301',
     postpaidPaymentCode: '053406401',
-    monnifyPrepaidCode: 'YEDC_PREPAID',
-    monnifyPostpaidCode: 'YEDC_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-yola-pre',
+    monnifyPrepaidProductCode: 'product-yola-pre',
+    monnifyPostpaidBillerCode: 'biller-yola-post',
+    monnifyPostpaidProductCode: 'product-yola-post',
+    monnifyPrepaidCode: 'product-yola-pre',
+    monnifyPostpaidCode: 'product-yola-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -198,8 +247,12 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
     coverageRegion: 'Aba, Abia State Ring-fence Area',
     prepaidPaymentCode: '053403501',
     postpaidPaymentCode: '053403401',
-    monnifyPrepaidCode: 'APLE_PREPAID',
-    monnifyPostpaidCode: 'APLE_POSTPAID',
+    monnifyPrepaidBillerCode: 'biller-aba-pre',
+    monnifyPrepaidProductCode: 'prd-aba-pre',
+    monnifyPostpaidBillerCode: 'biller-aba-post',
+    monnifyPostpaidProductCode: 'prd-aba-post',
+    monnifyPrepaidCode: 'prd-aba-pre',
+    monnifyPostpaidCode: 'prd-aba-post',
     discountBps: 120,
     minKobo: 50000n,
     maxKobo: 10000000n,
@@ -305,23 +358,58 @@ export class ElectricityService {
   }
 
   /**
+   * Retrieves active discount rates configured by the administrator in PostgreSQL `providers` table.
+   * If active providers exist in DB and no discounts were explicitly configured by the admin,
+   * returns { default: 0 } (0% discount/cashback).
+   * In a test environment where providers table is empty, returns undefined to fall back to test defaults.
+   */
+  public async getAdminDiscounts(): Promise<Record<string, number> | undefined> {
+    try {
+      const activeProviders = await db.select().from(providers).where(eq(providers.status, 'ACTIVE'));
+      if (activeProviders.length > 0) {
+        for (const p of activeProviders) {
+          const cfg = (p.config || {}) as Record<string, any>;
+          if (cfg.electricityDiscounts && typeof cfg.electricityDiscounts === 'object') {
+            return cfg.electricityDiscounts;
+          }
+          if (cfg.discounts?.electricity && typeof cfg.discounts.electricity === 'object') {
+            return cfg.discounts.electricity;
+          }
+          if (typeof cfg.electricityDiscountBps === 'number') {
+            return { default: cfg.electricityDiscountBps };
+          }
+          if (typeof cfg.discounts?.electricity === 'number') {
+            return { default: cfg.discounts.electricity };
+          }
+        }
+      }
+    } catch {
+      // In test or error
+    }
+    return undefined;
+  }
+
+  /**
    * Retrieves list of all supported DISCOs.
    */
-  public getDiscos() {
-    return Object.values(DISCO_CONFIGS).map((d) => ({
-      code: d.code,
-      name: d.name,
-      shortName: d.shortName,
-      coverageRegion: d.coverageRegion,
-      supportsPrepaid: !!d.prepaidPaymentCode,
-      supportsPostpaid: !!d.postpaidPaymentCode,
-      discountBps: d.discountBps,
-      discountPercent: (d.discountBps / 100).toFixed(1) + '%',
-      minimumAmountKobo: d.minKobo.toString(),
-      minimumAmountNaira: koboToNaira(d.minKobo),
-      maximumAmountKobo: d.maxKobo.toString(),
-      maximumAmountNaira: koboToNaira(d.maxKobo),
-    }));
+  public getDiscos(adminDiscounts?: Record<string, number>) {
+    return Object.values(DISCO_CONFIGS).map((d) => {
+      const discountBps = adminDiscounts?.[d.code] ?? adminDiscounts?.default ?? d.discountBps;
+      return {
+        code: d.code,
+        name: d.name,
+        shortName: d.shortName,
+        coverageRegion: d.coverageRegion,
+        supportsPrepaid: !!d.prepaidPaymentCode,
+        supportsPostpaid: !!d.postpaidPaymentCode,
+        discountBps,
+        discountPercent: (discountBps / 100).toFixed(1) + '%',
+        minimumAmountKobo: d.minKobo.toString(),
+        minimumAmountNaira: koboToNaira(d.minKobo),
+        maximumAmountKobo: d.maxKobo.toString(),
+        maximumAmountNaira: koboToNaira(d.maxKobo),
+      };
+    });
   }
 
   /**
@@ -361,10 +449,14 @@ export class ElectricityService {
     }
 
     const paymentCode = this.getPaymentCode(input.disco, input.meterType);
+    const monnifyBillerCode =
+      input.meterType === ElectricityMeterType.PREPAID
+        ? config.monnifyPrepaidBillerCode
+        : (config.monnifyPostpaidBillerCode || config.monnifyPrepaidBillerCode);
     const monnifyProductCode =
       input.meterType === ElectricityMeterType.PREPAID
-        ? config.monnifyPrepaidCode
-        : (config.monnifyPostpaidCode || config.monnifyPrepaidCode);
+        ? config.monnifyPrepaidProductCode
+        : (config.monnifyPostpaidProductCode || config.monnifyPrepaidProductCode);
 
     try {
       const result = await this.router.validateCustomer({
@@ -376,7 +468,7 @@ export class ElectricityService {
           disco: input.disco,
           meterType: input.meterType,
           interswitchPaymentCode: paymentCode,
-          monnifyBillerCode: input.disco,
+          monnifyBillerCode,
           monnifyProductCode,
         },
       });
@@ -460,9 +552,11 @@ export class ElectricityService {
       }
     }
 
-    // 2. Compute Pricing & Merchant Discount
+    // 2. Compute Pricing & Merchant Discount (Dynamically resolved from Admin Config)
+    const adminDiscounts = await this.getAdminDiscounts();
+    const discountBps = adminDiscounts?.[input.disco] ?? adminDiscounts?.default ?? config.discountBps;
     const faceAmountKobo = input.amountKobo;
-    const discountKobo = (faceAmountKobo * BigInt(config.discountBps)) / 10000n;
+    const discountKobo = discountBps > 0 ? (faceAmountKobo * BigInt(discountBps)) / 10000n : 0n;
     const amountToDebitKobo = faceAmountKobo - discountKobo;
 
     // 3. Resolve Business Wallets
@@ -509,10 +603,14 @@ export class ElectricityService {
       throw new Error('Failed to create transaction record');
     }
 
+    const monnifyBillerCode =
+      input.meterType === ElectricityMeterType.PREPAID
+        ? config.monnifyPrepaidBillerCode
+        : (config.monnifyPostpaidBillerCode || config.monnifyPrepaidBillerCode);
     const monnifyProductCode =
       input.meterType === ElectricityMeterType.PREPAID
-        ? config.monnifyPrepaidCode
-        : (config.monnifyPostpaidCode || config.monnifyPrepaidCode);
+        ? config.monnifyPrepaidProductCode
+        : (config.monnifyPostpaidProductCode || config.monnifyPrepaidProductCode);
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
     try {
@@ -529,7 +627,7 @@ export class ElectricityService {
             disco: input.disco,
             meterType: input.meterType,
             interswitchPaymentCode: paymentCode,
-            monnifyBillerCode: input.disco,
+            monnifyBillerCode,
             monnifyProductCode,
           },
         },

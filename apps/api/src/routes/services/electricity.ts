@@ -15,7 +15,8 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
    * Returns list of supported Nigerian electricity distribution companies (DISCOs).
    */
   fastify.get('/discos', async (request, reply) => {
-    const discos = electricityService.getDiscos();
+    const adminDiscounts = await electricityService.getAdminDiscounts();
+    const discos = electricityService.getDiscos(adminDiscounts);
     return reply.status(200).send(createSuccessResponse(discos, request.id));
   });
 

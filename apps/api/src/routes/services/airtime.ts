@@ -15,7 +15,8 @@ export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
    * Returns list of supported mobile network operators, active discount margins, and prefix ranges.
    */
   fastify.get('/networks', async (request, reply) => {
-    const networks = airtimeService.getNetworkOptions();
+    const adminDiscounts = await airtimeService.getAdminDiscounts();
+    const networks = airtimeService.getNetworkOptions(adminDiscounts);
     return reply.status(200).send(createSuccessResponse(networks, request.id));
   });
 

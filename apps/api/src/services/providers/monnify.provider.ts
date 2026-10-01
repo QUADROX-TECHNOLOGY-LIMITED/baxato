@@ -55,41 +55,115 @@ export const INTERSWITCH_TO_MONNIFY_ELECTRICITY: Record<
   { billerCode: string; productCode: string }
 > = {
   // IBEDC
-  '053413501': { billerCode: 'IBEDC', productCode: 'IBEDC_PREPAID' },
-  '053413401': { billerCode: 'IBEDC', productCode: 'IBEDC_POSTPAID' },
+  '053413501': { billerCode: 'biller-ibedc-pre', productCode: 'product-ibedc-pre' },
+  '053413401': { billerCode: 'biller-ibedc-post', productCode: 'product-ibedc-post' },
   // IKEDC
-  '053396201': { billerCode: 'IKEDC', productCode: 'IKEDC_PREPAID' },
-  '053396301': { billerCode: 'IKEDC', productCode: 'IKEDC_POSTPAID' },
+  '053396201': { billerCode: 'biller-ikedc-pre', productCode: 'product-ikedc-pre' },
+  '053396301': { billerCode: 'biller-ikedc-post', productCode: 'product-ikedc-post' },
   // EKEDC
-  '053396401': { billerCode: 'EKEDC', productCode: 'EKEDC_PREPAID' },
-  '053396501': { billerCode: 'EKEDC', productCode: 'EKEDC_POSTPAID' },
+  '053396401': { billerCode: 'biller-ekedc-pre', productCode: 'product-ekedc-pre' },
+  '053396501': { billerCode: 'biller-ekedc-post', productCode: 'product-ekedc-post' },
   // AEDC
-  '053394801': { billerCode: 'AEDC', productCode: 'AEDC_PREPAID' },
-  '053394901': { billerCode: 'AEDC', productCode: 'AEDC_POSTPAID' },
+  '053394801': { billerCode: 'biller-aedc-pre', productCode: 'product-aedc-pre' },
+  '053394901': { billerCode: 'biller-aedc-post', productCode: 'product-aedc-post' },
   // EEDC
-  '053395101': { billerCode: 'EEDC', productCode: 'EEDC_PREPAID' },
-  '0578501': { billerCode: 'EEDC', productCode: 'EEDC_POSTPAID' },
+  '053395101': { billerCode: 'biller-eedc-pre', productCode: 'product-eedc-pre' },
+  '0578501': { billerCode: 'biller-eedc-post', productCode: 'product-eedc-post' },
   // KEDCO
-  '053396701': { billerCode: 'KEDCO', productCode: 'KEDCO_PREPAID' },
-  '053396801': { billerCode: 'KEDCO', productCode: 'KEDCO_POSTPAID' },
+  '053396701': { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
+  '053396801': { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
   // JED
-  '053396101': { billerCode: 'JED', productCode: 'JED_PREPAID' },
-  '053396001': { billerCode: 'JED', productCode: 'JED_POSTPAID' },
+  '053396101': { billerCode: 'biller-jedc-pre', productCode: 'product-jedc-pre' },
+  '053396001': { billerCode: 'biller-jedc-post', productCode: 'product-jedc-post' },
   // PHED
-  '053394401': { billerCode: 'PHED', productCode: 'PHED_PREPAID' },
-  '0586001': { billerCode: 'PHED', productCode: 'PHED_POSTPAID' },
+  '053394401': { billerCode: 'biller-phedc-pre', productCode: 'product-phedc-pre' },
+  '0586001': { billerCode: 'biller-phedc-post', productCode: 'product-phedc-post' },
   // BEDC
-  '0576701': { billerCode: 'BEDC', productCode: 'BEDC_PREPAID' },
-  '0564601': { billerCode: 'BEDC', productCode: 'BEDC_POSTPAID' },
+  '0576701': { billerCode: 'bedc', productCode: 'bedc_prepaid' },
+  '0564601': { billerCode: 'bedc', productCode: 'bedc_postpaid' },
   // KAEDCO
-  '053394501': { billerCode: 'KAEDCO', productCode: 'KAEDCO_PREPAID' },
-  '053394601': { billerCode: 'KAEDCO', productCode: 'KAEDCO_POSTPAID' },
+  '053394501': { billerCode: 'biller-knedc-pre', productCode: 'product-knedc-pre' },
+  '053394601': { billerCode: 'biller-knedc-post', productCode: 'product-knedc-post' },
   // YEDC
-  '053406301': { billerCode: 'YEDC', productCode: 'YEDC_PREPAID' },
-  '053406401': { billerCode: 'YEDC', productCode: 'YEDC_POSTPAID' },
+  '053406301': { billerCode: 'biller-yola-pre', productCode: 'product-yola-pre' },
+  '053406401': { billerCode: 'biller-yola-post', productCode: 'product-yola-post' },
   // APLE
-  '053403501': { billerCode: 'APLE', productCode: 'APLE_PREPAID' },
-  '053403401': { billerCode: 'APLE', productCode: 'APLE_POSTPAID' },
+  '053403501': { billerCode: 'biller-aba-pre', productCode: 'prd-aba-pre' },
+  '053403401': { billerCode: 'biller-aba-post', productCode: 'prd-aba-post' },
+};
+
+export const DISCO_CODE_TO_MONNIFY: Record<
+  string,
+  { prepaid: { billerCode: string; productCode: string }; postpaid?: { billerCode: string; productCode: string } }
+> = {
+  IBEDC: {
+    prepaid: { billerCode: 'biller-ibedc-pre', productCode: 'product-ibedc-pre' },
+    postpaid: { billerCode: 'biller-ibedc-post', productCode: 'product-ibedc-post' },
+  },
+  IKEDC: {
+    prepaid: { billerCode: 'biller-ikedc-pre', productCode: 'product-ikedc-pre' },
+    postpaid: { billerCode: 'biller-ikedc-post', productCode: 'product-ikedc-post' },
+  },
+  EKEDC: {
+    prepaid: { billerCode: 'biller-ekedc-pre', productCode: 'product-ekedc-pre' },
+    postpaid: { billerCode: 'biller-ekedc-post', productCode: 'product-ekedc-post' },
+  },
+  AEDC: {
+    prepaid: { billerCode: 'biller-aedc-pre', productCode: 'product-aedc-pre' },
+    postpaid: { billerCode: 'biller-aedc-post', productCode: 'product-aedc-post' },
+  },
+  EEDC: {
+    prepaid: { billerCode: 'biller-eedc-pre', productCode: 'product-eedc-pre' },
+    postpaid: { billerCode: 'biller-eedc-post', productCode: 'product-eedc-post' },
+  },
+  KEDCO: {
+    prepaid: { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
+    postpaid: { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
+  },
+  KEDC: {
+    prepaid: { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
+    postpaid: { billerCode: 'biller-kedc-pre', productCode: 'product-kedc-pre' },
+  },
+  JED: {
+    prepaid: { billerCode: 'biller-jedc-pre', productCode: 'product-jedc-pre' },
+    postpaid: { billerCode: 'biller-jedc-post', productCode: 'product-jedc-post' },
+  },
+  JEDC: {
+    prepaid: { billerCode: 'biller-jedc-pre', productCode: 'product-jedc-pre' },
+    postpaid: { billerCode: 'biller-jedc-post', productCode: 'product-jedc-post' },
+  },
+  PHED: {
+    prepaid: { billerCode: 'biller-phedc-pre', productCode: 'product-phedc-pre' },
+    postpaid: { billerCode: 'biller-phedc-post', productCode: 'product-phedc-post' },
+  },
+  PHEDC: {
+    prepaid: { billerCode: 'biller-phedc-pre', productCode: 'product-phedc-pre' },
+    postpaid: { billerCode: 'biller-phedc-post', productCode: 'product-phedc-post' },
+  },
+  BEDC: {
+    prepaid: { billerCode: 'bedc', productCode: 'bedc_prepaid' },
+    postpaid: { billerCode: 'bedc', productCode: 'bedc_postpaid' },
+  },
+  KAEDCO: {
+    prepaid: { billerCode: 'biller-knedc-pre', productCode: 'product-knedc-pre' },
+    postpaid: { billerCode: 'biller-knedc-post', productCode: 'product-knedc-post' },
+  },
+  KNEDC: {
+    prepaid: { billerCode: 'biller-knedc-pre', productCode: 'product-knedc-pre' },
+    postpaid: { billerCode: 'biller-knedc-post', productCode: 'product-knedc-post' },
+  },
+  YEDC: {
+    prepaid: { billerCode: 'biller-yola-pre', productCode: 'product-yola-pre' },
+    postpaid: { billerCode: 'biller-yola-post', productCode: 'product-yola-post' },
+  },
+  APLE: {
+    prepaid: { billerCode: 'biller-aba-pre', productCode: 'prd-aba-pre' },
+    postpaid: { billerCode: 'biller-aba-post', productCode: 'prd-aba-post' },
+  },
+  ABA: {
+    prepaid: { billerCode: 'biller-aba-pre', productCode: 'prd-aba-pre' },
+    postpaid: { billerCode: 'biller-aba-post', productCode: 'prd-aba-post' },
+  },
 };
 
 export const INTERSWITCH_TO_MONNIFY_CABLE: Record<
@@ -234,20 +308,30 @@ export class MonnifyProvider implements ProviderAdapter {
     let productCode = (request.metadata?.productCode as string) || request.paymentCode;
 
     if (request.serviceType === ServiceType.ELECTRICITY) {
-      const mapped =
-        INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode] ||
-        (request.metadata?.monnifyProductCode
-          ? {
-              billerCode:
-                (request.metadata.monnifyBillerCode as string) ||
-                (request.metadata.disco as string),
-              productCode: request.metadata.monnifyProductCode as string,
-            }
-          : null);
+      const isPostpaid =
+        String(request.metadata?.meterType || '').toUpperCase() === 'POSTPAID' ||
+        String(request.paymentCode || '').toUpperCase().includes('POST');
 
-      if (mapped) {
-        billerCode = mapped.billerCode;
-        productCode = mapped.productCode;
+      const mappedPaymentCode = INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode];
+      const discoKey = String(request.metadata?.disco || request.paymentCode || '').toUpperCase();
+      const mappedDisco = DISCO_CODE_TO_MONNIFY[discoKey];
+
+      if (mappedPaymentCode) {
+        billerCode = mappedPaymentCode.billerCode;
+        productCode = mappedPaymentCode.productCode;
+      } else if (
+        request.metadata?.monnifyProductCode &&
+        request.metadata?.monnifyBillerCode &&
+        (String(request.metadata.monnifyProductCode).startsWith('product-') ||
+          String(request.metadata.monnifyProductCode).startsWith('prd-') ||
+          String(request.metadata.monnifyProductCode).startsWith('bedc_'))
+      ) {
+        billerCode = request.metadata.monnifyBillerCode as string;
+        productCode = request.metadata.monnifyProductCode as string;
+      } else if (mappedDisco) {
+        const target = isPostpaid && mappedDisco.postpaid ? mappedDisco.postpaid : mappedDisco.prepaid;
+        billerCode = target.billerCode;
+        productCode = target.productCode;
       } else if (request.paymentCode.includes('_')) {
         billerCode = request.paymentCode.split('_')[0] || request.paymentCode;
         productCode = request.paymentCode;
@@ -372,20 +456,30 @@ export class MonnifyProvider implements ProviderAdapter {
       }
 
       case ServiceType.ELECTRICITY: {
-        const mapped =
-          INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode] ||
-          (request.metadata?.monnifyProductCode
-            ? {
-                billerCode:
-                  (request.metadata.monnifyBillerCode as string) ||
-                  (request.metadata.disco as string),
-                productCode: request.metadata.monnifyProductCode as string,
-              }
-            : null);
+        const isPostpaid =
+          String(request.metadata?.meterType || '').toUpperCase() === 'POSTPAID' ||
+          String(request.paymentCode || '').toUpperCase().includes('POST');
 
-        if (mapped) {
-          billerCode = mapped.billerCode;
-          productCode = mapped.productCode;
+        const mappedPaymentCode = INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode];
+        const discoKey = String(request.metadata?.disco || request.paymentCode || '').toUpperCase();
+        const mappedDisco = DISCO_CODE_TO_MONNIFY[discoKey];
+
+        if (mappedPaymentCode) {
+          billerCode = mappedPaymentCode.billerCode;
+          productCode = mappedPaymentCode.productCode;
+        } else if (
+          request.metadata?.monnifyProductCode &&
+          request.metadata?.monnifyBillerCode &&
+          (String(request.metadata.monnifyProductCode).startsWith('product-') ||
+            String(request.metadata.monnifyProductCode).startsWith('prd-') ||
+            String(request.metadata.monnifyProductCode).startsWith('bedc_'))
+        ) {
+          billerCode = request.metadata.monnifyBillerCode as string;
+          productCode = request.metadata.monnifyProductCode as string;
+        } else if (mappedDisco) {
+          const target = isPostpaid && mappedDisco.postpaid ? mappedDisco.postpaid : mappedDisco.prepaid;
+          billerCode = target.billerCode;
+          productCode = target.productCode;
         } else if (request.paymentCode.includes('_')) {
           billerCode = request.paymentCode.split('_')[0] || request.paymentCode;
           productCode = request.paymentCode;
