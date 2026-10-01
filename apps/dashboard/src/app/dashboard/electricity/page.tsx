@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -370,6 +370,8 @@ export default function ElectricityPage() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedMeter, setVerifiedMeter] = useState<VerifiedMeter | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+  const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastVerifiedKeyRef = useRef<string>('');
 
   // Purchase & Modals State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -451,6 +453,12 @@ export default function ElectricityPage() {
         if (b.name) setBusinessName(b.name);
       }
     } catch {}
+
+    return () => {
+      if (autoVerifyTimeoutRef.current) {
+        clearTimeout(autoVerifyTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleRefreshBalance = async () => {
@@ -483,33 +491,21 @@ export default function ElectricityPage() {
     });
   }, [filterType, searchQuery]);
 
-  // Reset meter verification when DISCO option changes
-  const handleSelectDisco = (option: DiscoOption) => {
-    setSelectedOptionId(option.id);
-    setVerifiedMeter(null);
-    setVerificationError(null);
-    setSubmitError(null);
-  };
-
-  // Handle Meter Number Change
-  const handleMeterChange = (val: string) => {
-    const clean = val.replace(/\D/g, '').slice(0, 16);
-    setMeterNumber(clean);
-    setVerifiedMeter(null);
-    setVerificationError(null);
-    setSubmitError(null);
-  };
-
-  // Verify Meter Action
-  const handleVerifyMeter = async () => {
-    if (!meterNumber || meterNumber.length < 8) {
+  // Core Meter Verification Executor
+  const executeMeterVerification = async (targetMeter: string, targetDisco: DiscoOption) => {
+    const cleanMeter = targetMeter.replace(/\D/g, '');
+    if (!cleanMeter || cleanMeter.length < 8) {
       setVerificationError('Please enter a valid meter number (minimum 8 digits).');
+      return;
+    }
+
+    const verificationKey = `${targetDisco.id}:${cleanMeter}`;
+    if (lastVerifiedKeyRef.current === verificationKey && verifiedMeter) {
       return;
     }
 
     setIsVerifying(true);
     setVerificationError(null);
-    setVerifiedMeter(null);
     setSubmitError(null);
 
     try {
@@ -521,9 +517,9 @@ export default function ElectricityPage() {
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          disco: selectedDisco.code,
-          meterNumber,
-          meterType: selectedDisco.meterType,
+          disco: targetDisco.code,
+          meterNumber: cleanMeter,
+          meterType: targetDisco.meterType,
         }),
       });
 
@@ -534,18 +530,74 @@ export default function ElectricityPage() {
 
       const info = data.data;
       setVerifiedMeter({
-        meterNumber: info.meterNumber || meterNumber,
+        meterNumber: info.meterNumber || cleanMeter,
         customerName: info.customerName || 'VERIFIED CONSUMER',
         customerAddress: info.customerAddress || undefined,
         outstandingBalanceNaira: info.outstandingBalanceNaira || 0,
-        disco: selectedDisco.shortName,
-        meterType: selectedDisco.meterType,
+        disco: targetDisco.shortName,
+        meterType: targetDisco.meterType,
       });
+      lastVerifiedKeyRef.current = verificationKey;
     } catch (err: any) {
       setVerificationError(err.message || 'Unable to verify meter with electricity company.');
+      setVerifiedMeter(null);
+      lastVerifiedKeyRef.current = '';
     } finally {
       setIsVerifying(false);
     }
+  };
+
+  // Handle DISCO Card Selection: auto-reverify if valid meter number is already typed
+  const handleSelectDisco = (option: DiscoOption) => {
+    setSelectedOptionId(option.id);
+    setVerifiedMeter(null);
+    setVerificationError(null);
+    setSubmitError(null);
+    lastVerifiedKeyRef.current = '';
+
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+
+    // If meter number is already typed to standard length (11 digits or 10-13 digits), auto-verify with newly chosen DISCO
+    const clean = meterNumber.replace(/\D/g, '');
+    if (clean.length === 11 || (clean.length >= 10 && clean.length <= 13)) {
+      autoVerifyTimeoutRef.current = setTimeout(() => {
+        executeMeterVerification(clean, option);
+      }, 300);
+    }
+  };
+
+  // Handle Meter Number Change: automatically verify as soon as the meter number reaches the standard limit
+  const handleMeterChange = (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 13);
+    setMeterNumber(clean);
+    setVerifiedMeter(null);
+    setVerificationError(null);
+    setSubmitError(null);
+    lastVerifiedKeyRef.current = '';
+
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+
+    // Auto-verify triggered immediately upon reaching standard Nigerian STS meter limit (11 digits or 10-13 digits)
+    if (clean.length === 11 || (clean.length >= 10 && clean.length <= 13)) {
+      autoVerifyTimeoutRef.current = setTimeout(() => {
+        executeMeterVerification(clean, selectedDisco);
+      }, 350);
+    }
+  };
+
+  // Manual Verify Meter Action (or Retry)
+  const handleVerifyMeter = () => {
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    executeMeterVerification(meterNumber, selectedDisco);
   };
 
   // Calculations
@@ -921,13 +973,15 @@ export default function ElectricityPage() {
               {/* Form Start */}
               <form onSubmit={handleOpenConfirm} className="space-y-4">
                 
-                {/* 1. METER NUMBER INPUT WITH INTEGRATED VERIFICATION */}
+                {/* 1. METER NUMBER INPUT WITH INTEGRATED AUTO-VERIFICATION */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                       {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}
                     </label>
-                    <span className="text-[10px] text-slate-400">11-13 digits</span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Standard: 11 digits
+                    </span>
                   </div>
 
                   <div className="relative">
@@ -936,36 +990,77 @@ export default function ElectricityPage() {
                       placeholder="e.g. 04218392193"
                       value={meterNumber}
                       onChange={(e) => handleMeterChange(e.target.value)}
-                      className="w-full h-11 pl-3.5 pr-28 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none transition-all shadow-xs"
+                      maxLength={13}
+                      className={`w-full h-11 pl-3.5 pr-28 rounded-xl bg-slate-50 dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none transition-all shadow-xs ${
+                        verifiedMeter
+                          ? 'border-emerald-500/60 ring-2 ring-emerald-500/15 bg-emerald-50/10'
+                          : isVerifying
+                          ? 'border-[#126BEB] ring-2 ring-[#126BEB]/20'
+                          : verificationError
+                          ? 'border-rose-400 focus:border-rose-500'
+                          : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20'
+                      }`}
                       required
                     />
 
-                    {/* Verify Meter Button inside Input */}
-                    <button
-                      type="button"
-                      onClick={handleVerifyMeter}
-                      disabled={isVerifying || meterNumber.length < 8}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 px-3 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
-                    >
+                    {/* Integrated State Action / Button inside Input */}
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
                       {isVerifying ? (
-                        <>
-                          <RotateCw className="w-3 h-3 animate-spin" />
+                        <div className="h-8 px-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[#126BEB] dark:text-blue-400 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
                           <span>Verifying...</span>
-                        </>
+                        </div>
+                      ) : verifiedMeter ? (
+                        <div className="h-8 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1 shadow-xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Verified</span>
+                        </div>
                       ) : (
-                        <>
+                        <button
+                          type="button"
+                          onClick={handleVerifyMeter}
+                          disabled={meterNumber.length < 8}
+                          className="h-8 px-3 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                        >
                           <ShieldCheck className="w-3 h-3" />
                           <span>Verify</span>
-                        </>
+                        </button>
                       )}
-                    </button>
+                    </div>
                   </div>
+
+                  {/* Typing Counter & Auto-Verify Feedback */}
+                  {meterNumber.length > 0 && !verifiedMeter && !isVerifying && !verificationError && (
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 pt-0.5">
+                      <span>
+                        {meterNumber.length < 11
+                          ? `${meterNumber.length}/11 digits entered`
+                          : `${meterNumber.length} digits entered`}
+                      </span>
+                      {meterNumber.length === 11 ? (
+                        <span className="text-[#126BEB] dark:text-blue-400 font-semibold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> Auto-verifying meter...
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Auto-verifies when limit reached (11 digits)</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Verification Error Alert */}
                   {verificationError && (
-                    <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2 animate-in fade-in duration-150">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{verificationError}</span>
+                    <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{verificationError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleVerifyMeter}
+                        className="text-xs font-bold underline hover:no-underline shrink-0 cursor-pointer"
+                      >
+                        Retry
+                      </button>
                     </div>
                   )}
 

@@ -82,6 +82,10 @@ export interface TransactionStatusResult {
   amountKobo?: bigint;
   responseCode: string;
   responseMessage: string;
+  token?: string;
+  units?: string;
+  tariff?: string;
+  feeder?: string;
   rawResponse?: Record<string, unknown>;
 }
 
