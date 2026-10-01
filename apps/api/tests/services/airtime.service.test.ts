@@ -117,7 +117,7 @@ describe('AirtimeService (Prefix Detection, Concurrency Locking & Multi-Provider
       const mtn = options.find((o) => o.network === TelecomNetwork.MTN);
       expect(mtn).toBeDefined();
       expect(mtn?.discountPercent).toBe('2.5%');
-      expect(mtn?.minAmountKobo).toBe('5000'); // ₦50
+      expect(mtn?.minAmountKobo).toBe('10000'); // ₦100
       expect(mtn?.maxAmountKobo).toBe('5000000'); // ₦50,000
       expect(mtn?.primaryColor).toBe('#FFCC00');
 

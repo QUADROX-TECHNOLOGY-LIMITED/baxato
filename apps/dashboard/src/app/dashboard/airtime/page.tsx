@@ -191,8 +191,8 @@ export default function AirtimeVendingPage() {
       return;
     }
 
-    if (numericAmount < 50 || numericAmount > 50000) {
-      setErrorMessage('Airtime recharge amount must be between ₦50 and ₦50,000.');
+    if (numericAmount < 100 || numericAmount > 50000) {
+      setErrorMessage('Airtime recharge amount must be between ₦100 and ₦50,000.');
       return;
     }
 
@@ -470,7 +470,7 @@ export default function AirtimeVendingPage() {
                     </span>
                     <input
                       type="number"
-                      min={50}
+                      min={100}
                       max={50000}
                       step="any"
                       placeholder="Enter custom amount"

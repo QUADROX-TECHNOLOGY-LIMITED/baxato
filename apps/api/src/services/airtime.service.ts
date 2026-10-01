@@ -51,7 +51,7 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
     interswitchPaymentCode: '10901',
     monnifyNetworkCode: 'MTN',
     discountBps: 250, // 2.5% discount
-    minAmountKobo: 5000n, // ₦50
+    minAmountKobo: 10000n, // ₦100
     maxAmountKobo: 5000000n, // ₦50,000
     primaryColor: '#FFCC00',
   },
@@ -61,7 +61,7 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
     interswitchPaymentCode: '90102',
     monnifyNetworkCode: 'AIRTEL',
     discountBps: 250, // 2.5% discount
-    minAmountKobo: 5000n, // ₦50
+    minAmountKobo: 10000n, // ₦100
     maxAmountKobo: 5000000n, // ₦50,000
     primaryColor: '#FF0000',
   },
@@ -71,7 +71,7 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
     interswitchPaymentCode: '40201',
     monnifyNetworkCode: 'GLO',
     discountBps: 350, // 3.5% discount
-    minAmountKobo: 5000n, // ₦50
+    minAmountKobo: 10000n, // ₦100
     maxAmountKobo: 5000000n, // ₦50,000
     primaryColor: '#28A745',
   },
@@ -81,7 +81,7 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
     interswitchPaymentCode: '10801',
     monnifyNetworkCode: '9MOBILE',
     discountBps: 300, // 3.0% discount
-    minAmountKobo: 5000n, // ₦50
+    minAmountKobo: 10000n, // ₦100
     maxAmountKobo: 5000000n, // ₦50,000
     primaryColor: '#006633',
   },

@@ -21,6 +21,7 @@ import {
   wallets,
   eq,
   and,
+  or,
   desc,
 } from '@baxato/database';
 import { walletService } from './wallet.service';
@@ -674,50 +675,184 @@ export class ElectricityService {
       .limit(limit)
       .offset(offset);
 
-    const transactions: ElectricityReceiptDto[] = rows.map((r) => {
-      const meta = (r.metadata || {}) as Record<string, string>;
-      const disco = (meta.disco || DiscoCode.IBEDC) as DiscoCode;
-      const config = DISCO_CONFIGS[disco] || DISCO_CONFIGS[DiscoCode.IBEDC];
-      const meterType = (meta.meterType || ElectricityMeterType.PREPAID) as ElectricityMeterType;
-
-      return {
-        transactionId: r.id,
-        status: r.status as TransactionStatus,
-        disco,
-        discoName: config.name,
-        meterNumber: r.recipient,
-        meterType,
-        customerName: meta.customerName || undefined,
-        customerAddress: meta.customerAddress || undefined,
-        token: meta.token || undefined,
-        units: meta.units || undefined,
-        unitsCostKobo: meta.unitsCostKobo || undefined,
-        unitsCostNaira: meta.unitsCostKobo ? koboToNaira(BigInt(meta.unitsCostKobo)) : undefined,
-        vatKobo: meta.vatKobo || undefined,
-        vatNaira: meta.vatKobo ? koboToNaira(BigInt(meta.vatKobo)) : undefined,
-        tariff: meta.tariff || undefined,
-        feeder: meta.feeder || undefined,
-        faceAmountKobo: r.amount.toString(),
-        faceAmountNaira: koboToNaira(r.amount),
-        formattedFaceAmount: formatNairaFromKobo(r.amount),
-        discountKobo: r.discount.toString(),
-        discountNaira: koboToNaira(r.discount),
-        formattedDiscount: formatNairaFromKobo(r.discount),
-        amountDebitedKobo: r.totalAmount.toString(),
-        amountDebitedNaira: koboToNaira(r.totalAmount),
-        formattedAmountDebited: formatNairaFromKobo(r.totalAmount),
-        reference: r.requestReference || r.id,
-        clientReference: r.clientReference || undefined,
-        providerReference: r.providerReference || undefined,
-        providerName: r.providerName,
-        createdAt: r.createdAt,
-      };
-    });
+    const transactions: ElectricityReceiptDto[] = rows.map((r) => this.mapRowToReceiptDto(r));
 
     return {
       transactions,
       total: transactions.length,
     };
+  }
+
+  /**
+   * Maps a database transaction record to ElectricityReceiptDto
+   */
+  public mapRowToReceiptDto(r: typeof serviceTransactions.$inferSelect): ElectricityReceiptDto {
+    const meta = (r.metadata || {}) as Record<string, any>;
+    const disco = (meta.disco || DiscoCode.IBEDC) as DiscoCode;
+    const config = DISCO_CONFIGS[disco] || DISCO_CONFIGS[DiscoCode.IBEDC];
+    const meterType = (meta.meterType || ElectricityMeterType.PREPAID) as ElectricityMeterType;
+
+    return {
+      transactionId: r.id,
+      status: r.status as TransactionStatus,
+      disco,
+      discoName: config.name,
+      meterNumber: r.recipient,
+      meterType,
+      customerName: meta.customerName || undefined,
+      customerAddress: meta.customerAddress || undefined,
+      token: meta.token || undefined,
+      units: meta.units || undefined,
+      unitsCostKobo: meta.unitsCostKobo || undefined,
+      unitsCostNaira: meta.unitsCostKobo ? koboToNaira(BigInt(meta.unitsCostKobo)) : undefined,
+      vatKobo: meta.vatKobo || undefined,
+      vatNaira: meta.vatKobo ? koboToNaira(BigInt(meta.vatKobo)) : undefined,
+      tariff: meta.tariff || undefined,
+      feeder: meta.feeder || undefined,
+      faceAmountKobo: r.amount.toString(),
+      faceAmountNaira: koboToNaira(r.amount),
+      formattedFaceAmount: formatNairaFromKobo(r.amount),
+      discountKobo: r.discount.toString(),
+      discountNaira: koboToNaira(r.discount),
+      formattedDiscount: formatNairaFromKobo(r.discount),
+      amountDebitedKobo: r.totalAmount.toString(),
+      amountDebitedNaira: koboToNaira(r.totalAmount),
+      formattedAmountDebited: formatNairaFromKobo(r.totalAmount),
+      reference: r.requestReference || r.id,
+      clientReference: r.clientReference || undefined,
+      providerReference: r.providerReference || undefined,
+      providerName: r.providerName,
+      createdAt: r.createdAt,
+    };
+  }
+
+  /**
+   * Requeries live status of an in-flight or processing electricity transaction from upstream provider.
+   */
+  public async requeryElectricityStatus(
+    reference: string,
+    businessId?: string,
+  ): Promise<ElectricityReceiptDto> {
+    const conditions = [
+      or(
+        eq(serviceTransactions.clientReference, reference),
+        eq(serviceTransactions.requestReference, reference),
+        eq(serviceTransactions.id, reference),
+      ),
+      eq(serviceTransactions.serviceType, ServiceType.ELECTRICITY),
+    ];
+
+    if (businessId) {
+      conditions.push(eq(serviceTransactions.businessId, businessId));
+    }
+
+    const [row] = await db
+      .select()
+      .from(serviceTransactions)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundError(`Electricity transaction '${reference}' was not found.`);
+    }
+
+    if (
+      row.status === TransactionStatus.SUCCESSFUL ||
+      row.status === TransactionStatus.FAILED ||
+      row.status === TransactionStatus.REVERSED
+    ) {
+      return this.mapRowToReceiptDto(row);
+    }
+
+    try {
+      const requeryResult = await this.router.requeryTransaction(
+        row.providerName,
+        row.requestReference || row.clientReference || row.id,
+        row.providerReference || undefined,
+      );
+
+      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+        const meta = (row.metadata as Record<string, unknown>) || {};
+        if (requeryResult.token) meta.token = requeryResult.token;
+        if (requeryResult.units) meta.units = requeryResult.units;
+        if (requeryResult.tariff) meta.tariff = requeryResult.tariff;
+        if (requeryResult.feeder) meta.feeder = requeryResult.feeder;
+
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.SUCCESSFUL,
+            providerReference: requeryResult.providerReference || row.providerReference,
+            metadata: meta,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, row.id));
+
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: row.businessId,
+            reference: row.clientReference || row.requestReference || row.id,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'ELECTRICITY_PURCHASE',
+            description: `Electricity purchase confirmed: ₦${koboToNaira(row.amount)} for meter ${row.recipient}`,
+            transactionId: row.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: row.totalAmount,
+              balanceBeforeKobo: BigInt(mainWallet.balanceKobo),
+              balanceAfterKobo: BigInt(mainWallet.balanceKobo),
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: row.totalAmount,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: row.totalAmount,
+            },
+          })
+          .catch(() => {});
+
+        const updatedRow = {
+          ...row,
+          status: TransactionStatus.SUCCESSFUL,
+          providerReference: requeryResult.providerReference || row.providerReference,
+          metadata: meta,
+        };
+        const receipt = this.mapRowToReceiptDto(updatedRow);
+
+        webhookDispatcherService
+          .dispatch(row.businessId, WebhookEventType.TRANSACTION_SUCCESSFUL, receipt)
+          .catch(() => {});
+
+        return receipt;
+      }
+
+      if (requeryResult.status === TransactionStatus.FAILED) {
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await walletService.creditWallet(mainWallet.id, row.totalAmount);
+
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.FAILED,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, row.id));
+
+        const updatedRow = { ...row, status: TransactionStatus.FAILED };
+        const receipt = this.mapRowToReceiptDto(updatedRow);
+
+        webhookDispatcherService
+          .dispatch(row.businessId, WebhookEventType.TRANSACTION_FAILED, receipt)
+          .catch(() => {});
+
+        return receipt;
+      }
+    } catch {
+      // Non-blocking on provider timeout
+    }
+
+    return this.mapRowToReceiptDto(row);
   }
 }
 
