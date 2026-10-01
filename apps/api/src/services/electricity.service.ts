@@ -361,6 +361,10 @@ export class ElectricityService {
     }
 
     const paymentCode = this.getPaymentCode(input.disco, input.meterType);
+    const monnifyProductCode =
+      input.meterType === ElectricityMeterType.PREPAID
+        ? config.monnifyPrepaidCode
+        : (config.monnifyPostpaidCode || config.monnifyPrepaidCode);
 
     try {
       const result = await this.router.validateCustomer({
@@ -368,6 +372,13 @@ export class ElectricityService {
         paymentCode,
         customerId: cleanMeter,
         amountKobo: input.amountKobo,
+        metadata: {
+          disco: input.disco,
+          meterType: input.meterType,
+          interswitchPaymentCode: paymentCode,
+          monnifyBillerCode: input.disco,
+          monnifyProductCode,
+        },
       });
 
       return {
@@ -498,6 +509,11 @@ export class ElectricityService {
       throw new Error('Failed to create transaction record');
     }
 
+    const monnifyProductCode =
+      input.meterType === ElectricityMeterType.PREPAID
+        ? config.monnifyPrepaidCode
+        : (config.monnifyPostpaidCode || config.monnifyPrepaidCode);
+
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
     try {
       const vendResult = await this.router.vendService(
@@ -506,8 +522,16 @@ export class ElectricityService {
           paymentCode,
           customerId: cleanMeter,
           customerMobile: input.customerMobile,
+          customerName: input.customerName,
           amountKobo: faceAmountKobo,
           requestReference,
+          metadata: {
+            disco: input.disco,
+            meterType: input.meterType,
+            interswitchPaymentCode: paymentCode,
+            monnifyBillerCode: input.disco,
+            monnifyProductCode,
+          },
         },
         txnRow.id,
       );

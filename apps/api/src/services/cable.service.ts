@@ -491,6 +491,12 @@ export class CableService {
         serviceType: ServiceType.CABLE_TV,
         paymentCode: opInfo.defaultPaymentCode,
         customerId: cleanSmartcard,
+        metadata: {
+          operator,
+          interswitchPaymentCode: opInfo.defaultPaymentCode,
+          monnifyBillerCode: operator,
+          monnifyProductCode: operator,
+        },
       });
 
       return {
@@ -614,8 +620,16 @@ export class CableService {
           paymentCode: bouquet.interswitchPaymentCode,
           customerId: cleanSmartcard,
           customerMobile: input.customerMobile,
+          customerName: input.customerName,
           amountKobo: faceAmountKobo,
           requestReference,
+          metadata: {
+            operator: bouquet.operator,
+            interswitchPaymentCode: bouquet.interswitchPaymentCode,
+            monnifyBillerCode: bouquet.operator,
+            monnifyPlanCode: bouquet.monnifyPlanCode,
+            monnifyProductCode: bouquet.monnifyPlanCode,
+          },
         },
         txnRow.id,
       );

@@ -50,6 +50,57 @@ const MONNIFY_AIRTIME_PRODUCT_CODES: Record<string, string> = {
   '9MOBILE': '14',
 };
 
+export const INTERSWITCH_TO_MONNIFY_ELECTRICITY: Record<
+  string,
+  { billerCode: string; productCode: string }
+> = {
+  // IBEDC
+  '053413501': { billerCode: 'IBEDC', productCode: 'IBEDC_PREPAID' },
+  '053413401': { billerCode: 'IBEDC', productCode: 'IBEDC_POSTPAID' },
+  // IKEDC
+  '053396201': { billerCode: 'IKEDC', productCode: 'IKEDC_PREPAID' },
+  '053396301': { billerCode: 'IKEDC', productCode: 'IKEDC_POSTPAID' },
+  // EKEDC
+  '053396401': { billerCode: 'EKEDC', productCode: 'EKEDC_PREPAID' },
+  '053396501': { billerCode: 'EKEDC', productCode: 'EKEDC_POSTPAID' },
+  // AEDC
+  '053394801': { billerCode: 'AEDC', productCode: 'AEDC_PREPAID' },
+  '053394901': { billerCode: 'AEDC', productCode: 'AEDC_POSTPAID' },
+  // EEDC
+  '053395101': { billerCode: 'EEDC', productCode: 'EEDC_PREPAID' },
+  '0578501': { billerCode: 'EEDC', productCode: 'EEDC_POSTPAID' },
+  // KEDCO
+  '053396701': { billerCode: 'KEDCO', productCode: 'KEDCO_PREPAID' },
+  '053396801': { billerCode: 'KEDCO', productCode: 'KEDCO_POSTPAID' },
+  // JED
+  '053396101': { billerCode: 'JED', productCode: 'JED_PREPAID' },
+  '053396001': { billerCode: 'JED', productCode: 'JED_POSTPAID' },
+  // PHED
+  '053394401': { billerCode: 'PHED', productCode: 'PHED_PREPAID' },
+  '0586001': { billerCode: 'PHED', productCode: 'PHED_POSTPAID' },
+  // BEDC
+  '0576701': { billerCode: 'BEDC', productCode: 'BEDC_PREPAID' },
+  '0564601': { billerCode: 'BEDC', productCode: 'BEDC_POSTPAID' },
+  // KAEDCO
+  '053394501': { billerCode: 'KAEDCO', productCode: 'KAEDCO_PREPAID' },
+  '053394601': { billerCode: 'KAEDCO', productCode: 'KAEDCO_POSTPAID' },
+  // YEDC
+  '053406301': { billerCode: 'YEDC', productCode: 'YEDC_PREPAID' },
+  '053406401': { billerCode: 'YEDC', productCode: 'YEDC_POSTPAID' },
+  // APLE
+  '053403501': { billerCode: 'APLE', productCode: 'APLE_PREPAID' },
+  '053403401': { billerCode: 'APLE', productCode: 'APLE_POSTPAID' },
+};
+
+export const INTERSWITCH_TO_MONNIFY_CABLE: Record<
+  string,
+  { billerCode: string; productCode: string }
+> = {
+  '104154': { billerCode: 'DSTV', productCode: 'DSTV' },
+  '459137': { billerCode: 'GOTV', productCode: 'GOTV' },
+  '24019': { billerCode: 'STARTIMES', productCode: 'STARTIMES' },
+};
+
 
 async function safeParseResponse(res: any): Promise<any> {
   try {
@@ -179,10 +230,51 @@ export class MonnifyProvider implements ProviderAdapter {
     }
 
     const endpoint = `${this.config.baseUrl}/api/v1/vas/bills-payment/validate-customer`;
+    let billerCode = request.paymentCode;
+    let productCode = (request.metadata?.productCode as string) || request.paymentCode;
+
+    if (request.serviceType === ServiceType.ELECTRICITY) {
+      const mapped =
+        INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode] ||
+        (request.metadata?.monnifyProductCode
+          ? {
+              billerCode:
+                (request.metadata.monnifyBillerCode as string) ||
+                (request.metadata.disco as string),
+              productCode: request.metadata.monnifyProductCode as string,
+            }
+          : null);
+
+      if (mapped) {
+        billerCode = mapped.billerCode;
+        productCode = mapped.productCode;
+      } else if (request.paymentCode.includes('_')) {
+        billerCode = request.paymentCode.split('_')[0] || request.paymentCode;
+        productCode = request.paymentCode;
+      }
+    } else if (request.serviceType === ServiceType.CABLE_TV) {
+      const mapped =
+        INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
+        (request.metadata?.monnifyProductCode
+          ? {
+              billerCode:
+                (request.metadata.monnifyBillerCode as string) ||
+                (request.metadata.operator as string),
+              productCode: request.metadata.monnifyProductCode as string,
+            }
+          : null);
+
+      if (mapped) {
+        billerCode = mapped.billerCode;
+        productCode = mapped.productCode;
+      }
+    }
+
     const payload = {
+      customerId: request.customerId,
       customerNumber: request.customerId,
-      billerCode: request.paymentCode,
-      productCode: (request.metadata?.productCode as string) || request.paymentCode,
+      billerCode,
+      productCode,
     };
 
     const res = await fetch(endpoint, {
@@ -196,30 +288,51 @@ export class MonnifyProvider implements ProviderAdapter {
 
     const rawData = await safeParseResponse(res);
     const data = (rawData || {}) as {
-      requestSuccessful: boolean;
-      responseMessage: string;
-      responseCode: string;
-      responseBody?: {
-        customerName?: string;
-        address?: string;
-        accountNumber?: string;
-        outstandingAmount?: number;
-        validationReference?: string;
-      };
+      requestSuccessful?: boolean;
+      responseMessage?: string;
+      responseCode?: string;
+      responseBody?: Record<string, any>;
     };
 
-    const isSuccess = Boolean(data?.requestSuccessful && (data?.responseCode === '0' || data?.responseCode === '00'));
+    const isSuccess = Boolean(
+      data?.requestSuccessful &&
+        (data?.responseCode === '0' ||
+          data?.responseCode === '00' ||
+          data?.responseCode === '90000'),
+    );
+
+    const resBody = (data?.responseBody || {}) as Record<string, any>;
+    const customerName =
+      resBody.customerName ||
+      resBody.name ||
+      resBody.accountName ||
+      resBody.fullName ||
+      resBody.customer?.name ||
+      resBody.customer?.customerName ||
+      undefined;
+
+    const customerAddress =
+      resBody.address ||
+      resBody.customerAddress ||
+      resBody.customer?.address ||
+      undefined;
+
+    const outstandingBalanceKobo =
+      resBody.outstandingAmount !== undefined
+        ? BigInt(Math.round(Number(resBody.outstandingAmount) * 100))
+        : resBody.outstandingBalance !== undefined
+          ? BigInt(Math.round(Number(resBody.outstandingBalance) * 100))
+          : undefined;
 
     return {
       isValid: isSuccess,
       customerId: request.customerId,
-      customerName: data?.responseBody?.customerName,
-      customerAddress: data?.responseBody?.address,
-      outstandingBalanceKobo: data?.responseBody?.outstandingAmount
-        ? BigInt(Math.round(data.responseBody.outstandingAmount * 100))
-        : undefined,
+      customerName,
+      customerAddress,
+      outstandingBalanceKobo,
       responseCode: data?.responseCode || String(res.status),
-      responseMessage: data?.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),
+      responseMessage:
+        data?.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),
       rawResponse: data as Record<string, unknown>,
     };
   }
@@ -258,11 +371,52 @@ export class MonnifyProvider implements ProviderAdapter {
         break;
       }
 
-      case ServiceType.CABLE_TV:
-      case ServiceType.ELECTRICITY:
-        billerCode = request.paymentCode;
-        productCode = (request.metadata?.productCode as string) || request.paymentCode;
+      case ServiceType.ELECTRICITY: {
+        const mapped =
+          INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode] ||
+          (request.metadata?.monnifyProductCode
+            ? {
+                billerCode:
+                  (request.metadata.monnifyBillerCode as string) ||
+                  (request.metadata.disco as string),
+                productCode: request.metadata.monnifyProductCode as string,
+              }
+            : null);
+
+        if (mapped) {
+          billerCode = mapped.billerCode;
+          productCode = mapped.productCode;
+        } else if (request.paymentCode.includes('_')) {
+          billerCode = request.paymentCode.split('_')[0] || request.paymentCode;
+          productCode = request.paymentCode;
+        } else {
+          billerCode = request.paymentCode;
+          productCode = (request.metadata?.productCode as string) || request.paymentCode;
+        }
         break;
+      }
+
+      case ServiceType.CABLE_TV: {
+        const mapped =
+          INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
+          (request.metadata?.monnifyProductCode
+            ? {
+                billerCode:
+                  (request.metadata.monnifyBillerCode as string) ||
+                  (request.metadata.operator as string),
+                productCode: request.metadata.monnifyProductCode as string,
+              }
+            : null);
+
+        if (mapped) {
+          billerCode = mapped.billerCode;
+          productCode = mapped.productCode;
+        } else {
+          billerCode = request.paymentCode;
+          productCode = (request.metadata?.productCode as string) || request.paymentCode;
+        }
+        break;
+      }
 
       default:
         throw new AppError(
@@ -276,6 +430,7 @@ export class MonnifyProvider implements ProviderAdapter {
     const payload: Record<string, unknown> = {
       amount: numericNaira,
       customerId: request.customerId,
+      customerNumber: request.customerId,
       customerName: request.customerName || request.customerId,
       customerMobileNumber: request.customerMobile || request.customerId,
       billerCode,

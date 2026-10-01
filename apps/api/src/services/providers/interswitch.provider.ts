@@ -29,6 +29,39 @@ interface CachedToken {
   expiresAt: number;
 }
 
+export const MONNIFY_TO_INTERSWITCH_ELECTRICITY: Record<string, string> = {
+  IBEDC_PREPAID: '053413501',
+  IBEDC_POSTPAID: '053413401',
+  IKEDC_PREPAID: '053396201',
+  IKEDC_POSTPAID: '053396301',
+  EKEDC_PREPAID: '053396401',
+  EKEDC_POSTPAID: '053396501',
+  AEDC_PREPAID: '053394801',
+  AEDC_POSTPAID: '053394901',
+  EEDC_PREPAID: '053395101',
+  EEDC_POSTPAID: '0578501',
+  KEDCO_PREPAID: '053396701',
+  KEDCO_POSTPAID: '053396801',
+  JED_PREPAID: '053396101',
+  JED_POSTPAID: '053396001',
+  PHED_PREPAID: '053394401',
+  PHED_POSTPAID: '0586001',
+  BEDC_PREPAID: '0576701',
+  BEDC_POSTPAID: '0564601',
+  KAEDCO_PREPAID: '053394501',
+  KAEDCO_POSTPAID: '053394601',
+  YEDC_PREPAID: '053406301',
+  YEDC_POSTPAID: '053406401',
+  APLE_PREPAID: '053403501',
+  APLE_POSTPAID: '053403401',
+};
+
+export const MONNIFY_TO_INTERSWITCH_CABLE: Record<string, string> = {
+  DSTV: '104154',
+  GOTV: '459137',
+  STARTIMES: '24019',
+};
+
 async function safeParseResponse(res: any): Promise<any> {
   try {
     if (typeof res.text === 'function') {
@@ -127,11 +160,17 @@ export class InterswitchProvider implements ProviderAdapter {
   ): Promise<CustomerValidationResult> {
     const token = await this.getAccessToken();
 
+    const paymentCode =
+      (request.metadata?.interswitchPaymentCode as string) ||
+      MONNIFY_TO_INTERSWITCH_ELECTRICITY[request.paymentCode] ||
+      MONNIFY_TO_INTERSWITCH_CABLE[request.paymentCode] ||
+      request.paymentCode;
+
     const payload = {
       TerminalId: this.config.terminalId,
       Customers: [
         {
-          PaymentCode: request.paymentCode,
+          PaymentCode: paymentCode,
           CustomerId: request.customerId,
         },
       ],
@@ -183,6 +222,12 @@ export class InterswitchProvider implements ProviderAdapter {
   public async vendService(request: ServiceVendingRequest): Promise<ServiceVendingResult> {
     const token = await this.getAccessToken();
 
+    const paymentCode =
+      (request.metadata?.interswitchPaymentCode as string) ||
+      MONNIFY_TO_INTERSWITCH_ELECTRICITY[request.paymentCode] ||
+      MONNIFY_TO_INTERSWITCH_CABLE[request.paymentCode] ||
+      request.paymentCode;
+
     // Ensure request reference conforms to Interswitch prefix if not already formatted
     const reference = request.requestReference.startsWith(this.config.transferCodePrefix)
       ? request.requestReference
@@ -190,7 +235,7 @@ export class InterswitchProvider implements ProviderAdapter {
 
     const payload = {
       terminalId: this.config.terminalId,
-      paymentCode: request.paymentCode,
+      paymentCode,
       customerId: request.customerId,
       customerMobile: request.customerMobile || request.customerId,
       customerEmail: request.customerEmail || 'transactions@baxato.com',
