@@ -261,6 +261,10 @@ export const DISCO_CONFIGS: Record<DiscoCode, DiscoInfo> = {
 
 export interface ElectricityValidationDto {
   isValid: boolean;
+  isMismatch?: boolean;
+  requestedMeterType?: ElectricityMeterType;
+  detectedMeterType?: ElectricityMeterType;
+  suggestionDiscoId?: string;
   meterNumber: string;
   disco: DiscoCode;
   discoName: string;
@@ -274,6 +278,8 @@ export interface ElectricityValidationDto {
   outstandingBalanceNaira?: number;
   minimumAmountKobo: string;
   minimumAmountNaira: number;
+  maximumAmountKobo?: string;
+  maximumAmountNaira?: number;
   responseCode: string;
   responseMessage: string;
 }
@@ -435,6 +441,8 @@ export class ElectricityService {
   /**
    * Real-time Customer & Meter Validation:
    * Queries provider gateway to confirm consumer identity, address, meter validity, and balance.
+   * If validation fails on requested meter type (e.g. Prepaid), automatically probes the alternate
+   * meter type (e.g. Postpaid) to detect meter type mismatch and guide the customer seamlessly.
    */
   public async validateMeter(input: {
     disco: DiscoCode;
@@ -458,8 +466,11 @@ export class ElectricityService {
         ? config.monnifyPrepaidProductCode
         : (config.monnifyPostpaidProductCode || config.monnifyPrepaidProductCode);
 
+    let primaryResult: any = null;
+    let primaryError: Error | null = null;
+
     try {
-      const result = await this.router.validateCustomer({
+      primaryResult = await this.router.validateCustomer({
         serviceType: ServiceType.ELECTRICITY,
         paymentCode,
         customerId: cleanMeter,
@@ -472,45 +483,140 @@ export class ElectricityService {
           monnifyProductCode,
         },
       });
+    } catch (err) {
+      primaryError = err as Error;
+    }
+
+    // 1. If primary validation succeeded
+    if (primaryResult?.isValid) {
+      const effectiveMinKobo =
+        primaryResult.minimumAmountKobo !== undefined ? primaryResult.minimumAmountKobo : config.minKobo;
+      const effectiveMaxKobo =
+        primaryResult.maximumAmountKobo !== undefined ? primaryResult.maximumAmountKobo : config.maxKobo;
 
       return {
-        isValid: result.isValid,
+        isValid: true,
+        isMismatch: false,
         meterNumber: cleanMeter,
         disco: input.disco,
         discoName: config.name,
         meterType: input.meterType,
-        customerName: result.customerName || undefined,
-        customerAddress: result.customerAddress || undefined,
+        customerName: primaryResult.customerName || undefined,
+        customerAddress: primaryResult.customerAddress || undefined,
         accountNumber: cleanMeter,
-        outstandingBalanceKobo: result.outstandingBalanceKobo
-          ? result.outstandingBalanceKobo.toString()
+        outstandingBalanceKobo: primaryResult.outstandingBalanceKobo
+          ? primaryResult.outstandingBalanceKobo.toString()
           : undefined,
-        outstandingBalanceNaira: result.outstandingBalanceKobo
-          ? koboToNaira(result.outstandingBalanceKobo)
+        outstandingBalanceNaira: primaryResult.outstandingBalanceKobo
+          ? koboToNaira(primaryResult.outstandingBalanceKobo)
           : undefined,
-        minimumAmountKobo: config.minKobo.toString(),
-        minimumAmountNaira: koboToNaira(config.minKobo),
-        responseCode: result.responseCode,
-        responseMessage: result.responseMessage,
-      };
-    } catch (err) {
-      return {
-        isValid: false,
-        meterNumber: cleanMeter,
-        disco: input.disco,
-        discoName: config.name,
-        meterType: input.meterType,
-        minimumAmountKobo: config.minKobo.toString(),
-        minimumAmountNaira: koboToNaira(config.minKobo),
-        responseCode: 'VALIDATION_FAILED',
-        responseMessage: (err as Error).message || 'Meter verification failed.',
+        minimumAmountKobo: effectiveMinKobo.toString(),
+        minimumAmountNaira: koboToNaira(effectiveMinKobo),
+        maximumAmountKobo: effectiveMaxKobo.toString(),
+        maximumAmountNaira: koboToNaira(effectiveMaxKobo),
+        responseCode: primaryResult.responseCode,
+        responseMessage: primaryResult.responseMessage,
       };
     }
+
+    // 2. Primary validation failed or threw error. Probe alternate meter type to detect mismatch.
+    const alternateType =
+      input.meterType === ElectricityMeterType.PREPAID
+        ? ElectricityMeterType.POSTPAID
+        : ElectricityMeterType.PREPAID;
+
+    let altPaymentCode = '';
+    try {
+      altPaymentCode = this.getPaymentCode(input.disco, alternateType);
+    } catch {
+      altPaymentCode = '';
+    }
+
+    if (altPaymentCode) {
+      try {
+        const altMonnifyBiller =
+          alternateType === ElectricityMeterType.PREPAID
+            ? config.monnifyPrepaidBillerCode
+            : (config.monnifyPostpaidBillerCode || config.monnifyPrepaidBillerCode);
+        const altMonnifyProduct =
+          alternateType === ElectricityMeterType.PREPAID
+            ? config.monnifyPrepaidProductCode
+            : (config.monnifyPostpaidProductCode || config.monnifyPrepaidProductCode);
+
+        const altResult = await this.router.validateCustomer({
+          serviceType: ServiceType.ELECTRICITY,
+          paymentCode: altPaymentCode,
+          customerId: cleanMeter,
+          amountKobo: input.amountKobo,
+          metadata: {
+            disco: input.disco,
+            meterType: alternateType,
+            interswitchPaymentCode: altPaymentCode,
+            monnifyBillerCode: altMonnifyBiller,
+            monnifyProductCode: altMonnifyProduct,
+          },
+        });
+
+        if (altResult?.isValid) {
+          const altMinKobo =
+            altResult.minimumAmountKobo !== undefined ? altResult.minimumAmountKobo : config.minKobo;
+          const altMaxKobo =
+            altResult.maximumAmountKobo !== undefined ? altResult.maximumAmountKobo : config.maxKobo;
+          const detectedLabel = alternateType === ElectricityMeterType.PREPAID ? 'Prepaid' : 'Postpaid';
+          const requestedLabel = input.meterType === ElectricityMeterType.PREPAID ? 'Prepaid' : 'Postpaid';
+          const suggestionDiscoId = `${input.disco}_${alternateType}`;
+
+          return {
+            isValid: false,
+            isMismatch: true,
+            requestedMeterType: input.meterType,
+            detectedMeterType: alternateType,
+            suggestionDiscoId,
+            meterNumber: cleanMeter,
+            disco: input.disco,
+            discoName: config.name,
+            meterType: input.meterType,
+            customerName: altResult.customerName || undefined,
+            customerAddress: altResult.customerAddress || undefined,
+            accountNumber: cleanMeter,
+            outstandingBalanceKobo: altResult.outstandingBalanceKobo
+              ? altResult.outstandingBalanceKobo.toString()
+              : undefined,
+            outstandingBalanceNaira: altResult.outstandingBalanceKobo
+              ? koboToNaira(altResult.outstandingBalanceKobo)
+              : undefined,
+            minimumAmountKobo: altMinKobo.toString(),
+            minimumAmountNaira: koboToNaira(altMinKobo),
+            maximumAmountKobo: altMaxKobo.toString(),
+            maximumAmountNaira: koboToNaira(altMaxKobo),
+            responseCode: 'METER_TYPE_MISMATCH',
+            responseMessage: `Notice: This meter is registered as ${detectedLabel} with ${config.name}, not ${requestedLabel}. Switch to ${detectedLabel} to proceed.`,
+          };
+        }
+      } catch {
+        // Alternate probe failed, proceed with original validation result
+      }
+    }
+
+    // 3. Fallback: Return original validation error
+    return {
+      isValid: false,
+      isMismatch: false,
+      meterNumber: cleanMeter,
+      disco: input.disco,
+      discoName: config.name,
+      meterType: input.meterType,
+      minimumAmountKobo: config.minKobo.toString(),
+      minimumAmountNaira: koboToNaira(config.minKobo),
+      responseCode: primaryResult?.responseCode || 'VALIDATION_FAILED',
+      responseMessage:
+        primaryResult?.responseMessage || primaryError?.message || 'Meter verification failed.',
+    };
   }
 
   /**
    * End-to-end Electricity Token Vending / Bill Payment:
-   * 1. Meter & Amount Range Validation (min ₦500, max ₦100,000)
+   * 1. Meter & Amount Range Validation (min ₦100, max ₦100,000)
    * 2. Idempotency Lock Check
    * 3. Concurrency-safe Wallet Balance Debit (with 1.2% merchant discount)
    * 4. Multi-provider Vending with Automatic Failover

@@ -264,12 +264,17 @@ export class InterswitchProvider implements ProviderAdapter {
 
     const customer = data.Customers?.[0];
     const isSuccess = data.ResponseCode === '90000' && customer?.ResponseCode === '90000';
+    const minimumAmountKobo =
+      customer?.Amount !== undefined && customer.Amount > 0
+        ? BigInt(customer.Amount)
+        : undefined;
 
     return {
       isValid: isSuccess,
       customerId: request.customerId,
       customerName: customer?.FullName || undefined,
       surchargeKobo: customer?.Surcharge !== undefined ? BigInt(customer.Surcharge) : undefined,
+      minimumAmountKobo,
       responseCode: customer?.ResponseCode || data.ResponseCode || 'UNKNOWN',
       responseMessage: isSuccess ? 'Customer validated successfully' : 'Customer validation failed',
       rawResponse: data as Record<string, unknown>,

@@ -138,7 +138,7 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
     });
 
     it('handles provider meter validation failure gracefully', async () => {
-      (mockRouter.validateCustomer as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      (mockRouter.validateCustomer as ReturnType<typeof vi.fn>).mockResolvedValue({
         isValid: false,
         customerId: '00000000000',
         responseCode: '70012',
@@ -152,7 +152,67 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
       });
 
       expect(result.isValid).toBe(false);
+      expect(result.isMismatch).toBe(false);
       expect(result.responseMessage).toBe('Meter number not found on IBEDC database');
+    });
+
+    it('detects meter type mismatch and suggests switching meter type', async () => {
+      (mockRouter.validateCustomer as ReturnType<typeof vi.fn>)
+        // First call (PREPAID): fails
+        .mockResolvedValueOnce({
+          isValid: false,
+          customerId: '45077162324',
+          responseCode: '70071',
+          responseMessage: 'Account is postpaid',
+        })
+        // Second call (POSTPAID alternate probe): succeeds
+        .mockResolvedValueOnce({
+          isValid: true,
+          customerId: '45077162324',
+          customerName: 'Sogbein Olusola Samson',
+          customerAddress: '9, ORI OSOKO COMMUNITY, OLOKUTA OYO',
+          minimumAmountKobo: 10000n, // ₦100
+          responseCode: '90000',
+          responseMessage: 'Customer Validated Successfully',
+        });
+
+      const result = await service.validateMeter({
+        disco: DiscoCode.IBEDC,
+        meterNumber: '45077162324',
+        meterType: ElectricityMeterType.PREPAID,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.isMismatch).toBe(true);
+      expect(result.requestedMeterType).toBe(ElectricityMeterType.PREPAID);
+      expect(result.detectedMeterType).toBe(ElectricityMeterType.POSTPAID);
+      expect(result.suggestionDiscoId).toBe('IBEDC_POSTPAID');
+      expect(result.customerName).toBe('Sogbein Olusola Samson');
+      expect(result.minimumAmountNaira).toBe(100);
+      expect(result.responseMessage).toContain('Switch to Postpaid');
+    });
+
+    it('extracts dynamic minimum amount from provider validation response', async () => {
+      (mockRouter.validateCustomer as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        isValid: true,
+        customerId: '45077162324',
+        customerName: 'Sogbein Olusola Samson',
+        customerAddress: '9, ORI OSOKO COMMUNITY, OLOKUTA OYO',
+        minimumAmountKobo: 100n, // ₦1 from Monnify minAmount
+        maximumAmountKobo: 100000000n,
+        responseCode: '0',
+        responseMessage: 'Success',
+      });
+
+      const result = await service.validateMeter({
+        disco: DiscoCode.IBEDC,
+        meterNumber: '45077162324',
+        meterType: ElectricityMeterType.PREPAID,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.minimumAmountKobo).toBe('100');
+      expect(result.minimumAmountNaira).toBe(1);
     });
   });
 

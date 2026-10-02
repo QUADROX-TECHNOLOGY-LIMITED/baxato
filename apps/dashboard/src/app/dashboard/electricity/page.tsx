@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ShieldCheck,
   RotateCw,
+  ArrowRightLeft,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -341,8 +342,21 @@ interface VerifiedMeter {
   customerName?: string;
   customerAddress?: string;
   outstandingBalanceNaira?: number;
+  minimumAmountNaira?: number;
   disco: string;
   meterType: MeterType;
+}
+
+export interface MeterMismatch {
+  isMismatch: boolean;
+  meterNumber: string;
+  requestedMeterType: MeterType;
+  detectedMeterType: MeterType;
+  suggestionDiscoId?: string;
+  customerName?: string;
+  customerAddress?: string;
+  minimumAmountNaira?: number;
+  responseMessage: string;
 }
 
 export default function ElectricityPage() {
@@ -372,6 +386,7 @@ export default function ElectricityPage() {
   // Verification State
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedMeter, setVerifiedMeter] = useState<VerifiedMeter | null>(null);
+  const [meterMismatch, setMeterMismatch] = useState<MeterMismatch | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastVerifiedKeyRef = useRef<string>('');
@@ -529,6 +544,7 @@ export default function ElectricityPage() {
 
     setIsVerifying(true);
     setVerificationError(null);
+    setMeterMismatch(null);
     setSubmitError(null);
 
     try {
@@ -557,20 +573,47 @@ export default function ElectricityPage() {
         return;
       }
 
-      if (!res.ok || !data?.success || !data?.data?.isValid) {
+      if (!res.ok || !data?.success) {
         throw new Error(
-          data?.data?.responseMessage ||
           data?.error?.message ||
           'Meter verification failed. Please check the meter number with the selected provider.'
         );
       }
 
       const info = data.data;
+
+      // Handle Meter Type Mismatch (e.g. user entered a Postpaid meter on Prepaid page, or vice versa)
+      if (info?.isMismatch && info?.detectedMeterType) {
+        setMeterMismatch({
+          isMismatch: true,
+          meterNumber: info.meterNumber || cleanMeter,
+          requestedMeterType: info.requestedMeterType || targetDisco.meterType,
+          detectedMeterType: info.detectedMeterType,
+          suggestionDiscoId: info.suggestionDiscoId,
+          customerName: info.customerName,
+          customerAddress: info.customerAddress,
+          minimumAmountNaira: typeof info.minimumAmountNaira === 'number' ? info.minimumAmountNaira : undefined,
+          responseMessage: info.responseMessage || `This meter is registered as ${info.detectedMeterType}.`,
+        });
+        setVerifiedMeter(null);
+        setVerificationError(null);
+        return;
+      }
+
+      if (!info?.isValid) {
+        throw new Error(
+          info?.responseMessage ||
+          'Meter verification failed. Please check the meter number with the selected provider.'
+        );
+      }
+
+      setMeterMismatch(null);
       setVerifiedMeter({
         meterNumber: info.meterNumber || cleanMeter,
         customerName: info.customerName || undefined,
         customerAddress: info.customerAddress || undefined,
         outstandingBalanceNaira: info.outstandingBalanceNaira || 0,
+        minimumAmountNaira: typeof info.minimumAmountNaira === 'number' ? info.minimumAmountNaira : targetDisco.minAmountNaira,
         disco: targetDisco.shortName,
         meterType: targetDisco.meterType,
       });
@@ -578,9 +621,43 @@ export default function ElectricityPage() {
     } catch (err: any) {
       setVerificationError(err.message || 'Unable to verify meter with electricity company.');
       setVerifiedMeter(null);
+      setMeterMismatch(null);
       lastVerifiedKeyRef.current = '';
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  // Switch to the detected meter type when mismatch is identified
+  const handleSwitchMeterType = (mismatch: MeterMismatch) => {
+    const targetDisco = discosList.find(
+      (d) => d.code === selectedDisco?.code && d.meterType === mismatch.detectedMeterType,
+    );
+
+    if (!targetDisco) return;
+
+    setSelectedOptionId(targetDisco.id);
+    setMeterNumber(mismatch.meterNumber);
+    setMeterMismatch(null);
+    setVerificationError(null);
+    setSubmitError(null);
+
+    setVerifiedMeter({
+      meterNumber: mismatch.meterNumber,
+      customerName: mismatch.customerName,
+      customerAddress: mismatch.customerAddress,
+      outstandingBalanceNaira: 0,
+      minimumAmountNaira: mismatch.minimumAmountNaira || targetDisco.minAmountNaira,
+      disco: targetDisco.shortName,
+      meterType: mismatch.detectedMeterType,
+    });
+
+    lastVerifiedKeyRef.current = `${targetDisco.id}:${mismatch.meterNumber}`;
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('provider', targetDisco.id);
+      window.history.pushState({}, '', url.toString());
     }
   };
 
@@ -590,6 +667,7 @@ export default function ElectricityPage() {
     setMeterNumber('');
     setAmount('');
     setVerifiedMeter(null);
+    setMeterMismatch(null);
     setVerificationError(null);
     setSubmitError(null);
     lastVerifiedKeyRef.current = '';
@@ -607,6 +685,7 @@ export default function ElectricityPage() {
     setMeterNumber('');
     setAmount('');
     setVerifiedMeter(null);
+    setMeterMismatch(null);
     setVerificationError(null);
     setSubmitError(null);
     lastVerifiedKeyRef.current = '';
@@ -623,6 +702,7 @@ export default function ElectricityPage() {
     const clean = val.replace(/\D/g, '').slice(0, 13);
     setMeterNumber(clean);
     setVerifiedMeter(null);
+    setMeterMismatch(null);
     setVerificationError(null);
     setSubmitError(null);
     lastVerifiedKeyRef.current = '';
@@ -649,6 +729,20 @@ export default function ElectricityPage() {
     }
     executeMeterVerification(meterNumber, selectedDisco);
   };
+
+  // Dynamic minimum amount (from provider verification if returned, otherwise DISCO catalog default)
+  const dynamicMinAmount = useMemo(() => {
+    if (verifiedMeter?.minimumAmountNaira && verifiedMeter.minimumAmountNaira > 0) {
+      return verifiedMeter.minimumAmountNaira;
+    }
+    return selectedDisco?.minAmountNaira || 500;
+  }, [verifiedMeter, selectedDisco]);
+
+  // Dynamic preset chips respecting dynamic minimum amount
+  const dynamicPresetAmounts = useMemo(() => {
+    const base = [dynamicMinAmount, 500, 1000, 2000, 5000, 10000, 20000];
+    return Array.from(new Set(base.filter((v) => v >= dynamicMinAmount))).sort((a, b) => a - b).slice(0, 6);
+  }, [dynamicMinAmount]);
 
   // Calculations
   const numericAmount = parseFloat(amount) || 0;
@@ -680,8 +774,8 @@ export default function ElectricityPage() {
       return;
     }
 
-    if (numericAmount < selectedDisco.minAmountNaira) {
-      setSubmitError(`Minimum purchase amount for ${selectedDisco.shortName} is ₦${selectedDisco.minAmountNaira.toLocaleString()}.`);
+    if (numericAmount < dynamicMinAmount) {
+      setSubmitError(`Minimum purchase amount for ${selectedDisco.shortName} is ₦${dynamicMinAmount.toLocaleString()}.`);
       return;
     }
 
@@ -1126,6 +1220,50 @@ export default function ElectricityPage() {
                       </div>
                     )}
 
+                    {/* METER TYPE MISMATCH NOTICE & 1-CLICK SWITCH BUTTON */}
+                    {meterMismatch && selectedDisco && (
+                      <div className="p-3.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 text-xs space-y-2.5 animate-in fade-in duration-200 shadow-xs">
+                        <div className="flex items-start gap-2.5">
+                          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-extrabold text-amber-900 dark:text-amber-300 text-xs flex items-center gap-1.5">
+                              <span>Meter Type Mismatch</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                                {meterMismatch.detectedMeterType}
+                              </span>
+                            </h4>
+                            <p className="text-[11px] text-amber-800/90 dark:text-amber-400/90 mt-0.5 leading-relaxed">
+                              {meterMismatch.customerName ? (
+                                <>
+                                  Meter <span className="font-mono font-bold">#{meterMismatch.meterNumber}</span> is registered as a{' '}
+                                  <strong className="underline">{meterMismatch.detectedMeterType}</strong> account under{' '}
+                                  {selectedDisco.shortName} ({meterMismatch.customerName}).
+                                </>
+                              ) : (
+                                meterMismatch.responseMessage
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-1 flex items-center justify-between gap-2 border-t border-amber-500/20">
+                          <span className="text-[10px] text-amber-700/80 dark:text-amber-400/70">
+                            Switching preserves your meter number & customer verification
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchMeterType(meterMismatch)}
+                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                          >
+                            <span>Switch to {selectedDisco.shortName} {meterMismatch.detectedMeterType}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* VERIFIED ACCOUNT INFORMATION CARD (Real customer name returned from DISCO) */}
                     {verifiedMeter && (
                       <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1.5 animate-in zoom-in-95 duration-200">
@@ -1163,15 +1301,15 @@ export default function ElectricityPage() {
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                         Recharge Amount (₦)
                       </label>
-                      <span className="text-[10px] text-slate-400">Min: ₦{selectedDisco.minAmountNaira.toLocaleString()}</span>
+                      <span className="text-[10px] text-slate-400">Min: ₦{dynamicMinAmount.toLocaleString()}</span>
                     </div>
 
                     <input
                       type="number"
-                      placeholder={`Enter amount in ₦ (Min: ₦${selectedDisco.minAmountNaira.toLocaleString()})`}
+                      placeholder={`Enter amount in ₦ (Min: ₦${dynamicMinAmount.toLocaleString()})`}
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      min={selectedDisco.minAmountNaira}
+                      min={dynamicMinAmount}
                       max={100000}
                       className="w-full h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm font-extrabold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                       required
@@ -1179,7 +1317,7 @@ export default function ElectricityPage() {
 
                     {/* Preset Chips (Purely optional shortcuts - NONE auto-selected on load) */}
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-0.5">
-                      {PRESET_AMOUNTS.map((val) => (
+                      {dynamicPresetAmounts.map((val) => (
                         <button
                           key={val}
                           type="button"
@@ -1242,7 +1380,7 @@ export default function ElectricityPage() {
                   {/* SUBMIT BUTTON */}
                   <button
                     type="submit"
-                    disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < selectedDisco.minAmountNaira || amountToDebit > walletBalance}
+                    disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < dynamicMinAmount || amountToDebit > walletBalance}
                     className="w-full h-11 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
                   >
                     {isSubmitting ? (

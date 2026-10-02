@@ -408,12 +408,28 @@ export class MonnifyProvider implements ProviderAdapter {
           ? BigInt(Math.round(Number(resBody.outstandingBalance) * 100))
           : undefined;
 
+    const minimumAmountKobo =
+      resBody.minAmount !== undefined && resBody.minAmount !== null && !isNaN(Number(resBody.minAmount))
+        ? BigInt(Math.round(Number(resBody.minAmount) * 100))
+        : resBody.minimumAmount !== undefined && resBody.minimumAmount !== null && !isNaN(Number(resBody.minimumAmount))
+          ? BigInt(Math.round(Number(resBody.minimumAmount) * 100))
+          : undefined;
+
+    const maximumAmountKobo =
+      resBody.maxAmount !== undefined && resBody.maxAmount !== null && !isNaN(Number(resBody.maxAmount))
+        ? BigInt(Math.round(Number(resBody.maxAmount) * 100))
+        : resBody.maximumAmount !== undefined && resBody.maximumAmount !== null && !isNaN(Number(resBody.maximumAmount))
+          ? BigInt(Math.round(Number(resBody.maximumAmount) * 100))
+          : undefined;
+
     return {
       isValid: isSuccess,
       customerId: request.customerId,
       customerName,
       customerAddress,
       outstandingBalanceKobo,
+      minimumAmountKobo,
+      maximumAmountKobo,
       responseCode: data?.responseCode || String(res.status),
       responseMessage:
         data?.responseMessage || (isSuccess ? 'Validated successfully' : 'Validation failed'),

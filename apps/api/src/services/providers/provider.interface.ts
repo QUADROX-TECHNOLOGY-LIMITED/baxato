@@ -23,6 +23,8 @@ export interface CustomerValidationResult {
   surchargeKobo?: bigint;
   minimumAmountKobo?: bigint;
   maximumAmountKobo?: bigint;
+  isMismatch?: boolean;
+  detectedMeterType?: 'PREPAID' | 'POSTPAID';
   responseCode: string;
   responseMessage: string;
   rawResponse?: Record<string, unknown>;
