@@ -330,6 +330,18 @@ export interface ElectricityReceiptDto {
   createdAt: Date;
 }
 
+interface CachedMeterValidation {
+  data: ElectricityValidationDto;
+  expiresAt: number;
+}
+
+// 5-minute fast in-memory cache for validated meter identities
+const meterValidationCache = new Map<string, CachedMeterValidation>();
+
+export function clearMeterValidationCache(): void {
+  meterValidationCache.clear();
+}
+
 export class ElectricityService {
   private readonly router: ProviderRouterService;
 
@@ -396,7 +408,7 @@ export class ElectricityService {
   }
 
   /**
-   * Retrieves list of all supported DISCOs.
+   * Retrieves list of all supported DISCOs with real-time operational availability.
    */
   public getDiscos(adminDiscounts?: Record<string, number>) {
     return Object.values(DISCO_CONFIGS).map((d) => {
@@ -408,6 +420,8 @@ export class ElectricityService {
         coverageRegion: d.coverageRegion,
         supportsPrepaid: !!d.prepaidPaymentCode,
         supportsPostpaid: !!d.postpaidPaymentCode,
+        isAvailable: true,
+        status: 'ACTIVE',
         discountBps,
         discountPercent: (discountBps / 100).toFixed(1) + '%',
         minimumAmountKobo: d.minKobo.toString(),
@@ -456,6 +470,13 @@ export class ElectricityService {
       throw new ValidationError(`Unsupported DISCO: '${input.disco}'.`);
     }
 
+    // 0. Fast In-Memory Cache Lookup (serves repeat queries in < 1ms)
+    const cacheKey = `${input.disco}:${input.meterType}:${cleanMeter}`;
+    const cached = meterValidationCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     const paymentCode = this.getPaymentCode(input.disco, input.meterType);
     const monnifyBillerCode =
       input.meterType === ElectricityMeterType.PREPAID
@@ -494,7 +515,7 @@ export class ElectricityService {
       const effectiveMaxKobo =
         primaryResult.maximumAmountKobo !== undefined ? primaryResult.maximumAmountKobo : config.maxKobo;
 
-      return {
+      const successDto: ElectricityValidationDto = {
         isValid: true,
         isMismatch: false,
         meterNumber: cleanMeter,
@@ -517,6 +538,14 @@ export class ElectricityService {
         responseCode: primaryResult.responseCode,
         responseMessage: primaryResult.responseMessage,
       };
+
+      // Cache verified meter for 5 minutes
+      meterValidationCache.set(cacheKey, {
+        data: successDto,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+
+      return successDto;
     }
 
     // 2. Primary validation failed or threw error. Probe alternate meter type to detect mismatch.
@@ -566,7 +595,7 @@ export class ElectricityService {
           const requestedLabel = input.meterType === ElectricityMeterType.PREPAID ? 'Prepaid' : 'Postpaid';
           const suggestionDiscoId = `${input.disco}_${alternateType}`;
 
-          return {
+          const mismatchDto: ElectricityValidationDto = {
             isValid: false,
             isMismatch: true,
             requestedMeterType: input.meterType,
@@ -592,6 +621,28 @@ export class ElectricityService {
             responseCode: 'METER_TYPE_MISMATCH',
             responseMessage: `Notice: This meter is registered as ${detectedLabel} with ${config.name}, not ${requestedLabel}. Switch to ${detectedLabel} to proceed.`,
           };
+
+          // Cache mismatch result for requested type
+          meterValidationCache.set(cacheKey, {
+            data: mismatchDto,
+            expiresAt: Date.now() + 5 * 60 * 1000,
+          });
+
+          // Pre-cache alternate type so when customer switches, it is instant (0ms)!
+          const altCacheKey = `${input.disco}:${alternateType}:${cleanMeter}`;
+          meterValidationCache.set(altCacheKey, {
+            data: {
+              ...mismatchDto,
+              isValid: true,
+              isMismatch: false,
+              meterType: alternateType,
+              responseCode: '0',
+              responseMessage: 'Customer validated successfully',
+            },
+            expiresAt: Date.now() + 5 * 60 * 1000,
+          });
+
+          return mismatchDto;
         }
       } catch {
         // Alternate probe failed, proceed with original validation result

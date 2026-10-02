@@ -8,7 +8,7 @@ import {
   ValidationError,
   AppError,
 } from '@baxato/common';
-import { ElectricityService, DISCO_CONFIGS } from '../../src/services/electricity.service';
+import { ElectricityService, DISCO_CONFIGS, clearMeterValidationCache } from '../../src/services/electricity.service';
 import { inMemoryDb } from '../test-utils/mock-db';
 import type { ProviderRouterService } from '../../src/services/providers';
 
@@ -27,6 +27,7 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
 
   beforeEach(() => {
     inMemoryDb.reset();
+    clearMeterValidationCache();
 
     // Setup tenant business & main wallet with ₦50,000.00 (5,000,000 Kobo)
     inMemoryDb.businesses.push({

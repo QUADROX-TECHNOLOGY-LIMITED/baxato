@@ -56,7 +56,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'IBEDC_POSTPAID',
@@ -67,7 +67,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ibedc.png',
     coverage: 'Oyo, Ogun, Osun, Kwara, Niger, Kogi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 2. IKEDC
@@ -80,7 +80,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'IKEDC_POSTPAID',
@@ -91,7 +91,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ikedc.png',
     coverage: 'Lagos Mainland, Ikorodu, Ikeja, Oshodi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 3. EKEDC
@@ -104,7 +104,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'EKEDC_POSTPAID',
@@ -115,7 +115,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/ekedc.png',
     coverage: 'Lagos Island, Lekki, VI, Apapa, Festac',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 4. AEDC
@@ -128,7 +128,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'AEDC_POSTPAID',
@@ -139,7 +139,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aedc.png',
     coverage: 'FCT Abuja, Nasarawa, Kogi, Niger',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 5. EEDC
@@ -152,7 +152,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'EEDC_POSTPAID',
@@ -163,7 +163,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/eedc.png',
     coverage: 'Enugu, Abia, Imo, Anambra, Ebonyi',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 6. PHED
@@ -176,7 +176,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'PHED_POSTPAID',
@@ -187,7 +187,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/phed.png',
     coverage: 'Rivers, Bayelsa, Cross River, Akwa Ibom',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 7. KEDCO
@@ -200,7 +200,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'KEDCO_POSTPAID',
@@ -211,7 +211,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kedco.png',
     coverage: 'Kano, Katsina, Jigawa',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 8. KAEDCO
@@ -224,7 +224,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'KAEDCO_POSTPAID',
@@ -235,7 +235,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/kaedco.png',
     coverage: 'Kaduna, Kebbi, Sokoto, Zamfara',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 9. JED
@@ -248,7 +248,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'JED_POSTPAID',
@@ -259,7 +259,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/jed.png',
     coverage: 'Plateau, Bauchi, Benue, Gombe',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 10. BEDC
@@ -272,7 +272,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'BEDC_POSTPAID',
@@ -283,7 +283,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/bedc.png',
     coverage: 'Edo, Delta, Ondo, Ekiti',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 11. YEDC
@@ -296,7 +296,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'YEDC_POSTPAID',
@@ -307,7 +307,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/yedc.png',
     coverage: 'Adamawa, Borno, Taraba, Yobe',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 
   // 12. ABA
@@ -320,7 +320,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
   {
     id: 'ABA_POSTPAID',
@@ -331,7 +331,7 @@ const ALL_DISCOS: DiscoOption[] = [
     logo: '/logos/electricity/aba.png',
     coverage: 'Aba Ringfenced Area, Abia State',
     discountBps: 0,
-    minAmountNaira: 500,
+    minAmountNaira: 100,
   },
 ];
 
@@ -390,6 +390,7 @@ export default function ElectricityPage() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastVerifiedKeyRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Purchase & Modals State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -495,6 +496,9 @@ export default function ElectricityPage() {
       if (autoVerifyTimeoutRef.current) {
         clearTimeout(autoVerifyTimeoutRef.current);
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, []);
 
@@ -542,6 +546,13 @@ export default function ElectricityPage() {
       return;
     }
 
+    // Cancel any previous in-flight verification request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsVerifying(true);
     setVerificationError(null);
     setMeterMismatch(null);
@@ -565,9 +576,14 @@ export default function ElectricityPage() {
           meterNumber: cleanMeter,
           meterType: targetDisco.meterType,
         }),
+        signal: controller.signal,
       });
 
       const data = await res.json().catch(() => null);
+
+      if (controller.signal.aborted) {
+        return;
+      }
 
       if (handleAuthResponse(res, data)) {
         return;
@@ -592,7 +608,7 @@ export default function ElectricityPage() {
           suggestionDiscoId: info.suggestionDiscoId,
           customerName: info.customerName,
           customerAddress: info.customerAddress,
-          minimumAmountNaira: typeof info.minimumAmountNaira === 'number' ? info.minimumAmountNaira : undefined,
+          minimumAmountNaira: typeof info.minimumAmountNaira === 'number' && info.minimumAmountNaira > 1 ? info.minimumAmountNaira : undefined,
           responseMessage: info.responseMessage || `This meter is registered as ${info.detectedMeterType}.`,
         });
         setVerifiedMeter(null);
@@ -613,18 +629,23 @@ export default function ElectricityPage() {
         customerName: info.customerName || undefined,
         customerAddress: info.customerAddress || undefined,
         outstandingBalanceNaira: info.outstandingBalanceNaira || 0,
-        minimumAmountNaira: typeof info.minimumAmountNaira === 'number' ? info.minimumAmountNaira : targetDisco.minAmountNaira,
+        minimumAmountNaira: typeof info.minimumAmountNaira === 'number' && info.minimumAmountNaira > 1 ? info.minimumAmountNaira : undefined,
         disco: targetDisco.shortName,
         meterType: targetDisco.meterType,
       });
       lastVerifiedKeyRef.current = verificationKey;
     } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
       setVerificationError(err.message || 'Unable to verify meter with electricity company.');
       setVerifiedMeter(null);
       setMeterMismatch(null);
       lastVerifiedKeyRef.current = '';
     } finally {
-      setIsVerifying(false);
+      if (!controller.signal.aborted) {
+        setIsVerifying(false);
+      }
     }
   };
 
@@ -647,7 +668,7 @@ export default function ElectricityPage() {
       customerName: mismatch.customerName,
       customerAddress: mismatch.customerAddress,
       outstandingBalanceNaira: 0,
-      minimumAmountNaira: mismatch.minimumAmountNaira || targetDisco.minAmountNaira,
+      minimumAmountNaira: mismatch.minimumAmountNaira && mismatch.minimumAmountNaira > 1 ? mismatch.minimumAmountNaira : undefined,
       disco: targetDisco.shortName,
       meterType: mismatch.detectedMeterType,
     });
@@ -707,16 +728,23 @@ export default function ElectricityPage() {
     setSubmitError(null);
     lastVerifiedKeyRef.current = '';
 
+    // Cancel in-flight validation on typing
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsVerifying(false);
+
     if (autoVerifyTimeoutRef.current) {
       clearTimeout(autoVerifyTimeoutRef.current);
       autoVerifyTimeoutRef.current = null;
     }
 
-    // Auto-verify triggered upon reaching standard Nigerian STS meter limit (11 digits, or 10-13)
-    if (selectedDisco && (clean.length === 11 || (clean.length >= 10 && clean.length <= 13))) {
+    // Auto-verify triggered upon reaching standard Nigerian STS meter limit (11 digits) with 600ms debounce
+    if (selectedDisco && clean.length === 11) {
       autoVerifyTimeoutRef.current = setTimeout(() => {
         executeMeterVerification(clean, selectedDisco);
-      }, 350);
+      }, 600);
     }
   };
 
@@ -730,19 +758,27 @@ export default function ElectricityPage() {
     executeMeterVerification(meterNumber, selectedDisco);
   };
 
-  // Dynamic minimum amount (from provider verification if returned, otherwise DISCO catalog default)
-  const dynamicMinAmount = useMemo(() => {
-    if (verifiedMeter?.minimumAmountNaira && verifiedMeter.minimumAmountNaira > 0) {
+  // Confirmed minimum amount ONLY when returned and verified from provider (> ₦1)
+  const confirmedMinAmount = useMemo(() => {
+    if (verifiedMeter?.minimumAmountNaira && verifiedMeter.minimumAmountNaira > 1) {
       return verifiedMeter.minimumAmountNaira;
     }
-    return selectedDisco?.minAmountNaira || 500;
-  }, [verifiedMeter, selectedDisco]);
+    return null;
+  }, [verifiedMeter]);
 
-  // Dynamic preset chips respecting dynamic minimum amount
+  const effectiveMinAmount = useMemo(() => {
+    return confirmedMinAmount && confirmedMinAmount > 1 ? confirmedMinAmount : 100;
+  }, [confirmedMinAmount]);
+
+  // Dynamic preset chips respecting confirmed minimum amount (if any)
   const dynamicPresetAmounts = useMemo(() => {
-    const base = [dynamicMinAmount, 500, 1000, 2000, 5000, 10000, 20000];
-    return Array.from(new Set(base.filter((v) => v >= dynamicMinAmount))).sort((a, b) => a - b).slice(0, 6);
-  }, [dynamicMinAmount]);
+    const base = [500, 1000, 2000, 5000, 10000, 20000];
+    if (confirmedMinAmount && confirmedMinAmount > 1) {
+      const combined = [confirmedMinAmount, ...base.filter((v) => v >= confirmedMinAmount)];
+      return Array.from(new Set(combined)).sort((a, b) => a - b).slice(0, 6);
+    }
+    return base;
+  }, [confirmedMinAmount]);
 
   // Calculations
   const numericAmount = parseFloat(amount) || 0;
@@ -774,8 +810,8 @@ export default function ElectricityPage() {
       return;
     }
 
-    if (numericAmount < dynamicMinAmount) {
-      setSubmitError(`Minimum purchase amount for ${selectedDisco.shortName} is ₦${dynamicMinAmount.toLocaleString()}.`);
+    if (numericAmount < effectiveMinAmount) {
+      setSubmitError(`Minimum purchase amount is ₦${effectiveMinAmount.toLocaleString()}.`);
       return;
     }
 
@@ -1301,15 +1337,23 @@ export default function ElectricityPage() {
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                         Recharge Amount (₦)
                       </label>
-                      <span className="text-[10px] text-slate-400">Min: ₦{dynamicMinAmount.toLocaleString()}</span>
+                      {confirmedMinAmount && confirmedMinAmount > 1 ? (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                          Min: ₦{confirmedMinAmount.toLocaleString()}
+                        </span>
+                      ) : null}
                     </div>
 
                     <input
                       type="number"
-                      placeholder={`Enter amount in ₦ (Min: ₦${dynamicMinAmount.toLocaleString()})`}
+                      placeholder={
+                        confirmedMinAmount && confirmedMinAmount > 1
+                          ? `Enter amount in ₦ (Min: ₦${confirmedMinAmount.toLocaleString()})`
+                          : 'Enter recharge amount in ₦'
+                      }
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      min={dynamicMinAmount}
+                      min={confirmedMinAmount && confirmedMinAmount > 1 ? confirmedMinAmount : 100}
                       max={100000}
                       className="w-full h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm font-extrabold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                       required
@@ -1380,7 +1424,7 @@ export default function ElectricityPage() {
                   {/* SUBMIT BUTTON */}
                   <button
                     type="submit"
-                    disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < dynamicMinAmount || amountToDebit > walletBalance}
+                    disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < effectiveMinAmount || amountToDebit > walletBalance}
                     className="w-full h-11 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
                   >
                     {isSubmitting ? (

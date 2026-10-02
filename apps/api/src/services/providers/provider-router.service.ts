@@ -271,39 +271,30 @@ export class ProviderRouterService {
     const primaryProvider = this.getProvider(primaryName);
     let lastResult: CustomerValidationResult | null = null;
 
-    // If primary is available, try it
+    // 1. If primary is available, try it
     if (primaryBreaker.isAvailable()) {
       try {
         const result = await primaryBreaker.execute(() =>
           primaryProvider.validateCustomer(request),
         );
-        if (result.isValid) return result;
-        lastResult = result;
+        // Return definitive validation result directly without adding a 3.5s+ secondary provider cascade
+        return result;
       } catch (_error) {
-        // If failover is disabled or no fallback, throw error
+        // Only if primary threw an error (timeout, network down, 5xx) do we fall back
         if (!allowFailover || !fallbackName) {
           throw _error;
         }
       }
     }
 
-    // Failover to secondary provider if configured
+    // 2. Failover to secondary provider if primary threw an error or breaker is OPEN
     if (allowFailover && fallbackName) {
       const fallbackBreaker = this.getCircuitBreaker(fallbackName);
       const fallbackProvider = this.getProvider(fallbackName);
 
-      try {
-        return await fallbackBreaker.execute(() =>
-          fallbackProvider.validateCustomer(request),
-        );
-      } catch (fallbackError) {
-        if (lastResult) return lastResult;
-        throw fallbackError;
-      }
-    }
-
-    if (lastResult) {
-      return lastResult;
+      return await fallbackBreaker.execute(() =>
+        fallbackProvider.validateCustomer(request),
+      );
     }
 
     throw new AppError(
