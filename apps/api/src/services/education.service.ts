@@ -340,7 +340,7 @@ export class EducationService {
         isValid: result.isValid,
         examBody: ExamBody.JAMB,
         candidateId: cleanId,
-        candidateName: result.customerName || 'MUSA IBRAHIM CHUKWUEMEKA',
+        candidateName: result.isValid ? (result.customerName || undefined) : undefined,
         session: '2026/2027 Academic Session',
         packageCode: pkg?.packageCode || 'JAMB_DIRECT_ENTRY',
         responseCode: result.responseCode,

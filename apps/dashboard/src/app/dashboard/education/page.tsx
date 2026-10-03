@@ -773,50 +773,6 @@ export default function EducationPage() {
             </div>
           </div>
 
-          {/* Quick Stats Highlights */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Live Gateway
-                </h4>
-                <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  Interswitch SVA v5 & Vault
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Merchant Margins
-                </h4>
-                <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  Dynamic Wholesale Pricing
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                <Layers className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Fulfillment Speed
-                </h4>
-                <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                  &lt; 1.5s Instant Decryption
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* Council Filter Tabs & Search */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-3">
