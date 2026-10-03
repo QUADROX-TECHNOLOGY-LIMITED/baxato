@@ -75,10 +75,10 @@ export const EXAM_PACKAGES: Record<string, ExamPackageConfig> = {
     serviceType: ExamServiceType.UTME_NO_MOCK,
     name: 'JAMB 2026 UTME PIN (Without Mock)',
     description: '10-digit profile code required. Standard UTME registration PIN without Mock examination.',
-    billerId: '3588',
-    paymentCode: '04358801',
-    baseCostKobo: 770000n, // ₦7,700.00 wholesale
-    suggestedPriceKobo: 800000n, // ₦8,000.00 suggested retail
+    billerId: '3573',
+    paymentCode: '04357305',
+    baseCostKobo: 720000n, // ₦7,200.00 exact Orion face cost
+    suggestedPriceKobo: 750000n, // ₦7,500.00 suggested retail
     defaultMarkupKobo: 30000n, // ₦300.00 configurable markup
     requiresValidation: true,
     identifierType: 'PROFILE_CODE',
