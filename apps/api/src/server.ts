@@ -24,6 +24,7 @@ import { dataRoutes } from './routes/services/data.js';
 import { cableRoutes } from './routes/services/cable.js';
 import { electricityRoutes } from './routes/services/electricity.js';
 import { educationRoutes } from './routes/services/education.js';
+import { transactionRoutes } from './routes/transactions.js';
 
 export function buildServer(): FastifyInstance {
   const app = Fastify({
@@ -229,6 +230,8 @@ export function buildServer(): FastifyInstance {
   app.register(electricityRoutes, { prefix: '/v1/services/electricity' });
   app.register(educationRoutes, { prefix: '/services/education' });
   app.register(educationRoutes, { prefix: '/v1/services/education' });
+  app.register(transactionRoutes, { prefix: '/transactions' });
+  app.register(transactionRoutes, { prefix: '/v1/transactions' });
 
   return app;
 }

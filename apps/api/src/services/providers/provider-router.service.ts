@@ -87,11 +87,20 @@ export class ProviderRouterService {
       allowFailover: false,
     });
 
+    // Cable TV is direct on Interswitch Quickteller Orion (Biller 104, 459, 240)
+    // Monnify VAS bills-payment is unprovisioned on Cable TV and rejects validation.
+    this.routingConfigs.set(ServiceType.CABLE_TV, {
+      serviceType: ServiceType.CABLE_TV,
+      strategy: ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
+      primaryProvider: ProviderName.INTERSWITCH,
+      fallbackProvider: ProviderName.MONNIFY,
+      allowFailover: true,
+    });
+
     // Telecom & Utilities default: Monnify primary, Interswitch fallback
     const dualServices: ServiceType[] = [
       ServiceType.AIRTIME,
       ServiceType.DATA,
-      ServiceType.CABLE_TV,
       ServiceType.ELECTRICITY,
     ];
 
@@ -232,8 +241,13 @@ export class ProviderRouterService {
         const pool = explicitlyEnabled.length > 0 ? explicitlyEnabled : eligibleProviders;
 
         if (pool.length > 0) {
-          // The provider marked is_primary = true in TablePlus is chosen first, otherwise the first in pool
-          const primaryCandidate = pool.find((p) => p.isPrimary) || pool[0]!;
+          // If in-memory strategy specifically designates a primaryProvider (e.g. INTERSWITCH for CABLE_TV),
+          // prioritize it if it exists in the active eligible pool.
+          const primaryCandidate =
+            pool.find((p) => p.name === config?.primaryProvider && p.isPrimary) ||
+            pool.find((p) => p.name === config?.primaryProvider) ||
+            pool.find((p) => p.isPrimary) ||
+            pool[0]!;
           primaryName = primaryCandidate.name as ProviderName;
 
           // Fallback provider is another eligible provider in pool (or eligibleProviders)
@@ -277,8 +291,12 @@ export class ProviderRouterService {
         const result = await primaryBreaker.execute(() =>
           primaryProvider.validateCustomer(request),
         );
-        // Return definitive validation result directly without adding a 3.5s+ secondary provider cascade
-        return result;
+        // If primary succeeded and validated customer, return directly
+        if (result.isValid) {
+          return result;
+        }
+        // Save result in case fallback also fails or isn't available
+        lastResult = result;
       } catch (_error) {
         // Only if primary threw an error (timeout, network down, 5xx) do we fall back
         if (!allowFailover || !fallbackName) {
@@ -287,14 +305,26 @@ export class ProviderRouterService {
       }
     }
 
-    // 2. Failover to secondary provider if primary threw an error or breaker is OPEN
+    // 2. Failover to secondary provider if primary threw an error, breaker is OPEN, or returned isValid === false
     if (allowFailover && fallbackName) {
       const fallbackBreaker = this.getCircuitBreaker(fallbackName);
       const fallbackProvider = this.getProvider(fallbackName);
 
-      return await fallbackBreaker.execute(() =>
-        fallbackProvider.validateCustomer(request),
-      );
+      try {
+        const fallbackResult = await fallbackBreaker.execute(() =>
+          fallbackProvider.validateCustomer(request),
+        );
+        return fallbackResult;
+      } catch (fallbackError) {
+        if (lastResult) {
+          return lastResult;
+        }
+        throw fallbackError;
+      }
+    }
+
+    if (lastResult) {
+      return lastResult;
     }
 
     throw new AppError(

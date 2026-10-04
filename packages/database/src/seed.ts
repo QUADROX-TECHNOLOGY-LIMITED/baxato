@@ -36,7 +36,7 @@ export async function seedProviders() {
           airtime: true,
           data: true,
           electricity: true,
-          cable: true,
+          cable: false,
           exam_pin: false,
         },
       },
@@ -78,7 +78,7 @@ export async function seedProviders() {
               airtime: true,
               data: true,
               electricity: true,
-              cable: true,
+              cable: false,
               exam_pin: false,
             },
           })

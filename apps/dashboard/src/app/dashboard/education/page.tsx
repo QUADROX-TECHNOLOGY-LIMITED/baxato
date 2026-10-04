@@ -27,6 +27,7 @@ import {
   EyeOff,
   Clock,
   AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -343,12 +344,6 @@ export default function EducationPage() {
   const [receiptData, setReceiptData] = useState<ExamPinReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // History State
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
-  const [historySearch, setHistorySearch] = useState('');
-  const [visiblePinsMap, setVisiblePinsMap] = useState<Record<string, boolean>>({});
-
   const isVerified = kycStatus === 'VERIFIED';
 
   // Load Wallets
@@ -368,13 +363,11 @@ export default function EducationPage() {
 
       if (handleAuthResponse(res, data)) return;
 
-      if (res.ok && data?.success && Array.isArray(data.data)) {
-        const primary = data.data.find(
-          (w: { walletType: string; isPrimary: boolean }) =>
-            w.walletType === 'COLLECTION_ACCOUNT' || w.isPrimary,
-        );
-        const balKobo = primary ? BigInt(primary.balanceKobo || '0') : 0n;
-        setWalletBalance(Number(balKobo) / 100);
+      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
+        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
+        if (main) {
+          setWalletBalance(main.balanceNaira || Number(main.balanceKobo || '0') / 100);
+        }
       }
     } catch {
       // Fallback
@@ -405,27 +398,6 @@ export default function EducationPage() {
     }
   };
 
-  // Load Transaction History
-  const loadHistory = async () => {
-    try {
-      setIsLoadingHistory(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken) return;
-
-      const res = await fetch('/api/services/education/history?limit=25&offset=0', {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && data.data?.transactions) {
-        setHistoryItems(data.data.transactions);
-      }
-    } catch {
-      // History fallback
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
   // Initialize
   useEffect(() => {
     const user = getStoredUser();
@@ -437,7 +409,6 @@ export default function EducationPage() {
 
     loadWallets();
     loadPackages();
-    loadHistory();
   }, []);
 
   // Active Selected Package
@@ -647,10 +618,9 @@ export default function EducationPage() {
 
         setIsReceiptModalOpen(true);
 
-        // Update local wallet balance and reload history
+        // Update local wallet balance
         setWalletBalance((prev) => Math.max(0, prev - totalCostNaira));
         loadWallets();
-        loadHistory();
 
         // Reset inputs
         setCandidateId('');
@@ -679,10 +649,6 @@ export default function EducationPage() {
 
   const formatNaira = (val: number) =>
     `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const togglePinVisibility = (id: string) => {
-    setVisiblePinsMap((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
@@ -744,30 +710,40 @@ export default function EducationPage() {
               </div>
             </div>
 
-            {/* Wallet Balance Widget */}
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 px-4 py-3 rounded-xl self-start md:self-auto">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <Wallet className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-                  Settlement Balance
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-base sm:text-lg text-slate-900 dark:text-white">
-                    {isLoadingBalance ? 'Loading...' : formatNaira(walletBalance)}
+            {/* Wallet Balance & History Action Widgets */}
+            <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+              <Link
+                href="/dashboard/ledger?service=EXAM_PIN"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0A1220] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition shadow-xs"
+              >
+                <FileText className="w-4 h-4 text-emerald-500" />
+                <span>Exam PIN History</span>
+              </Link>
+
+              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 px-4 py-2.5 rounded-xl">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                    Settlement Balance
                   </span>
-                  <button
-                    onClick={() => {
-                      setIsRefreshing(true);
-                      loadWallets();
-                    }}
-                    disabled={isRefreshing}
-                    title="Refresh Balance"
-                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-base sm:text-lg text-slate-900 dark:text-white">
+                      {isLoadingBalance ? 'Loading...' : formatNaira(walletBalance)}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setIsRefreshing(true);
+                        loadWallets();
+                      }}
+                      disabled={isRefreshing}
+                      title="Refresh Balance"
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1126,181 +1102,7 @@ export default function EducationPage() {
             </div>
           </div>
 
-          {/* VENDED PINS & TRANSACTION AUDIT HISTORY */}
-          <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                  Exam PIN Vending History
-                </h3>
-              </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Filter by ref, phone or profile..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-            </div>
-
-            {isLoadingHistory ? (
-              <div className="py-12 text-center text-slate-400 text-xs">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-500" />
-                Loading exam vending history...
-              </div>
-            ) : historyItems.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs space-y-1">
-                <GraduationCap className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700" />
-                <p className="font-semibold text-slate-700 dark:text-slate-300">No Exam PINs vended yet</p>
-                <p>Purchased JAMB, WAEC, NECO, and NABTEB PINs will appear here with serials.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-medium">
-                      <th className="py-3 px-3">Date</th>
-                      <th className="py-3 px-3">Package / Council</th>
-                      <th className="py-3 px-3">Candidate ID</th>
-                      <th className="py-3 px-3">Vended e-PIN</th>
-                      <th className="py-3 px-3">Amount</th>
-                      <th className="py-3 px-3">Status</th>
-                      <th className="py-3 px-3 text-right">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
-                    {historyItems
-                      .filter((item) => {
-                        if (!historySearch.trim()) return true;
-                        const s = historySearch.toLowerCase();
-                        return (
-                          item.reference?.toLowerCase().includes(s) ||
-                          item.recipient?.toLowerCase().includes(s) ||
-                          item.metadata?.packageName?.toLowerCase().includes(s) ||
-                          item.metadata?.examBody?.toLowerCase().includes(s)
-                        );
-                      })
-                      .map((item) => {
-                        const isVisible = visiblePinsMap[item.id];
-                        const pins = item.pins || item.metadata?.pins || [];
-                        const primaryPin = pins[0]?.pin || 'ENCRYPTED';
-                        const serialNum = pins[0]?.serialNumber;
-
-                        return (
-                          <tr
-                            key={item.id}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition"
-                          >
-                            <td className="py-3 px-3 text-slate-500 font-sans whitespace-nowrap">
-                              {new Date(item.createdAt).toLocaleDateString('en-NG', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </td>
-
-                            <td className="py-3 px-3 font-sans">
-                              <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                                {item.metadata?.packageName || item.type}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                Ref: {item.reference}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3 font-mono font-semibold text-slate-700 dark:text-slate-300">
-                              {item.recipient}
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                  {isVisible ? primaryPin : '•••• •••• ••••'}
-                                </span>
-                                {pins.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => togglePinVisibility(item.id)}
-                                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
-                                    title={isVisible ? 'Hide PIN' : 'Reveal PIN'}
-                                  >
-                                    {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                  </button>
-                                )}
-                              </div>
-                              {serialNum && (
-                                <span className="text-[10px] text-slate-400 block font-mono">
-                                  SN: {serialNum}
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3 font-mono font-bold text-slate-900 dark:text-white">
-                              {formatNaira(item.amountNaira)}
-                            </td>
-
-                            <td className="py-3 px-3 font-sans">
-                              {item.status === 'SUCCESSFUL' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                  <CheckCircle2 className="w-3 h-3" /> Success
-                                </span>
-                              ) : item.status === 'PROCESSING' || item.status === 'PENDING' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                  <Clock className="w-3 h-3" /> Pending
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                                  <AlertTriangle className="w-3 h-3" /> Failed
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3 text-right font-sans">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setReceiptData({
-                                    transactionId: item.id,
-                                    reference: item.reference,
-                                    clientReference: item.clientReference,
-                                    providerReference: item.providerReference,
-                                    status: item.status,
-                                    packageCode: item.metadata?.packageCode || 'EXAM_PIN',
-                                    packageName: item.metadata?.packageName || item.type,
-                                    examBody: item.metadata?.examBody || 'EXAM',
-                                    councilLogo: getCouncilLogo(item.metadata?.examBody || ''),
-                                    portalUrl: item.metadata?.portalUrl,
-                                    instructions: item.metadata?.instructions,
-                                    candidateId: item.recipient,
-                                    candidateName: item.metadata?.candidateName,
-                                    pins: pins,
-                                    quantity: item.metadata?.quantity || 1,
-                                    baseCostNaira: item.amountNaira,
-                                    merchantMarkupNaira: item.feeNaira || 0,
-                                    amountDebitedNaira: item.amountNaira,
-                                    date: item.createdAt,
-                                  });
-                                  setIsReceiptModalOpen(true);
-                                }}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition"
-                              >
-                                View Slip
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </main>
       </div>
 

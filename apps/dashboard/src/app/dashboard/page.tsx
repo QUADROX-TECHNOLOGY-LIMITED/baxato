@@ -113,11 +113,47 @@ export default function DashboardOverviewPage() {
     } catch {}
 
     loadWallets();
+    loadRecentTransactions();
   }, []);
+
+  const loadRecentTransactions = async () => {
+    try {
+      const authToken = getStoredAuthToken();
+      if (!authToken) return;
+      const res = await fetch('/api/transactions?limit=6', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && Array.isArray(data.data?.transactions)) {
+        setTransactions(
+          data.data.transactions.map((t: any) => ({
+            id: t.id,
+            reference: t.reference,
+            service:
+              t.metadata?.packageName ||
+              t.metadata?.operatorName ||
+              t.metadata?.disco ||
+              t.metadata?.network ||
+              t.serviceType,
+            recipient: t.recipient,
+            amount: t.amountNaira || 0,
+            status: t.status,
+            date: new Date(t.createdAt).toLocaleDateString('en-NG', {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          })),
+        );
+      }
+    } catch {}
+  };
 
   const handleRefresh = () => {
     setIsRefreshing(true);
     loadWallets();
+    loadRecentTransactions();
     setTimeout(() => setIsRefreshing(false), 700);
   };
 
