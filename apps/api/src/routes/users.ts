@@ -139,6 +139,10 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.id, userId))
       .returning();
 
+    if (!updatedUser) {
+      throw new NotFoundError('User not found');
+    }
+
     await auditService.log({
       userId: updatedUser.id,
       businessId: request.user?.businessId,
