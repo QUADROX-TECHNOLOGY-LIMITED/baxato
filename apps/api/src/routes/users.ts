@@ -9,6 +9,7 @@ import {
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { authenticate } from '../plugins/auth.plugin';
+import { auditService } from '../services/audit.service';
 
 export const userRoutes: FastifyPluginAsync = async (fastify) => {
   // Apply authentication hook to all user routes
@@ -138,6 +139,21 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.id, userId))
       .returning();
 
+    await auditService.log({
+      userId: updatedUser.id,
+      businessId: request.user?.businessId,
+      action: 'PROFILE_UPDATED',
+      resourceType: 'USER',
+      resourceId: updatedUser.id,
+      ipAddress: request.ip,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: {
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        middleName: updatedUser.middleName,
+      },
+    });
+
     return reply.status(200).send(
       createSuccessResponse(
         {
@@ -148,4 +164,54 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
       ),
     );
   });
+
+  /**
+   * GET /users/me/security
+   * Returns security telemetry, last login date, active session data, and recent security audit logs.
+   */
+  fastify.get('/me/security', async (request, reply) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      throw new ValidationError('User ID required');
+    }
+
+    const [user] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      throw new NotFoundError('User profile');
+    }
+
+    const lastLogin = await auditService.getLastLoginForUser(userId);
+    const auditLogs = await auditService.getLogsForUser(userId, 20);
+
+    const clientIp =
+      request.ip ||
+      (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      '127.0.0.1';
+    const userAgent = (request.headers['user-agent'] as string) || 'Unknown Browser';
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          lastLoginAt: lastLogin?.createdAt || user.createdAt,
+          currentSession: {
+            ipAddress: clientIp,
+            userAgent,
+            lastActiveAt: new Date().toISOString(),
+          },
+          auditLogs,
+        },
+        request.id,
+      ),
+    );
+  });
 };
+

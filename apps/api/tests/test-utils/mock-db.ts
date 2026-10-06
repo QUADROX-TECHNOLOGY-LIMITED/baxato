@@ -160,6 +160,19 @@ export interface MockWebhookDelivery {
   createdAt: Date;
 }
 
+export interface MockAuditLog {
+  id: string;
+  userId?: string | null;
+  businessId?: string | null;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  changes?: Record<string, unknown>;
+  createdAt: Date;
+}
+
 export class InMemoryTestDb {
   public users: MockUser[] = [];
   public businesses: MockBusiness[] = [];
@@ -172,6 +185,7 @@ export class InMemoryTestDb {
   public examPins: MockExamPin[] = [];
   public apiKeys: MockApiKey[] = [];
   public webhookDeliveries: MockWebhookDelivery[] = [];
+  public auditLogs: MockAuditLog[] = [];
 
   public reset() {
     this.users = [];
@@ -185,6 +199,7 @@ export class InMemoryTestDb {
     this.examPins = [];
     this.apiKeys = [];
     this.webhookDeliveries = [];
+    this.auditLogs = [];
   }
 }
 
@@ -221,7 +236,7 @@ function isBusinessMembersTable(t: unknown): boolean {
   if (typeof t === 'object' && t !== null) {
     const obj = t as Record<string, unknown>;
     return (
-      ('businessId' in obj && 'userId' in obj && !('serviceType' in obj) && !('service_type' in obj)) ||
+      ('businessId' in obj && 'userId' in obj && !('serviceType' in obj) && !('service_type' in obj) && !('action' in obj)) ||
       obj._name === 'business_members' ||
       obj.name === 'business_members'
     );
@@ -326,6 +341,19 @@ function isWebhookDeliveriesTable(t: unknown): boolean {
       'next_retry_at' in obj ||
       obj._name === 'webhook_deliveries' ||
       obj.name === 'webhook_deliveries'
+    );
+  }
+  return false;
+}
+
+function isAuditLogsTable(t: unknown): boolean {
+  if (t === 'audit_logs' || t === 'auditLogs') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      ('action' in obj && ('resourceType' in obj || 'resource_type' in obj || 'userId' in obj || 'user_id' in obj)) ||
+      obj._name === 'audit_logs' ||
+      obj.name === 'audit_logs'
     );
   }
   return false;
@@ -545,6 +573,23 @@ export function createMockDatabase() {
         inMemoryDb.businessMembers.push(newMember);
         return [newMember];
       }
+
+      if ('action' in u && ('resourceType' in u || 'resource_type' in u)) {
+        const aud: MockAuditLog = {
+          id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          userId: u.userId ? String(u.userId) : null,
+          businessId: u.businessId ? String(u.businessId) : null,
+          action: String(u.action),
+          resourceType: String(u.resourceType || u.resource_type),
+          resourceId: String(u.resourceId || u.resource_id),
+          ipAddress: u.ipAddress ? String(u.ipAddress) : null,
+          userAgent: u.userAgent ? String(u.userAgent) : null,
+          changes: (u.changes as Record<string, unknown>) || {},
+          createdAt: (u.createdAt as Date) || new Date(),
+        };
+        inMemoryDb.auditLogs.push(aud);
+        return [aud];
+      }
     }
 
     return [];
@@ -659,6 +704,18 @@ export function createMockDatabase() {
       nextRetryAt: 'next_retry_at',
       responseStatus: 'response_status',
       responseBody: 'response_body',
+      createdAt: 'created_at',
+    },
+    auditLogs: {
+      id: 'id',
+      userId: 'user_id',
+      businessId: 'business_id',
+      action: 'action',
+      resourceType: 'resource_type',
+      resourceId: 'resource_id',
+      ipAddress: 'ip_address',
+      userAgent: 'user_agent',
+      changes: 'changes',
       createdAt: 'created_at',
     },
     providers: {
@@ -898,6 +955,29 @@ export function createMockDatabase() {
                 }
               }
               return inMemoryDb.webhookDeliveries;
+            }
+
+            if (isAuditLogsTable(table)) {
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'user_id' || col === 'userid') return inMemoryDb.auditLogs.filter((a) => a.userId === p.val);
+                  if (col === 'action') return inMemoryDb.auditLogs.filter((a) => a.action === p.val);
+                }
+                if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
+                  return inMemoryDb.auditLogs.filter((a) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if ((col === 'user_id' || col === 'userid') && a.userId !== c.val) return false;
+                      if (col === 'action' && a.action !== c.val) return false;
+                    }
+                    return true;
+                  });
+                }
+              }
+              return inMemoryDb.auditLogs;
             }
 
             if (isProvidersTable(table)) {

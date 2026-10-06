@@ -57,6 +57,21 @@ export const updateUserProfileSchema = z.object({
 
 export type UpdateUserProfileInput = z.infer<typeof updateUserProfileSchema>;
 
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
+export type ChangePasswordRequestInput = z.infer<typeof changePasswordRequestSchema>;
+
+export const changePasswordConfirmSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+  otp: z.string().length(6, 'Confirmation code must be exactly 6 digits'),
+});
+
+export type ChangePasswordConfirmInput = z.infer<typeof changePasswordConfirmSchema>;
+
 export interface AuthSessionUser {
   id: string;
   email: string;

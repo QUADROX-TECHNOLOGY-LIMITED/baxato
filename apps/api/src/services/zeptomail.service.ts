@@ -214,6 +214,86 @@ export class ZeptoMailService {
 
     return this.sendEmail([{ email: toEmail, name }], subject, html);
   }
+
+  /**
+   * Helper to retrieve active password change OTP for testing or dev mode
+   */
+  public getActivePasswordChangeOtp(email: string): string | undefined {
+    return this.otpStore.get(`pwd:${email.toLowerCase().trim()}`)?.code;
+  }
+
+  /**
+   * Dispatches a secure 6-digit confirmation code via ZeptoMail for password change confirmation.
+   */
+  public async sendPasswordChangeOtp(
+    email: string,
+    name?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const normalized = email.toLowerCase().trim();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    this.otpStore.set(`pwd:${normalized}`, { code, expiresAt });
+
+    const subject = `${code} is your BAXATO password change confirmation code`;
+    const recipientName = name || 'Merchant';
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; padding: 24px; color: #0B1220; margin: 0;">
+  <div style="max-width: 520px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="padding: 24px; text-align: center; border-bottom: 1px solid #E2E8F0; background-color: #FFFFFF;">
+      <h2 style="color: #126BEB; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">BAXATO</h2>
+      <p style="margin: 4px 0 0 0; font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 1px;">Security & Account Protection</p>
+    </div>
+    <div style="padding: 32px 28px; text-align: left;">
+      <h3 style="margin-top: 0; font-size: 16px; color: #0F172A;">Password Change Confirmation</h3>
+      <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+        Hello ${recipientName},<br />
+        A request was submitted to change your BAXATO merchant account password. To authorize this change, please enter the following 6-digit confirmation code in your dashboard settings:
+      </p>
+      <div style="margin: 28px 0; background: #0F172A; border-radius: 8px; padding: 18px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38BDF8; text-align: center;">
+        ${code}
+      </div>
+      <p style="font-size: 13px; color: #64748B; line-height: 1.5;">
+        This security code expires in <strong>10 minutes</strong>. If you did not initiate this request, your account credentials may be compromised. Please sign in and secure your account immediately.
+      </p>
+      <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />
+      <p style="font-size: 11px; color: #94A3B8; margin-bottom: 0; text-align: center;">
+        &copy; 2026 XATO TECHNOLOGIES LIMITED. Automated security notification.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    return this.sendEmail([{ email: normalized, name: recipientName }], subject, html);
+  }
+
+  /**
+   * Validates password change confirmation code.
+   */
+  public verifyPasswordChangeOtp(email: string, code: string): { valid: boolean; reason?: string } {
+    const normalized = email.toLowerCase().trim();
+    const key = `pwd:${normalized}`;
+    const record = this.otpStore.get(key);
+    if (!record) {
+      return { valid: false, reason: 'No password confirmation code requested for this email.' };
+    }
+    if (Date.now() > record.expiresAt) {
+      this.otpStore.delete(key);
+      return { valid: false, reason: 'Confirmation code has expired. Please request a new code.' };
+    }
+    if (record.code !== code.trim()) {
+      return { valid: false, reason: 'Invalid confirmation code. Please check your email.' };
+    }
+    this.otpStore.delete(key);
+    return { valid: true };
+  }
 }
 
 export const zeptoMailService = new ZeptoMailService();

@@ -5,6 +5,8 @@ import {
   sendPhoneOtpSchema,
   verifyPhoneOtpSchema,
   loginUserSchema,
+  changePasswordRequestSchema,
+  changePasswordConfirmSchema,
   createSuccessResponse,
   ValidationError,
   ConflictError,
@@ -18,7 +20,7 @@ import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { env } from '@baxato/config';
 import { whatsAppService } from '../services/whatsapp.service';
 import { zeptoMailService } from '../services/zeptomail.service';
-import { generateToken } from '../plugins/auth.plugin';
+import { generateToken, authenticate } from '../plugins/auth.plugin';
 import { auditService } from '../services/audit.service';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -476,4 +478,162 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       ),
     );
   });
+
+  /**
+   * POST /auth/change-password/request
+   * Validates current password and dispatches 6-digit confirmation code to registered email via ZeptoMail.
+   */
+  fastify.post(
+    '/change-password/request',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const parseResult = changePasswordRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        throw new ValidationError(
+          parseResult.error.errors.map((e) => e.message).join(', '),
+        );
+      }
+
+      const { currentPassword, newPassword } = parseResult.data;
+
+      if (currentPassword === newPassword) {
+        throw new ValidationError('New password must be different from your current password.');
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user || !user.passwordHash) {
+        throw new AuthenticationError('User account not found or password not set.');
+      }
+
+      const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isCurrentValid) {
+        throw new ValidationError('Current password is incorrect.');
+      }
+
+      const emailResult = await zeptoMailService.sendPasswordChangeOtp(
+        user.email,
+        user.firstName,
+      );
+
+      const activeOtp = zeptoMailService.getActivePasswordChangeOtp(user.email);
+      if (env.NODE_ENV !== 'production') {
+        request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Password change confirmation code dispatched');
+      }
+
+      if (!emailResult.success) {
+        request.log.error(
+          { email: user.email, error: emailResult.error },
+          'Failed to dispatch password change confirmation email',
+        );
+      }
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'PASSWORD_CHANGE_REQUESTED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { email: user.email },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            sent: true,
+            message: 'A 6-digit confirmation code was sent to your registered email address.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/change-password/confirm
+   * Validates current password + email OTP code and commits new password hash.
+   */
+  fastify.post(
+    '/change-password/confirm',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const parseResult = changePasswordConfirmSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        throw new ValidationError(
+          parseResult.error.errors.map((e) => e.message).join(', '),
+        );
+      }
+
+      const { currentPassword, newPassword, otp } = parseResult.data;
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user || !user.passwordHash) {
+        throw new AuthenticationError('User account not found.');
+      }
+
+      const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isCurrentValid) {
+        throw new ValidationError('Current password is incorrect.');
+      }
+
+      const verification = zeptoMailService.verifyPasswordChangeOtp(user.email, otp);
+      if (!verification.valid) {
+        throw new ValidationError(
+          verification.reason || 'Invalid or expired confirmation code.',
+        );
+      }
+
+      const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+      await db
+        .update(users)
+        .set({
+          passwordHash: newPasswordHash,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'PASSWORD_CHANGED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { email: user.email },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            updated: true,
+            message: 'Password updated successfully. Please use your new password next time you sign in.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
 };
