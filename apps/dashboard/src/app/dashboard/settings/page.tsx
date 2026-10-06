@@ -24,6 +24,8 @@ import {
   Calendar,
   Check,
   History,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -57,6 +59,8 @@ interface SecurityData {
   auditLogs: AuditLogItem[];
 }
 
+type SettingsTab = 'profile' | 'security' | 'sessions' | 'audit';
+
 export default function SettingsPage() {
   const router = useRouter();
 
@@ -69,7 +73,7 @@ export default function SettingsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions'>('profile');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
   // User Profile Form State
   const [userId, setUserId] = useState('');
@@ -83,6 +87,7 @@ export default function SettingsPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [copiedUserId, setCopiedUserId] = useState(false);
 
   // Password Change State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -130,7 +135,6 @@ export default function SettingsPage() {
         setKycStatus(u.kycStatus || 'UNVERIFIED');
         if (u.firstName) setMerchantName(u.firstName);
 
-        // Update local session storage
         try {
           const stored = getStoredUser() || ({} as any);
           localStorage.setItem(
@@ -148,19 +152,21 @@ export default function SettingsPage() {
         if (u.nin) {
           const rawNin = String(u.nin);
           setNinMasked(
-            rawNin.length >= 6
-              ? `${rawNin.slice(0, 3)}*****${rawNin.slice(-3)}`
-              : 'Verified',
+            rawNin.length > 4
+              ? `${rawNin.slice(0, 3)}****${rawNin.slice(-3)}`
+              : '***Verified***',
           );
         }
-        if (u.dob) setDob(u.dob);
+        if (u.dateOfBirth) {
+          setDob(u.dateOfBirth);
+        }
       }
     } catch {
-      // Fallback to cached profile if network fails
+      // Graceful fallback to cached storage
     }
   };
 
-  // Load Security & Audit Logs Data
+  // Load Security & Session Data
   const loadSecurityData = async () => {
     try {
       setIsLoadingSecurity(true);
@@ -178,33 +184,28 @@ export default function SettingsPage() {
         setSecurityData(data.data);
       }
     } catch {
+      // Quiet fail on security telemetry fetch
     } finally {
       setIsLoadingSecurity(false);
     }
   };
 
+  // Bootstrap initial session
   useEffect(() => {
-    const token = getStoredAuthToken();
-    if (!token) {
-      clearSessionAndRedirect('expired');
-      return;
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      if (storedUser.firstName) setFirstName(storedUser.firstName);
+      if (storedUser.lastName) setLastName(storedUser.lastName);
+      if (storedUser.email) setEmail(storedUser.email);
+      if (storedUser.phone) setPhoneNumber(storedUser.phone);
+      if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
+      if (storedUser.firstName) setMerchantName(storedUser.firstName);
     }
 
-    try {
-      const storedUser = getStoredUser();
-      const storedBiz = getStoredBusiness();
-      if (storedUser) {
-        if (storedUser.firstName) {
-          setMerchantName(storedUser.firstName);
-          setFirstName(storedUser.firstName);
-        }
-        if (storedUser.lastName) setLastName(storedUser.lastName);
-        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
-        if (storedUser.phone) setPhoneNumber(storedUser.phone);
-        if (storedUser.email) setEmail(storedUser.email);
-      }
-      if (storedBiz?.name) setBusinessName(storedBiz.name);
-    } catch {}
+    const storedBiz = getStoredBusiness();
+    if (storedBiz && storedBiz.name) {
+      setBusinessName(storedBiz.name);
+    }
 
     loadProfile();
     loadSecurityData();
@@ -212,20 +213,26 @@ export default function SettingsPage() {
 
   // OTP Countdown Timer
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (passwordStep === 'verify' && otpCountdown > 0) {
-      timer = setInterval(() => {
-        setOtpCountdown((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    }
+    if (passwordStep !== 'verify' || otpCountdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setOtpCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(timer);
   }, [passwordStep, otpCountdown]);
 
-  // Handle Profile Update
+  // Handle Save Profile
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfileErrorMsg('');
     setProfileSuccessMsg('');
+    setProfileErrorMsg('');
 
     if (!firstName.trim() || !lastName.trim()) {
       setProfileErrorMsg('First name and last name are required.');
@@ -258,9 +265,8 @@ export default function SettingsPage() {
       if (handleAuthResponse(res, data)) return;
 
       if (res.ok && data?.success) {
-        setProfileSuccessMsg('Profile details updated successfully.');
+        setProfileSuccessMsg('Profile updated successfully.');
         setMerchantName(firstName.trim());
-        // Update local storage
         try {
           const stored = getStoredUser() || ({} as any);
           localStorage.setItem(
@@ -273,6 +279,7 @@ export default function SettingsPage() {
           );
         } catch {}
         loadSecurityData();
+        setTimeout(() => setProfileSuccessMsg(''), 4000);
       } else {
         setProfileErrorMsg(data?.error?.message || 'Failed to update profile.');
       }
@@ -334,7 +341,7 @@ export default function SettingsPage() {
         setPasswordStep('verify');
         setOtpCountdown(600);
         setPassSuccessMsg(
-          'Confirmation code sent to your registered email. Enter the 6-digit code below to finalize.',
+          'Confirmation code sent to your email. Enter the 6-digit code below to finalize.',
         );
       } else {
         setPassErrorMsg(data?.error?.message || 'Failed to initiate password change.');
@@ -384,13 +391,13 @@ export default function SettingsPage() {
 
       if (res.ok && data?.success) {
         setPassSuccessMsg('Your password has been updated successfully.');
-        // Reset state
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setEmailOtp('');
         setPasswordStep('form');
         loadSecurityData();
+        setTimeout(() => setPassSuccessMsg(''), 5000);
       } else {
         setPassErrorMsg(data?.error?.message || 'Invalid or expired confirmation code.');
       }
@@ -407,19 +414,24 @@ export default function SettingsPage() {
     setIsRefreshing(false);
   };
 
+  const copyUserId = () => {
+    if (!userId) return;
+    navigator.clipboard.writeText(userId);
+    setCopiedUserId(true);
+    setTimeout(() => setCopiedUserId(false), 2000);
+  };
+
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Format Helper for Audit Dates
   const formatDateTime = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
-      return d.toLocaleString('en-NG', {
+      return d.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
       });
     } catch {
       return dateStr;
@@ -432,7 +444,6 @@ export default function SettingsPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // User-Agent Display Parser
   const parseUserAgent = (ua?: string | null) => {
     if (!ua) return 'Web Browser';
     if (ua.includes('Windows')) return 'Chrome on Windows';
@@ -441,11 +452,18 @@ export default function SettingsPage() {
     if (ua.includes('Android')) return 'Mobile Chrome (Android)';
     if (ua.includes('Linux')) return 'Chrome on Linux';
     if (ua === 'lightMyRequest') return 'BAXATO Security Engine';
-    return ua.slice(0, 32);
+    return ua.slice(0, 28);
   };
 
+  const tabs = [
+    { id: 'profile' as const, label: 'Profile & Identity' },
+    { id: 'security' as const, label: 'Security & Password' },
+    { id: 'sessions' as const, label: 'Active Sessions' },
+    { id: 'audit' as const, label: 'Audit Trail' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#040810] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-150">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-150">
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
@@ -469,670 +487,729 @@ export default function SettingsPage() {
         />
 
         {/* Page Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl w-full mx-auto space-y-6">
           {/* KYC Alert Banner (if unverified) */}
           {!isVerified && (
             <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
           )}
 
-          {/* Page Title & Breadcrumb Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800/80">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                <Link href="/dashboard" className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                  Dashboard
-                </Link>
-                <span>/</span>
-                <span className="text-[#126BEB] dark:text-[#38BDF8]">Account Settings</span>
+          {/* Page Header */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <Link href="/dashboard" className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors">
+                Dashboard
+              </Link>
+              <span>/</span>
+              <span className="text-slate-900 dark:text-slate-300 font-medium">Settings</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                  Account Settings
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Manage your personal identity, contact credentials, password, and security audit logs.
+                </p>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                Settings & Security
-              </h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Manage your personal identity, credentials, active sessions, and security audit trail.
-              </p>
-            </div>
 
-            {/* Quick Session Status Indicator */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 self-start sm:self-auto">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Session Authenticated</span>
+              {/* Verified Pill */}
+              {isVerified ? (
+                <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span>KYC Verified</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsKycModalOpen(true)}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50 hover:bg-amber-100 transition-colors"
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Verify Identity</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Navigation Segment Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 dark:bg-[#071120] rounded-xl border border-slate-200 dark:border-slate-800/80 w-full sm:w-fit">
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'profile'
-                  ? 'bg-white dark:bg-[#0E1B31] text-[#126BEB] dark:text-[#38BDF8] shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Profile & Identity</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'security'
-                  ? 'bg-white dark:bg-[#0E1B31] text-[#126BEB] dark:text-[#38BDF8] shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Key className="w-3.5 h-3.5" />
-              <span>Security & Password</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('sessions')}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                activeTab === 'sessions'
-                  ? 'bg-white dark:bg-[#0E1B31] text-[#126BEB] dark:text-[#38BDF8] shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Sessions & Activity Trail</span>
-            </button>
+          {/* Stripe-Style Sub-Navigation Tabs */}
+          <div className="border-b border-slate-200 dark:border-slate-800">
+            <nav className="flex space-x-8" aria-label="Tabs">
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`whitespace-nowrap py-3 px-1 border-b-2 text-xs sm:text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'border-slate-900 dark:border-white text-slate-900 dark:text-white font-semibold'
+                        : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
 
-          {/* TAB 1: PROFILE & IDENTITY */}
+          {/* ========================================================================= */}
+          {/* TAB 1: PROFILE & IDENTITY                                                 */}
+          {/* ========================================================================= */}
           {activeTab === 'profile' && (
-            <div className="space-y-6">
-              {/* Profile Details Card */}
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-                  <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      Personal Details
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Update your account name and identity information.
-                    </p>
-                  </div>
+            <div className="space-y-10 pt-2 pb-12">
+              {/* Section 1: Personal Details */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Personal Information
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Update your legal name as registered on official government identification.
+                  </p>
                 </div>
 
-                <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
-                  {profileSuccessMsg && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>{profileSuccessMsg}</span>
-                    </div>
-                  )}
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    <form onSubmit={handleSaveProfile}>
+                      <div className="p-6 space-y-5">
+                        {/* Avatar & User ID Row */}
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800/80">
+                          <div className="flex items-center gap-3.5">
+                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 font-semibold text-base">
+                              {firstName ? firstName.charAt(0).toUpperCase() : 'M'}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                {firstName} {lastName}
+                              </p>
+                              <p className="text-xs text-slate-400 font-mono">
+                                {email || 'merchant@baxato.ng'}
+                              </p>
+                            </div>
+                          </div>
 
-                  {profileErrorMsg && (
-                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{profileErrorMsg}</span>
-                    </div>
-                  )}
+                          {userId && (
+                            <button
+                              type="button"
+                              onClick={copyUserId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
+                              title="Click to copy User ID"
+                            >
+                              <span>{userId.slice(0, 10)}...</span>
+                              {copiedUserId ? (
+                                <Check className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        First Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        required
-                        placeholder="e.g. Mukhtar"
-                        className="w-full h-10 px-3 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                      />
-                    </div>
+                        {profileSuccessMsg && (
+                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>{profileSuccessMsg}</span>
+                          </div>
+                        )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        Last Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        required
-                        placeholder="e.g. Aliyu"
-                        className="w-full h-10 px-3 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                      />
-                    </div>
+                        {profileErrorMsg && (
+                          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400 text-xs font-medium flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{profileErrorMsg}</span>
+                          </div>
+                        )}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        Middle Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={middleName}
-                        onChange={(e) => setMiddleName(e.target.value)}
-                        placeholder="e.g. Babangida"
-                        className="w-full h-10 px-3 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                      />
-                    </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                              First Name
+                            </label>
+                            <input
+                              type="text"
+                              value={firstName}
+                              onChange={(e) => setFirstName(e.target.value)}
+                              required
+                              placeholder="First name"
+                              className="w-full h-9 px-3 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                              Last Name
+                            </label>
+                            <input
+                              type="text"
+                              value={lastName}
+                              onChange={(e) => setLastName(e.target.value)}
+                              required
+                              placeholder="Last name"
+                              className="w-full h-9 px-3 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                            Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={middleName}
+                            onChange={(e) => setMiddleName(e.target.value)}
+                            placeholder="Middle name"
+                            className="w-full h-9 px-3 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Card Action Footer */}
+                      <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Changes are logged to your security audit trail.
+                        </p>
+                        <button
+                          type="submit"
+                          disabled={isSavingProfile}
+                          className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSavingProfile ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Save changes</span>
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={isSavingProfile}
-                      className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#126BEB] text-white hover:bg-[#0F59C7] transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {isSavingProfile ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Saving Changes...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Save Changes</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                </div>
               </div>
 
-              {/* Verified Contact Credentials */}
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      Verified Contact Credentials
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Primary channels used for transaction alerts, password confirmations, and two-factor verifications.
-                    </p>
-                  </div>
+              {/* Section 2: Contact Channels */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Contact Channels
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Verified channels used for password recovery, two-factor authentication, and security notifications.
+                  </p>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Registered Email */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center mt-0.5">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <div>
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {/* Row 1: Email */}
+                    <div className="p-5 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                            Registered Email
+                          <span className="text-xs font-medium text-slate-900 dark:text-white">
+                            Email address
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
                             Verified
                           </span>
                         </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 break-all">
+                        <p className="text-sm font-mono text-slate-600 dark:text-slate-300">
                           {email || 'Loading...'}
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Primary email for receiving security confirmation codes.
+                        <p className="text-[11px] text-slate-400">
+                          Used to receive 6-digit confirmation codes for password changes.
                         </p>
                       </div>
-                    </div>
-                    <span title="Protected identity field">
-                      <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
-                    </span>
-                  </div>
 
-                  {/* Registered Phone */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center mt-0.5">
-                        <Smartphone className="w-4 h-4" />
-                      </div>
-                      <div>
+                      <span className="p-1.5 text-slate-400" title="Contact email is locked for security">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                    </div>
+
+                    {/* Row 2: Phone / WhatsApp */}
+                    <div className="p-5 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                            Phone Number
+                          <span className="text-xs font-medium text-slate-900 dark:text-white">
+                            Phone number
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
                             WhatsApp Verified
                           </span>
                         </div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                        <p className="text-sm font-mono text-slate-600 dark:text-slate-300">
                           {phoneNumber || 'Loading...'}
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-1">
+                        <p className="text-[11px] text-slate-400">
                           Verified via WhatsApp Cloud OTP during registration.
                         </p>
                       </div>
+
+                      <span className="p-1.5 text-slate-400" title="Verified phone is locked for security">
+                        <Lock className="w-4 h-4" />
+                      </span>
                     </div>
-                    <span title="Protected identity field">
-                      <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
-                    </span>
+
+                    {/* Card Footer */}
+                    <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        To update verified email or phone credentials, please submit an identity verification ticket to compliance.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* National Identity & KYC Card */}
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800/80 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                        National Identity & KYC Verification
-                      </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Government-issued identity status with the National Identity Management Commission (NIMC).
-                      </p>
-                    </div>
-                  </div>
-
-                  {isVerified ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Tier 1: Identity Verified
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setIsKycModalOpen(true)}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors flex items-center gap-1.5"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>Verify Identity Now</span>
-                    </button>
-                  )}
+              {/* Section 3: National Identity (KYC) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    National Identity & KYC
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Identity authentication status connected to the National Identity Management Commission (NIMC).
+                  </p>
                 </div>
 
-                <div className="mt-5">
-                  {isVerified ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                          National ID (NIN)
-                        </span>
-                        <span className="text-sm font-mono font-bold text-slate-900 dark:text-white mt-1 block">
-                          {ninMasked || 'Verified in Vault'}
-                        </span>
-                      </div>
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    {isVerified ? (
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        <div className="p-5 flex items-center justify-between gap-4">
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block mb-1">
+                              National Identity Number (NIN)
+                            </span>
+                            <span className="text-sm font-mono font-semibold text-slate-900 dark:text-white">
+                              {ninMasked || 'Verified in Vault'}
+                            </span>
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Tier 1 Verified</span>
+                          </span>
+                        </div>
 
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                          Date of Birth
-                        </span>
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white mt-1 block">
-                          {dob ? formatDateTime(dob).split(',')[0] : 'Verified on Record'}
-                        </span>
-                      </div>
+                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block mb-1">
+                              Date of Birth
+                            </span>
+                            <span className="text-sm text-slate-900 dark:text-white font-medium">
+                              {dob ? formatDateTime(dob).split(',')[0] : 'Verified on Record'}
+                            </span>
+                          </div>
 
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                          Verification Authority
-                        </span>
-                        <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mt-1 block">
-                          NIMC Database Authenticated
-                        </span>
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block mb-1">
+                              Verification Authority
+                            </span>
+                            <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                              NIMC Database Authenticated
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Your identity is securely bound to your merchant account.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-4 flex-wrap">
-                      <div className="space-y-1">
-                        <p className="font-bold">Identity Verification Pending</p>
-                        <p className="text-amber-700 dark:text-amber-400">
-                          To protect against financial fraud and comply with regulations, identity verification is required before initiating wallet funding and top-up settlements.
+                    ) : (
+                      <div className="p-6 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                            <AlertCircle className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-medium text-slate-900 dark:text-white">
+                              Identity Verification Required
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                              In compliance with Nigerian regulatory guidelines, verify your 11-digit NIN before performing prepaid wallet funding and utility top-ups.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setIsKycModalOpen(true)}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity"
+                          >
+                            Verify Identity Now
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 2: SECURITY & PASSWORD                                                */}
+          {/* ========================================================================= */}
+          {activeTab === 'security' && (
+            <div className="space-y-10 pt-2 pb-12">
+              {/* Section 1: Change Password */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Account Password
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Ensure your account is protected with a strong password. Changes require two-step email confirmation.
+                  </p>
+                </div>
+
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    {passSuccessMsg && (
+                      <div className="m-6 mb-0 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>{passSuccessMsg}</span>
+                      </div>
+                    )}
+
+                    {passErrorMsg && (
+                      <div className="m-6 mb-0 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400 text-xs font-medium flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{passErrorMsg}</span>
+                      </div>
+                    )}
+
+                    {passwordStep === 'form' ? (
+                      /* Step 1: Input Current and New Passwords */
+                      <form onSubmit={handleRequestPasswordOtp}>
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                              Current Password
+                            </label>
+                            <div className="relative max-w-md">
+                              <input
+                                type={showCurrentPass ? 'text' : 'password'}
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                required
+                                placeholder="••••••••••••"
+                                className="w-full h-9 px-3 pr-10 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowCurrentPass(!showCurrentPass)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              >
+                                {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                              New Password
+                            </label>
+                            <div className="relative max-w-md">
+                              <input
+                                type={showNewPass ? 'text' : 'password'}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                                minLength={8}
+                                placeholder="Minimum 8 characters"
+                                className="w-full h-9 px-3 pr-10 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowNewPass(!showNewPass)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              >
+                                {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                              Confirm New Password
+                            </label>
+                            <div className="relative max-w-md">
+                              <input
+                                type={showConfirmPass ? 'text' : 'password'}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                minLength={8}
+                                placeholder="Re-enter new password"
+                                className="w-full h-9 px-3 pr-10 text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 focus:ring-1 focus:ring-slate-400/20 transition-all font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPass(!showConfirmPass)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              >
+                                {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            A 6-digit confirmation code will be dispatched to your email.
+                          </p>
+                          <button
+                            type="submit"
+                            disabled={isRequestingOtp}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isRequestingOtp ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Verifying...</span>
+                              </>
+                            ) : (
+                              <span>Send confirmation code</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      /* Step 2: Confirmation OTP Input */
+                      <form onSubmit={handleConfirmPasswordChange}>
+                        <div className="p-6 space-y-4">
+                          <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 max-w-md">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                6-Digit Email Code
+                              </span>
+                              <span className="text-xs font-mono text-slate-500">
+                                Expires in {formatCountdown(otpCountdown)}
+                              </span>
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={emailOtp}
+                              onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
+                              autoFocus
+                              placeholder="••••••"
+                              className="w-full h-11 text-center text-xl font-mono font-bold tracking-[0.4em] rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-slate-500 transition-all"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-2">
+                              Enter code sent to <strong className="text-slate-600 dark:text-slate-300">{email}</strong>.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setPasswordStep('form')}
+                            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium"
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            disabled={isConfirmingOtp || emailOtp.length !== 6}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isConfirmingOtp ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Updating...</span>
+                              </>
+                            ) : (
+                              <span>Confirm & update password</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Two-Factor & Login Policies */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Login Protection
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Multi-factor security policies applied to your merchant console sessions.
+                  </p>
+                </div>
+
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] divide-y divide-slate-100 dark:divide-slate-800/80">
+                    <div className="p-5 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-slate-900 dark:text-white">
+                          Email OTP Verification
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Requires 6-digit one-time code for sensitive account actions and password changes.
                         </p>
                       </div>
-                      <button
-                        onClick={() => setIsKycModalOpen(true)}
-                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#126BEB] text-white hover:bg-[#0F59C7] transition-all shrink-0"
-                      >
-                        Launch Verification
-                      </button>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                        Always On
+                      </span>
                     </div>
-                  )}
+
+                    <div className="p-5 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-slate-900 dark:text-white">
+                          Session Inactivity Timeout
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Automatically locks your workspace after 15 minutes of inactivity.
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono text-slate-500">
+                        15 minutes
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: SECURITY & PASSWORD */}
-          {activeTab === 'security' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-                  <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
-                    <Key className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      Change Account Password
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Two-step authorization: Verify your current password and confirm with a 6-digit code sent to your email.
-                    </p>
-                  </div>
-                </div>
-
-                {passSuccessMsg && (
-                  <div className="mt-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>{passSuccessMsg}</span>
-                  </div>
-                )}
-
-                {passErrorMsg && (
-                  <div className="mt-4 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{passErrorMsg}</span>
-                  </div>
-                )}
-
-                {passwordStep === 'form' ? (
-                  /* Step 1: Input Passwords */
-                  <form onSubmit={handleRequestPasswordOtp} className="mt-5 space-y-4 max-w-xl">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        Current Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showCurrentPass ? 'text' : 'password'}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          required
-                          placeholder="Enter your current password"
-                          className="w-full h-10 px-3 pr-10 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowCurrentPass(!showCurrentPass)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        >
-                          {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        New Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showNewPass ? 'text' : 'password'}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          required
-                          minLength={8}
-                          placeholder="Minimum 8 characters"
-                          className="w-full h-10 px-3 pr-10 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPass(!showNewPass)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        >
-                          {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                        Confirm New Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showConfirmPass ? 'text' : 'password'}
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          required
-                          minLength={8}
-                          placeholder="Re-enter your new password"
-                          className="w-full h-10 px-3 pr-10 text-sm rounded-xl bg-slate-50 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPass(!showConfirmPass)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        >
-                          {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        disabled={isRequestingOtp}
-                        className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#126BEB] text-white hover:bg-[#0F59C7] transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {isRequestingOtp ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Verifying & Sending Code...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="w-3.5 h-3.5" />
-                            <span>Send Email Confirmation Code</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  /* Step 2: Enter Email Confirmation OTP */
-                  <form onSubmit={handleConfirmPasswordChange} className="mt-5 space-y-4 max-w-xl">
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                          Enter 6-Digit Email Code
-                        </span>
-                        <span className="text-xs font-mono font-bold text-slate-500">
-                          Expires in {formatCountdown(otpCountdown)}
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        value={emailOtp}
-                        onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))}
-                        autoFocus
-                        placeholder="••••••"
-                        className="w-full h-12 text-center text-2xl font-mono font-black tracking-[0.5em] rounded-xl bg-white dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-all"
-                      />
-                      <p className="text-[11px] text-slate-400 mt-2">
-                        Check your inbox at <strong className="text-slate-600 dark:text-slate-300">{email}</strong> for the confirmation code.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3 pt-2">
-                      <button
-                        type="submit"
-                        disabled={isConfirmingOtp || emailOtp.length !== 6}
-                        className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#126BEB] text-white hover:bg-[#0F59C7] transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {isConfirmingOtp ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Updating Password...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Confirm & Update Password</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPasswordStep('form')}
-                        className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      >
-                        Back
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: SESSIONS & ACTIVITY TRAIL */}
+          {/* ========================================================================= */}
+          {/* TAB 3: ACTIVE SESSIONS                                                    */}
+          {/* ========================================================================= */}
           {activeTab === 'sessions' && (
-            <div className="space-y-6">
-              {/* Active Session & Device Telemetry Card */}
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-                  <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
-                    <Laptop className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      Current Active Session
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Telemetry for the browser device currently communicating with BAXATO.
-                    </p>
-                  </div>
+            <div className="space-y-10 pt-2 pb-12">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Current Device & Session
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    The active client session currently communicating with the BAXATO gateway.
+                  </p>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Current Device */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Device / Client
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Active Now
-                      </span>
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    <div className="p-6 space-y-4">
+                      {/* Active device card */}
+                      <div className="p-4 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
+                            <Laptop className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                {parseUserAgent(securityData?.currentSession?.userAgent)}
+                              </p>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Current device
+                              </span>
+                            </div>
+                            <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
+                              IP: {securityData?.currentSession?.ipAddress || '127.0.0.1'}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Last login: {securityData?.lastLoginAt ? formatDateTime(securityData.lastLoginAt) : 'Active now'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      {parseUserAgent(securityData?.currentSession?.userAgent)}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1 truncate" title={securityData?.currentSession?.userAgent}>
-                      {securityData?.currentSession?.userAgent || 'Browser Client'}
-                    </p>
-                  </div>
 
-                  {/* Client IP Address */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
-                      Client IP Address
-                    </span>
-                    <p className="text-sm font-mono font-bold text-slate-900 dark:text-white">
-                      {securityData?.currentSession?.ipAddress || '127.0.0.1'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Direct TCP connection to BAXATO edge gateway.
-                    </p>
-                  </div>
-
-                  {/* Last Login Date */}
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0A1322] border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
-                      Last Authentication
-                    </span>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      {securityData?.lastLoginAt
-                        ? formatDateTime(securityData.lastLoginAt)
-                        : 'Current Active Session'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Time of most recent credentials verification.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Security Audit Trail Table */}
-              <div className="bg-white dark:bg-[#070D18] rounded-2xl border border-slate-200 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm">
-                <div className="flex items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
-                      <History className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                        Security Audit Trail
-                      </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Immutable record of account actions, logins, and identity modifications.
+                    <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        If you notice an unrecognized session, change your password immediately to terminate access.
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-                  <button
-                    onClick={loadSecurityData}
-                    disabled={isLoadingSecurity}
-                    className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="Refresh Audit Trail"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isLoadingSecurity ? 'animate-spin text-[#126BEB]' : ''}`} />
-                  </button>
+          {/* ========================================================================= */}
+          {/* TAB 4: AUDIT TRAIL                                                        */}
+          {/* ========================================================================= */}
+          {activeTab === 'audit' && (
+            <div className="space-y-10 pt-2 pb-12">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
+                <div className="md:col-span-4 space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Security Audit Trail
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Immutable security log of authentication events and account profile modifications.
+                  </p>
                 </div>
 
-                <div className="mt-5 overflow-x-auto">
-                  {securityData?.auditLogs && securityData.auditLogs.length > 0 ? (
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800/80 text-slate-400 uppercase tracking-wider text-[10px]">
-                          <th className="py-2.5 px-3">Event Action</th>
-                          <th className="py-2.5 px-3">Device / Client</th>
-                          <th className="py-2.5 px-3">IP Address</th>
-                          <th className="py-2.5 px-3 text-right">Timestamp</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                        {securityData.auditLogs.map((log) => {
-                          const action = log.action || 'UNKNOWN';
-                          let badgeClass = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-
-                          if (action.includes('LOGIN')) {
-                            badgeClass = 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
-                          } else if (action.includes('PASSWORD')) {
-                            badgeClass = 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20';
-                          } else if (action.includes('REGISTER')) {
-                            badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
-                          } else if (action.includes('PROFILE')) {
-                            badgeClass = 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20';
-                          }
-
-                          return (
-                            <tr key={log.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                              <td className="py-3 px-3">
-                                <span className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold ${badgeClass}`}>
-                                  {action.replace(/_/g, ' ')}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
-                                {parseUserAgent(log.userAgent)}
-                              </td>
-                              <td className="py-3 px-3 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                                {log.ipAddress || '—'}
-                              </td>
-                              <td className="py-3 px-3 text-right text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                                {formatDateTime(log.createdAt)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="py-12 text-center text-slate-400">
-                      <Shield className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                      <p className="text-xs font-semibold">No recent security events logged yet.</p>
+                <div className="md:col-span-8">
+                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-500">
+                        Recent 10 Security Events
+                      </span>
+                      <button
+                        onClick={loadSecurityData}
+                        disabled={isLoadingSecurity}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                        title="Refresh"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSecurity ? 'animate-spin' : ''}`} />
+                      </button>
                     </div>
-                  )}
+
+                    {securityData?.auditLogs && securityData.auditLogs.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-400 font-medium text-[11px]">
+                              <th className="py-2.5 px-4 font-medium">Event</th>
+                              <th className="py-2.5 px-4 font-medium">Client</th>
+                              <th className="py-2.5 px-4 font-medium">IP Address</th>
+                              <th className="py-2.5 px-4 font-medium text-right">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-normal">
+                            {securityData.auditLogs.map((log) => {
+                              const action = log.action || 'UNKNOWN';
+                              return (
+                                <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors">
+                                  <td className="py-3 px-4">
+                                    <span className="font-mono text-[11px] font-medium text-slate-800 dark:text-slate-200">
+                                      {action}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">
+                                    {parseUserAgent(log.userAgent)}
+                                  </td>
+                                  <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                                    {log.ipAddress || '—'}
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-slate-500 font-mono text-[11px]">
+                                    {formatDateTime(log.createdAt)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center text-slate-400">
+                        <Shield className="w-6 h-6 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+                        <p className="text-xs">No recent security events logged.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
