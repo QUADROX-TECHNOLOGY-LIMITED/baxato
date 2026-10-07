@@ -18,6 +18,10 @@ export interface MockUser {
   nin?: string | null;
   dob?: string | null;
   ninData?: Record<string, unknown>;
+  twoFactorEnabled?: boolean;
+  twoFactorMethod?: string | null;
+  twoFactorSecret?: string | null;
+  twoFactorBackupCodes?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

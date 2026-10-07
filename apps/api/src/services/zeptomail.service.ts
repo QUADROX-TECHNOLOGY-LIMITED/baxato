@@ -294,6 +294,85 @@ export class ZeptoMailService {
     this.otpStore.delete(key);
     return { valid: true };
   }
+
+  /**
+   * Helper to retrieve active 2FA OTP for testing or dev mode
+   */
+  public getActiveTwoFactorOtp(email: string): string | undefined {
+    return this.otpStore.get(`2fa:${email.toLowerCase().trim()}`)?.code;
+  }
+
+  /**
+   * Dispatches a secure 6-digit confirmation code via ZeptoMail for Two-Factor Authentication (2FA).
+   */
+  public async sendTwoFactorOtp(
+    email: string,
+    name?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const normalized = email.toLowerCase().trim();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    this.otpStore.set(`2fa:${normalized}`, { code, expiresAt });
+
+    const subject = `${code} is your BAXATO Two-Factor Authentication verification code`;
+    const recipientName = name || 'Merchant';
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; padding: 24px; color: #0B1220; margin: 0;">
+  <div style="max-width: 520px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="padding: 24px; text-align: center; border-bottom: 1px solid #E2E8F0; background-color: #FFFFFF;">
+      <h2 style="color: #126BEB; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">BAXATO</h2>
+      <p style="margin: 4px 0 0 0; font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 1px;">Two-Factor Authentication Security</p>
+    </div>
+    <div style="padding: 32px 24px; text-align: center;">
+      <h3 style="font-size: 18px; font-weight: 700; margin: 0 0 12px 0; color: #0F172A;">Two-Factor Authentication Verification</h3>
+      <p style="font-size: 14px; color: #475569; margin: 0 0 24px 0; line-height: 1.5;">
+        Hello ${recipientName},<br>
+        Enter the 6-digit verification code below to verify and activate Two-Factor Authentication on your BAXATO merchant account:
+      </p>
+      <div style="background-color: #F1F5F9; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 18px; font-size: 32px; font-weight: 900; letter-spacing: 6px; font-family: monospace; color: #0F172A; display: inline-block; min-width: 200px;">
+        ${code}
+      </div>
+      <p style="font-size: 12px; color: #64748B; margin: 20px 0 0 0;">
+        This code expires in 10 minutes. If you did not initiate this request, please change your account password immediately.
+      </p>
+    </div>
+    <div style="padding: 16px 24px; text-align: center; background-color: #F8FAFC; border-top: 1px solid #E2E8F0;">
+      <p style="margin: 0; font-size: 11px; color: #94A3B8;">&copy; 2026 BAXATO Infrastructure. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    return this.sendEmail([{ email: normalized, name: recipientName }], subject, html);
+  }
+
+  /**
+   * Validates Two-Factor Authentication email verification code.
+   */
+  public verifyTwoFactorOtp(email: string, code: string): { valid: boolean; reason?: string } {
+    const normalized = email.toLowerCase().trim();
+    const key = `2fa:${normalized}`;
+    const record = this.otpStore.get(key);
+    if (!record) {
+      return { valid: false, reason: 'No two-factor verification code requested for this email.' };
+    }
+    if (Date.now() > record.expiresAt) {
+      this.otpStore.delete(key);
+      return { valid: false, reason: 'Verification code has expired. Please request a new code.' };
+    }
+    if (record.code !== code.trim()) {
+      return { valid: false, reason: 'Invalid verification code. Please check your email.' };
+    }
+    this.otpStore.delete(key);
+    return { valid: true };
+  }
 }
 
 export const zeptoMailService = new ZeptoMailService();

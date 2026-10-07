@@ -2,7 +2,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { db } from './client.js';
+import { db, getQueryClient } from './client.js';
 
 /**
  * Automatically applies pending Drizzle migrations to PostgreSQL.
@@ -34,6 +34,14 @@ export async function runMigrations(): Promise<boolean> {
   console.log(`[Database Migration] Applying PostgreSQL migrations from: ${migrationsFolder}`);
   try {
     await migrate(db, { migrationsFolder });
+    
+    // Idempotent schema guarantee for Two-Factor Authentication fields
+    const sql = getQueryClient();
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE NOT NULL;`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_method TEXT;`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_backup_codes JSONB DEFAULT '[]'::jsonb NOT NULL;`;
+
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;
   } catch (err: any) {

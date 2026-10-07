@@ -15,6 +15,13 @@
       "when": 1788233919575,
       "tag": "0001_condemned_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788250000000,
+      "tag": "0002_add_two_factor_auth",
+      "breakpoints": true
     }
   ]
 }

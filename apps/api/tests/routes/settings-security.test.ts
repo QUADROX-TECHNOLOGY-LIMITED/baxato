@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type { ApiResponse } from '@baxato/common';
 import { zeptoMailService } from '../../src/services/zeptomail.service';
+import { twoFactorService } from '../../src/services/two-factor.service';
 import { inMemoryDb, createMockDatabase } from '../test-utils/mock-db';
 
 vi.mock('@baxato/database', () => createMockDatabase());
@@ -232,5 +233,193 @@ describe('Settings & Security Endpoints (/users/me/security & /auth/change-passw
     const actions = secBody.data?.auditLogs.map((l) => l.action);
     expect(actions).toContain('PROFILE_UPDATED');
     expect(actions).toContain('PASSWORD_CHANGED');
+  });
+
+  it('GET /auth/2fa/status returns initial disabled state', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/2fa/status',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ enabled: boolean; method: string | null }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.enabled).toBe(false);
+  });
+
+  it('POST /auth/2fa/email/request dispatches real ZeptoMail OTP', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/email/request',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ sent: boolean }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.sent).toBe(true);
+
+    const activeOtp = zeptoMailService.getActiveTwoFactorOtp(userEmail);
+    expect(activeOtp).toBeDefined();
+    expect(activeOtp).toHaveLength(6);
+  });
+
+  it('POST /auth/2fa/email/verify rejects invalid OTP', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/email/verify',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        otp: '000000',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body: ApiResponse = res.json();
+    expect(body.success).toBe(false);
+  });
+
+  it('POST /auth/2fa/email/verify activates Email 2FA with valid OTP', async () => {
+    const activeOtp = zeptoMailService.getActiveTwoFactorOtp(userEmail);
+    expect(activeOtp).toBeDefined();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/email/verify',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        otp: activeOtp!,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ enabled: boolean; method: string }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.enabled).toBe(true);
+    expect(body.data?.method).toBe('EMAIL');
+
+    // Confirm via GET /auth/2fa/status
+    const statusRes = await app.inject({
+      method: 'GET',
+      url: '/auth/2fa/status',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    const statusBody: ApiResponse<{ enabled: boolean; method: string }> = statusRes.json();
+    expect(statusBody.data?.enabled).toBe(true);
+    expect(statusBody.data?.method).toBe('EMAIL');
+  });
+
+  it('POST /auth/2fa/totp/setup returns real secret, QR Data URL and recovery codes', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/totp/setup',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{
+      secret: string;
+      qrCodeDataUrl: string;
+      backupCodes: string[];
+    }> = res.json();
+
+    expect(body.success).toBe(true);
+    expect(body.data?.secret).toBeDefined();
+    expect(body.data?.secret.length).toBeGreaterThanOrEqual(16);
+    expect(body.data?.qrCodeDataUrl).toContain('data:image/png;base64');
+    expect(body.data?.backupCodes).toHaveLength(6);
+  });
+
+  it('POST /auth/2fa/totp/verify activates Authenticator App 2FA with valid TOTP', async () => {
+    const setupRes = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/totp/setup',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    const setupData = setupRes.json().data;
+
+    // Generate real RFC 6238 TOTP code matching secret
+    const validCode = twoFactorService.generateTotp(setupData.secret);
+
+    const verifyRes = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/totp/verify',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        secret: setupData.secret,
+        token: validCode,
+        backupCodes: setupData.backupCodes,
+      },
+    });
+
+    expect(verifyRes.statusCode).toBe(200);
+    const verifyBody: ApiResponse<{ enabled: boolean; method: string }> = verifyRes.json();
+    expect(verifyBody.success).toBe(true);
+    expect(verifyBody.data?.enabled).toBe(true);
+    expect(verifyBody.data?.method).toBe('TOTP');
+  });
+
+  it('POST /auth/2fa/disable fails when password is incorrect', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/disable',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        password: 'IncorrectPassword!',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body: ApiResponse = res.json();
+    expect(body.success).toBe(false);
+    expect(body.error?.message).toContain('Current password is incorrect');
+  });
+
+  it('POST /auth/2fa/disable safely deactivates 2FA with correct password', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/2fa/disable',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        password: 'BrandNewPassword2026!',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ enabled: boolean }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.enabled).toBe(false);
+
+    // Confirm via GET /auth/2fa/status
+    const statusRes = await app.inject({
+      method: 'GET',
+      url: '/auth/2fa/status',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    const statusBody: ApiResponse<{ enabled: boolean }> = statusRes.json();
+    expect(statusBody.data?.enabled).toBe(false);
   });
 });

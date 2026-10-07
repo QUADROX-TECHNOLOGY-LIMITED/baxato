@@ -36,6 +36,7 @@ export type VerifyPhoneOtpInput = z.infer<typeof verifyPhoneOtpSchema>;
 export const loginUserSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+  twoFactorCode: z.string().optional(),
 });
 
 export type LoginUserInput = z.infer<typeof loginUserSchema>;
@@ -71,6 +72,26 @@ export const changePasswordConfirmSchema = z.object({
 });
 
 export type ChangePasswordConfirmInput = z.infer<typeof changePasswordConfirmSchema>;
+
+export const verify2FaEmailSchema = z.object({
+  otp: z.string().length(6, 'Verification code must be exactly 6 digits'),
+});
+
+export type Verify2FaEmailInput = z.infer<typeof verify2FaEmailSchema>;
+
+export const verify2FaTotpSchema = z.object({
+  secret: z.string().min(16, 'Secret is required'),
+  token: z.string().length(6, 'Authenticator code must be exactly 6 digits'),
+  backupCodes: z.array(z.string()).optional(),
+});
+
+export type Verify2FaTotpInput = z.infer<typeof verify2FaTotpSchema>;
+
+export const disable2FaSchema = z.object({
+  password: z.string().min(1, 'Password is required to disable Two-Factor Authentication'),
+});
+
+export type Disable2FaInput = z.infer<typeof disable2FaSchema>;
 
 export interface AuthSessionUser {
   id: string;

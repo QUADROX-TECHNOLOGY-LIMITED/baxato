@@ -1,3 +1,5 @@
+import { headers } from 'next/headers';
+
 /**
  * Backend API Client & Proxy Helper for BAXATO Merchant Dashboard
  *
@@ -82,11 +84,23 @@ export async function proxyToBackendApi<T = any>(
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const targetUrl = `${baseUrl}${normalizedPath}`;
 
+  const clientHeaders: Record<string, string> = {};
+  try {
+    const h = headers();
+    const ua = h.get('user-agent');
+    const fwd = h.get('x-forwarded-for') || h.get('x-real-ip');
+    if (ua) clientHeaders['user-agent'] = ua;
+    if (fwd) clientHeaders['x-forwarded-for'] = fwd;
+  } catch {
+    // headers() not available in background or static build context
+  }
+
   try {
     const res = await fetch(targetUrl, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...clientHeaders,
         ...(options.headers || {}),
       },
     });

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import {
   registerUserSchema,
   sendPhoneOtpSchema,
@@ -7,6 +8,9 @@ import {
   loginUserSchema,
   changePasswordRequestSchema,
   changePasswordConfirmSchema,
+  verify2FaEmailSchema,
+  verify2FaTotpSchema,
+  disable2FaSchema,
   createSuccessResponse,
   ValidationError,
   ConflictError,
@@ -20,6 +24,7 @@ import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { env } from '@baxato/config';
 import { whatsAppService } from '../services/whatsapp.service';
 import { zeptoMailService } from '../services/zeptomail.service';
+import { twoFactorService } from '../services/two-factor.service';
 import { generateToken, authenticate } from '../plugins/auth.plugin';
 import { auditService } from '../services/audit.service';
 
@@ -426,6 +431,62 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError(`Your account is ${user.status}. Please contact support.`);
     }
 
+    // Handle Two-Factor Authentication if enabled
+    if (user.twoFactorEnabled) {
+      const code = parseResult.data.twoFactorCode?.trim();
+      if (!code) {
+        if (user.twoFactorMethod === 'EMAIL') {
+          await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+          const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+          if (env.NODE_ENV !== 'production') {
+            request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Login 2FA Email OTP dispatched');
+          }
+        }
+
+        return reply.status(200).send(
+          createSuccessResponse(
+            {
+              requiresTwoFactor: true,
+              twoFactorMethod: user.twoFactorMethod || 'EMAIL',
+              email: user.email,
+              message:
+                user.twoFactorMethod === 'TOTP'
+                  ? 'Please enter the 6-digit code from your authenticator app.'
+                  : `A 6-digit verification code has been dispatched to ${user.email}.`,
+            },
+            request.id,
+          ),
+        );
+      }
+
+      let is2FaValid = false;
+      if (user.twoFactorMethod === 'TOTP') {
+        if (user.twoFactorSecret) {
+          is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
+        }
+        if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
+          const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+          const backupList = user.twoFactorBackupCodes as string[];
+          const matchIdx = backupList.indexOf(codeHash);
+          if (matchIdx !== -1) {
+            is2FaValid = true;
+            const remaining = backupList.filter((_, idx) => idx !== matchIdx);
+            await db
+              .update(users)
+              .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
+              .where(eq(users.id, user.id));
+          }
+        }
+      } else {
+        const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+        is2FaValid = emailVerify.valid;
+      }
+
+      if (!is2FaValid) {
+        throw new ValidationError('Invalid or expired two-factor authentication code.');
+      }
+    }
+
     // Fetch primary business
     const [biz] = await db
       .select({ id: businesses.id })
@@ -630,6 +691,379 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             updated: true,
             message: 'Password updated successfully. Please use your new password next time you sign in.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * GET /auth/2fa/status
+   * Returns current Two-Factor Authentication state for the authenticated user.
+   */
+  fastify.get(
+    '/2fa/status',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const [user] = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          twoFactorEnabled: users.twoFactorEnabled,
+          twoFactorMethod: users.twoFactorMethod,
+          twoFactorBackupCodes: users.twoFactorBackupCodes,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      const backupCodesList = Array.isArray(user.twoFactorBackupCodes)
+        ? (user.twoFactorBackupCodes as any[])
+        : [];
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            enabled: Boolean(user.twoFactorEnabled),
+            method: user.twoFactorMethod || null,
+            hasBackupCodes: backupCodesList.length > 0,
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/2fa/email/request
+   * Dispatches a real 6-digit confirmation code via ZeptoMail to the user's verified email.
+   */
+  fastify.post(
+    '/2fa/email/request',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const [user] = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      const result = await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+      const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+      if (env.NODE_ENV !== 'production') {
+        request.log.info({ email: user.email, otp: activeOtp }, '[DEV] 2FA Email verification code dispatched');
+      }
+
+      if (!result.success) {
+        request.log.warn(
+          { email: user.email, error: result.error },
+          'ZeptoMail dispatch warning during 2FA request',
+        );
+        if (env.NODE_ENV === 'production') {
+          throw new ValidationError('Could not dispatch verification email. Please try again or check your mailbox.');
+        }
+      }
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'USER_2FA_EMAIL_REQUESTED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { email: user.email },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            sent: true,
+            email: user.email,
+            message: `A 6-digit verification code has been dispatched to ${user.email}.`,
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/2fa/email/verify
+   * Validates the 6-digit email OTP and permanently enables Email Two-Factor Authentication.
+   */
+  fastify.post(
+    '/2fa/email/verify',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const parseResult = verify2FaEmailSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        throw new ValidationError(parseResult.error.errors[0]?.message || 'Invalid verification code');
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      const verification = zeptoMailService.verifyTwoFactorOtp(user.email, parseResult.data.otp);
+      if (!verification.valid) {
+        throw new ValidationError(verification.reason || 'Invalid or expired verification code.');
+      }
+
+      await db
+        .update(users)
+        .set({
+          twoFactorEnabled: true,
+          twoFactorMethod: 'EMAIL',
+          twoFactorSecret: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'USER_2FA_ENABLED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { method: 'EMAIL' },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            enabled: true,
+            method: 'EMAIL',
+            message: 'Two-Factor Authentication via Email Code enabled successfully.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/2fa/totp/setup
+   * Generates a cryptographically secure TOTP secret, standard otpauth URI, and QR code Data URL.
+   */
+  fastify.post(
+    '/2fa/totp/setup',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const [user] = await db
+        .select({
+          id: users.id,
+          email: users.email,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      const secret = twoFactorService.generateSecret();
+      const otpAuthUri = twoFactorService.generateOtpAuthUri(user.email, secret, 'BAXATO');
+      const qrCodeDataUrl = await twoFactorService.generateQrCodeDataUrl(otpAuthUri);
+      const { codes } = twoFactorService.generateBackupRecoveryCodes();
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            secret,
+            qrCodeDataUrl,
+            otpAuthUri,
+            backupCodes: codes,
+            message: 'Scan the QR code in Google Authenticator or enter the secret manually, then verify with a 6-digit code.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/2fa/totp/verify
+   * Verifies the 6-digit TOTP code against the secret and activates TOTP Two-Factor Authentication.
+   */
+  fastify.post(
+    '/2fa/totp/verify',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const parseResult = verify2FaTotpSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        throw new ValidationError(parseResult.error.errors[0]?.message || 'Invalid parameters');
+      }
+
+      const { secret, token, backupCodes } = parseResult.data;
+
+      const isValid = twoFactorService.verifyTotp(secret, token);
+      if (!isValid) {
+        throw new ValidationError('Invalid authenticator code. Please check your authenticator app and try again.');
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      let hashedList: string[] = [];
+      if (backupCodes && Array.isArray(backupCodes) && backupCodes.length > 0) {
+        hashedList = backupCodes.map((code) =>
+          crypto.createHash('sha256').update(code.trim()).digest('hex'),
+        );
+      } else {
+        const generated = twoFactorService.generateBackupRecoveryCodes();
+        hashedList = generated.hashedCodes;
+      }
+
+      await db
+        .update(users)
+        .set({
+          twoFactorEnabled: true,
+          twoFactorMethod: 'TOTP',
+          twoFactorSecret: secret,
+          twoFactorBackupCodes: hashedList,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'USER_2FA_ENABLED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { method: 'TOTP' },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            enabled: true,
+            method: 'TOTP',
+            message: 'Authenticator App (TOTP) Two-Factor Authentication activated successfully.',
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /**
+   * POST /auth/2fa/disable
+   * Validates account password and safely turns off Two-Factor Authentication.
+   */
+  fastify.post(
+    '/2fa/disable',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const userId = request.user?.id;
+      if (!userId) {
+        throw new ValidationError('Authentication required');
+      }
+
+      const parseResult = disable2FaSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        throw new ValidationError(parseResult.error.errors[0]?.message || 'Password is required to disable 2FA');
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user || !user.passwordHash) {
+        throw new AuthenticationError('User account not found');
+      }
+
+      const isMatch = await bcrypt.compare(parseResult.data.password, user.passwordHash);
+      if (!isMatch) {
+        throw new ValidationError('Current password is incorrect.');
+      }
+
+      await db
+        .update(users)
+        .set({
+          twoFactorEnabled: false,
+          twoFactorMethod: null,
+          twoFactorSecret: null,
+          twoFactorBackupCodes: [],
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await auditService.log({
+        userId: user.id,
+        businessId: request.user?.businessId,
+        action: 'USER_2FA_DISABLED',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { enabled: false },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            enabled: false,
+            message: 'Two-Factor Authentication has been disabled.',
           },
           request.id,
         ),

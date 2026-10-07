@@ -110,18 +110,30 @@ export default function SettingsPage() {
   const [passErrorMsg, setPassErrorMsg] = useState('');
   const [passSuccessMsg, setPassSuccessMsg] = useState('');
 
-  // 2FA Interactive Setup State
+  // 2FA Interactive Setup State (Live Real-Time Integration)
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
-  const [active2FAMethod, setActive2FAMethod] = useState<'EMAIL' | 'TOTP'>('EMAIL');
+  const [active2FAMethod, setActive2FAMethod] = useState<'EMAIL' | 'TOTP' | null>(null);
   const [isConfiguring2FA, setIsConfiguring2FA] = useState(false);
   const [selected2FAMethod, setSelected2FAMethod] = useState<'EMAIL' | 'TOTP'>('TOTP');
-  const [totpSecret, setTotpSecret] = useState('BXAT-7K9M-P2XW-4LQ8');
+  const [totpSecret, setTotpSecret] = useState('');
+  const [totpQrCodeUrl, setTotpQrCodeUrl] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [isRequestingEmailOtp, setIsRequestingEmailOtp] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [copiedTotpSecret, setCopiedTotpSecret] = useState(false);
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
-  const [backupCodes] = useState(['4819-2091', '8302-1940', '5920-4102', '9104-3829']);
   const [twoFactorNotice, setTwoFactorNotice] = useState('');
   const [twoFactorError, setTwoFactorError] = useState('');
+  const [isLoading2FASetup, setIsLoading2FASetup] = useState(false);
+  const [isSubmitting2FA, setIsSubmitting2FA] = useState(false);
+
+  // Disable 2FA State (Requires Password Confirmation)
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [showDisablePassword, setShowDisablePassword] = useState(false);
+  const [isSubmittingDisable2FA, setIsSubmittingDisable2FA] = useState(false);
 
   // Security & Sessions State
   const [securityData, setSecurityData] = useState<SecurityData | null>(null);
@@ -231,15 +243,27 @@ export default function SettingsPage() {
       const token = getStoredAuthToken();
       if (!token) return;
 
-      const res = await fetch('/api/users/me/security', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [res, twoFaRes] = await Promise.all([
+        fetch('/api/users/me/security', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch('/api/auth/2fa/status', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
       const data = await res.json().catch(() => null);
+      const twoFaData = await twoFaRes.json().catch(() => null);
 
       if (handleAuthResponse(res, data)) return;
 
       if (res.ok && data?.success && data?.data) {
         setSecurityData(data.data);
+      }
+
+      if (twoFaRes.ok && twoFaData?.success && twoFaData?.data) {
+        setIs2FAEnabled(Boolean(twoFaData.data.enabled));
+        setActive2FAMethod(twoFaData.data.method || null);
       }
     } catch {
       // Quiet fail
@@ -434,27 +458,216 @@ export default function SettingsPage() {
     }
   };
 
-  // 2FA Actions
-  const handleActivate2FA = (e: React.FormEvent) => {
-    e.preventDefault();
-    setTwoFactorError('');
-    if (selected2FAMethod === 'TOTP' && totpCode.trim().length !== 6) {
-      setTwoFactorError('Please enter the 6-digit code from Google Authenticator.');
-      return;
+  // Fetch real TOTP secret & QR code data URL from backend
+  const fetchTotpSetup = async () => {
+    try {
+      setIsLoading2FASetup(true);
+      setTwoFactorError('');
+      const token = getStoredAuthToken();
+      if (!token) return;
+
+      const res = await fetch('/api/auth/2fa/totp/setup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.data) {
+        setTotpSecret(data.data.secret || '');
+        setTotpQrCodeUrl(data.data.qrCodeDataUrl || '');
+        if (Array.isArray(data.data.backupCodes)) {
+          setBackupCodes(data.data.backupCodes);
+        }
+      } else {
+        setTwoFactorError(data?.error?.message || 'Failed to initialize authenticator setup.');
+      }
+    } catch {
+      setTwoFactorError('Network error initializing authenticator setup.');
+    } finally {
+      setIsLoading2FASetup(false);
     }
-    setIs2FAEnabled(true);
-    setActive2FAMethod(selected2FAMethod);
-    setIsConfiguring2FA(false);
-    setTotpCode('');
-    setTwoFactorNotice(`Two-Factor Authentication is now enabled via ${selected2FAMethod === 'TOTP' ? 'Authenticator App' : 'Email Code'}.`);
-    setTimeout(() => setTwoFactorNotice(''), 4000);
   };
 
-  const handleDisable2FA = () => {
-    setIs2FAEnabled(false);
-    setIsConfiguring2FA(false);
-    setTwoFactorNotice('Two-Factor Authentication has been turned off.');
-    setTimeout(() => setTwoFactorNotice(''), 4000);
+  const handleStart2FASetup = async () => {
+    setIsConfiguring2FA(true);
+    setIsDisabling2FA(false);
+    setTwoFactorError('');
+    setTwoFactorNotice('');
+    setTotpCode('');
+    setEmailOtpCode('');
+    setEmailOtpSent(false);
+
+    if (selected2FAMethod === 'TOTP') {
+      await fetchTotpSetup();
+    }
+  };
+
+  const handleSelect2FAMethod = (method: 'EMAIL' | 'TOTP') => {
+    setSelected2FAMethod(method);
+    setTwoFactorError('');
+    if (method === 'TOTP' && !totpSecret) {
+      fetchTotpSetup();
+    }
+  };
+
+  const handleRequestEmailOtp = async () => {
+    try {
+      setIsRequestingEmailOtp(true);
+      setTwoFactorError('');
+      const token = getStoredAuthToken();
+      if (!token) return;
+
+      const res = await fetch('/api/auth/2fa/email/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setEmailOtpSent(true);
+        setTwoFactorNotice(`A 6-digit verification code has been dispatched to ${email || 'your email'}.`);
+        setTimeout(() => setTwoFactorNotice(''), 6000);
+      } else {
+        setTwoFactorError(data?.error?.message || 'Failed to dispatch verification email.');
+      }
+    } catch {
+      setTwoFactorError('Network error requesting verification code.');
+    } finally {
+      setIsRequestingEmailOtp(false);
+    }
+  };
+
+  const handleActivate2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTwoFactorError('');
+    const token = getStoredAuthToken();
+    if (!token) return;
+
+    if (selected2FAMethod === 'TOTP') {
+      if (totpCode.trim().length !== 6) {
+        setTwoFactorError('Please enter the 6-digit code shown in your authenticator app.');
+        return;
+      }
+
+      try {
+        setIsSubmitting2FA(true);
+        const res = await fetch('/api/auth/2fa/totp/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            secret: totpSecret,
+            token: totpCode.trim(),
+            backupCodes,
+          }),
+        });
+
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success) {
+          setIs2FAEnabled(true);
+          setActive2FAMethod('TOTP');
+          setIsConfiguring2FA(false);
+          setTotpCode('');
+          setTwoFactorNotice('Two-Factor Authentication via Authenticator App is now active.');
+          loadSecurityData();
+          setTimeout(() => setTwoFactorNotice(''), 6000);
+        } else {
+          setTwoFactorError(data?.error?.message || 'Invalid authenticator code. Please try again.');
+        }
+      } catch {
+        setTwoFactorError('Network error verifying authenticator code.');
+      } finally {
+        setIsSubmitting2FA(false);
+      }
+    } else {
+      if (emailOtpCode.trim().length !== 6) {
+        setTwoFactorError('Please enter the 6-digit verification code sent to your email.');
+        return;
+      }
+
+      try {
+        setIsSubmitting2FA(true);
+        const res = await fetch('/api/auth/2fa/email/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            otp: emailOtpCode.trim(),
+          }),
+        });
+
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success) {
+          setIs2FAEnabled(true);
+          setActive2FAMethod('EMAIL');
+          setIsConfiguring2FA(false);
+          setEmailOtpCode('');
+          setEmailOtpSent(false);
+          setTwoFactorNotice('Two-Factor Authentication via Email is now active.');
+          loadSecurityData();
+          setTimeout(() => setTwoFactorNotice(''), 6000);
+        } else {
+          setTwoFactorError(data?.error?.message || 'Invalid or expired verification code.');
+        }
+      } catch {
+        setTwoFactorError('Network error verifying email code.');
+      } finally {
+        setIsSubmitting2FA(false);
+      }
+    }
+  };
+
+  const handleConfirmDisable2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTwoFactorError('');
+    if (!disablePassword) {
+      setTwoFactorError('Please enter your account password to confirm.');
+      return;
+    }
+
+    try {
+      setIsSubmittingDisable2FA(true);
+      const token = getStoredAuthToken();
+      if (!token) return;
+
+      const res = await fetch('/api/auth/2fa/disable', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          password: disablePassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setIs2FAEnabled(false);
+        setActive2FAMethod(null);
+        setIsDisabling2FA(false);
+        setDisablePassword('');
+        setTwoFactorNotice('Two-Factor Authentication has been safely disabled.');
+        loadSecurityData();
+        setTimeout(() => setTwoFactorNotice(''), 6000);
+      } else {
+        setTwoFactorError(data?.error?.message || 'Incorrect password.');
+      }
+    } catch {
+      setTwoFactorError('Network error while disabling Two-Factor Authentication.');
+    } finally {
+      setIsSubmittingDisable2FA(false);
+    }
   };
 
   const copyTotpKey = () => {
@@ -502,14 +715,26 @@ export default function SettingsPage() {
 
   // Parse User Agent strictly for each historical log entry (no current device fallback)
   const parseLogUserAgent = (ua?: string | null) => {
-    if (!ua || ua === 'lightMyRequest') return 'BAXATO Web Client';
-    if (ua.toLowerCase().includes('node') || ua.includes('undici')) return 'BAXATO API Gateway';
+    if (!ua) return 'Web Browser';
     if (ua.includes('iPhone')) return 'Safari on iPhone';
     if (ua.includes('iPad')) return 'Safari on iPad';
-    if (ua.includes('Macintosh')) return 'Safari on macOS';
-    if (ua.includes('Windows')) return 'Chrome on Windows';
+    if (ua.includes('Macintosh') || ua.includes('Mac OS')) {
+      if (ua.includes('Chrome')) return 'Chrome on macOS';
+      if (ua.includes('Safari')) return 'Safari on macOS';
+      if (ua.includes('Firefox')) return 'Firefox on macOS';
+      return 'macOS Device';
+    }
+    if (ua.includes('Windows')) {
+      if (ua.includes('Edg')) return 'Edge on Windows';
+      if (ua.includes('Chrome')) return 'Chrome on Windows';
+      if (ua.includes('Firefox')) return 'Firefox on Windows';
+      return 'Windows PC';
+    }
     if (ua.includes('Android')) return 'Chrome on Android';
     if (ua.includes('Linux')) return 'Chrome on Linux';
+    if (ua.toLowerCase().includes('node') || ua.includes('undici') || ua === 'lightMyRequest') {
+      return 'Web Dashboard Session';
+    }
     return ua.length > 24 ? ua.slice(0, 24) + '...' : ua;
   };
 
@@ -1055,7 +1280,7 @@ export default function SettingsPage() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                           {is2FAEnabled
-                            ? 'Verification code required on unrecognized device logins.'
+                            ? 'Verification code required during sign-in.'
                             : 'Two-factor protection is currently deactivated.'}
                         </p>
                       </div>
@@ -1064,7 +1289,11 @@ export default function SettingsPage() {
                         {is2FAEnabled ? (
                           <button
                             type="button"
-                            onClick={handleDisable2FA}
+                            onClick={() => {
+                              setIsDisabling2FA(true);
+                              setIsConfiguring2FA(false);
+                              setTwoFactorError('');
+                            }}
                             className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                           >
                             Turn off
@@ -1072,7 +1301,7 @@ export default function SettingsPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setIsConfiguring2FA(true)}
+                            onClick={handleStart2FASetup}
                             className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity"
                           >
                             Set up 2FA
@@ -1081,7 +1310,75 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    {/* Interactive Setup Box (Key, QR & Backup Codes Right There) */}
+                    {/* Disable Confirmation Box (Requires Account Password) */}
+                    {isDisabling2FA && is2FAEnabled && (
+                      <form onSubmit={handleConfirmDisable2FA} className="border-t border-slate-100 dark:border-slate-800/80 p-5 sm:p-6 space-y-4 bg-slate-50/40 dark:bg-slate-900/20">
+                        <div className="space-y-1">
+                          <h3 className="text-xs font-semibold text-slate-900 dark:text-white">
+                            Confirm Password to Turn Off 2FA
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            To protect your account from unauthorized changes, enter your password to deactivate Two-Factor Authentication.
+                          </p>
+                        </div>
+
+                        {twoFactorError && (
+                          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 text-red-700 dark:text-red-400 text-xs font-medium flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{twoFactorError}</span>
+                          </div>
+                        )}
+
+                        <div className="relative max-w-sm">
+                          <input
+                            type={showDisablePassword ? 'text' : 'password'}
+                            value={disablePassword}
+                            onChange={(e) => setDisablePassword(e.target.value)}
+                            required
+                            placeholder="Enter your account password"
+                            className="w-full h-9 px-3 pr-10 text-base sm:text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowDisablePassword(!showDisablePassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          >
+                            {showDisablePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+
+                        <div className="pt-2 flex items-center justify-end gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsDisabling2FA(false);
+                              setDisablePassword('');
+                              setTwoFactorError('');
+                            }}
+                            className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            disabled={isSubmittingDisable2FA}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isSubmittingDisable2FA ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Deactivating...</span>
+                              </>
+                            ) : (
+                              <span>Confirm & Turn Off</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Interactive Setup Box (Real TOTP QR Code, Real Email Code Dispatch) */}
                     {isConfiguring2FA && !is2FAEnabled && (
                       <form onSubmit={handleActivate2FA} className="border-t border-slate-100 dark:border-slate-800/80 p-5 sm:p-6 space-y-5 bg-slate-50/40 dark:bg-slate-900/20">
                         {twoFactorError && (
@@ -1107,7 +1404,7 @@ export default function SettingsPage() {
                                   type="radio"
                                   name="setup-2fa-method"
                                   checked={selected2FAMethod === 'TOTP'}
-                                  onChange={() => setSelected2FAMethod('TOTP')}
+                                  onChange={() => handleSelect2FAMethod('TOTP')}
                                 />
                                 <span className="text-xs font-medium text-slate-900 dark:text-white">
                                   Authenticator App
@@ -1128,7 +1425,7 @@ export default function SettingsPage() {
                                   type="radio"
                                   name="setup-2fa-method"
                                   checked={selected2FAMethod === 'EMAIL'}
-                                  onChange={() => setSelected2FAMethod('EMAIL')}
+                                  onChange={() => handleSelect2FAMethod('EMAIL')}
                                 />
                                 <span className="text-xs font-medium text-slate-900 dark:text-white">
                                   Email Code
@@ -1143,29 +1440,41 @@ export default function SettingsPage() {
 
                         {selected2FAMethod === 'TOTP' ? (
                           <div className="space-y-4 pt-1">
-                            {/* QR & Secret Key Box */}
+                            {/* Real QR & Secret Key Box */}
                             <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-5">
-                              {/* Clean Embedded SVG QR Code Visual */}
-                              <div className="w-28 h-28 bg-white p-2 rounded-lg border border-slate-200 flex flex-col items-center justify-center shrink-0 shadow-xs">
-                                <QrCode className="w-24 h-24 text-slate-900" />
+                              {/* Real Base64 PNG QR Code from RFC 6238 Generator */}
+                              <div className="w-28 h-28 bg-white p-1 rounded-lg border border-slate-200 flex flex-col items-center justify-center shrink-0 shadow-xs">
+                                {isLoading2FASetup ? (
+                                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                                ) : totpQrCodeUrl ? (
+                                  <img
+                                    src={totpQrCodeUrl}
+                                    alt="Authenticator QR Code"
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <QrCode className="w-16 h-16 text-slate-400" />
+                                )}
                               </div>
 
                               <div className="space-y-2 flex-1 min-w-0 text-center sm:text-left">
                                 <span className="text-xs text-slate-500 block">
-                                  Scan QR code or enter manual secret key:
+                                  Scan QR code in Google Authenticator or enter manual secret key:
                                 </span>
                                 <div className="flex items-center justify-center sm:justify-start gap-2">
                                   <code className="text-xs font-mono font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 select-all">
-                                    {totpSecret}
+                                    {totpSecret || 'Loading secret...'}
                                   </code>
-                                  <button
-                                    type="button"
-                                    onClick={copyTotpKey}
-                                    className="p-1 rounded text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
-                                    title="Copy Secret Key"
-                                  >
-                                    {copiedTotpSecret ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                                  </button>
+                                  {totpSecret && (
+                                    <button
+                                      type="button"
+                                      onClick={copyTotpKey}
+                                      className="p-1 rounded text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+                                      title="Copy Secret Key"
+                                    >
+                                      {copiedTotpSecret ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1185,40 +1494,90 @@ export default function SettingsPage() {
                               />
                             </div>
 
-                            {/* Backup Recovery Codes */}
-                            <div className="p-3.5 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                                  Emergency Recovery Codes:
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={copyRecoveryCodes}
-                                  className="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:underline flex items-center gap-1"
-                                >
-                                  {copiedBackupCodes ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                                  <span>{copiedBackupCodes ? 'Copied' : 'Copy codes'}</span>
-                                </button>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                                {backupCodes.map((code, i) => (
-                                  <span key={i} className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-[#0c1424] py-1 rounded border border-slate-200/70 dark:border-slate-700/60">
-                                    {code}
+                            {/* Emergency Backup Recovery Codes */}
+                            {backupCodes.length > 0 && (
+                              <div className="p-3.5 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                    Emergency Backup Recovery Codes:
                                   </span>
-                                ))}
+                                  <button
+                                    type="button"
+                                    onClick={copyRecoveryCodes}
+                                    className="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:underline flex items-center gap-1"
+                                  >
+                                    {copiedBackupCodes ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                    <span>{copiedBackupCodes ? 'Copied' : 'Copy codes'}</span>
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
+                                  {backupCodes.map((code, i) => (
+                                    <span key={i} className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-[#0c1424] py-1 rounded border border-slate-200/70 dark:border-slate-700/60 select-all">
+                                      {code}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         ) : (
-                          <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            A verification code will be sent to <strong className="text-slate-900 dark:text-white">{email}</strong> whenever you log in from a new device.
+                          <div className="space-y-4 pt-1">
+                            <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 space-y-3">
+                              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                A 6-digit verification code will be sent to <strong className="text-slate-900 dark:text-white">{email}</strong> via ZeptoMail to verify and activate Two-Factor Authentication.
+                              </p>
+                              {!emailOtpSent ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRequestEmailOtp}
+                                  disabled={isRequestingEmailOtp}
+                                  className="h-8 px-4 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                  {isRequestingEmailOtp ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Dispatching email...</span>
+                                    </>
+                                  ) : (
+                                    <span>Send verification code to {email || 'email'}</span>
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="space-y-2 pt-1">
+                                  <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                                      Enter 6-digit verification code from your email:
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={handleRequestEmailOtp}
+                                      disabled={isRequestingEmailOtp}
+                                      className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                                    >
+                                      Resend code
+                                    </button>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    maxLength={6}
+                                    value={emailOtpCode}
+                                    onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="123456"
+                                    className="w-48 h-9 px-3 text-center text-base sm:text-sm font-mono font-bold tracking-widest rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-slate-400"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
                         <div className="pt-2 flex items-center justify-end gap-2.5">
                           <button
                             type="button"
-                            onClick={() => setIsConfiguring2FA(false)}
+                            onClick={() => {
+                              setIsConfiguring2FA(false);
+                              setTwoFactorError('');
+                            }}
                             className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                           >
                             Cancel
@@ -1226,9 +1585,17 @@ export default function SettingsPage() {
 
                           <button
                             type="submit"
-                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity"
+                            disabled={isSubmitting2FA || (selected2FAMethod === 'EMAIL' && !emailOtpSent)}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
                           >
-                            Verify & Activate 2FA
+                            {isSubmitting2FA ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Verifying...</span>
+                              </>
+                            ) : (
+                              <span>Verify & Activate 2FA</span>
+                            )}
                           </button>
                         </div>
                       </form>
