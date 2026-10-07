@@ -100,11 +100,12 @@ export class AuditService {
 
   /**
    * Retrieves recent distinct login sessions for a user across devices.
+   * Filters out automated test runners (node/undici) and deduplicates by distinct client platform.
    */
-  public async getRecentLoginSessions(userId: string, limit = 5) {
+  public async getRecentLoginSessions(userId: string, limit = 6) {
     try {
       if (!db || typeof db.select !== 'function') return [];
-      return await db
+      const rows = await db
         .select({
           id: auditLogs.id,
           ipAddress: auditLogs.ipAddress,
@@ -114,7 +115,36 @@ export class AuditService {
         .from(auditLogs)
         .where(and(eq(auditLogs.userId, userId), eq(auditLogs.action, 'USER_LOGIN')))
         .orderBy(desc(auditLogs.createdAt))
-        .limit(limit);
+        .limit(30);
+
+      // Filter out automated script user agents like "node", "axios", "undici"
+      const humanRows = rows.filter((r) => {
+        const ua = (r.userAgent || '').trim().toLowerCase();
+        return ua && ua !== 'node' && !ua.startsWith('node/') && !ua.startsWith('axios') && !ua.startsWith('undici');
+      });
+
+      // Deduplicate by device/platform so distinct physical devices appear cleanly
+      const seen = new Set<string>();
+      const distinct: typeof rows = [];
+
+      for (const row of humanRows) {
+        const ua = row.userAgent || '';
+        let key = 'unknown';
+        if (/iPhone/i.test(ua)) key = 'apple-iphone';
+        else if (/iPad/i.test(ua)) key = 'apple-ipad';
+        else if (/Android/i.test(ua)) key = 'android-device';
+        else if (/Windows/i.test(ua)) key = 'windows-pc';
+        else if (/Macintosh|Mac OS X/i.test(ua)) key = 'macos-pc';
+        else if (/Linux/i.test(ua)) key = 'linux-pc';
+        else key = ua.slice(0, 30);
+
+        if (!seen.has(key)) {
+          seen.add(key);
+          distinct.push(row);
+        }
+      }
+
+      return distinct.slice(0, limit);
     } catch (err) {
       console.error('[AuditService] Failed to fetch login sessions:', err);
       return [];

@@ -72,11 +72,11 @@ interface ParsedClientDevice {
 }
 
 function parseDeviceSession(ua?: string | null): ParsedClientDevice {
-  if (!ua || !ua.trim()) {
+  if (!ua || !ua.trim() || ua.trim().toLowerCase() === 'node') {
     return {
       displayName: 'Web Browser',
       category: 'browser',
-      os: 'Unknown OS',
+      os: 'Web Platform',
       browser: 'Web Browser',
     };
   }
@@ -1563,37 +1563,65 @@ export default function SettingsPage() {
                     </div>
 
                     {/* Other Logged-in Devices (from activeSessions) */}
-                    {securityData?.activeSessions && securityData.activeSessions.length > 1 && (
-                      securityData.activeSessions.slice(1).map((s) => {
+                    {(() => {
+                      const currentParsed = parseDeviceSession(typeof navigator !== 'undefined' ? navigator.userAgent : null);
+                      const otherSessions = (securityData?.activeSessions || []).filter((s) => {
+                        const parsed = parseDeviceSession(s.userAgent);
+                        if ((s.userAgent || '').toLowerCase() === 'node') return false;
+                        // Show sessions from a different OS or category than the current device
+                        const isSameAsCurrent =
+                          parsed.category === currentParsed.category &&
+                          parsed.os === currentParsed.os;
+                        return !isSameAsCurrent;
+                      });
+
+                      if (otherSessions.length === 0) {
+                        return (
+                          <div className="p-5 sm:p-6 text-center bg-slate-50/20 dark:bg-slate-900/10">
+                            <p className="text-xs text-slate-400 dark:text-slate-500">
+                              No other devices currently active. Your account is only signed in on this device.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return otherSessions.map((s) => {
                         const parsed = parseDeviceSession(s.userAgent);
                         return (
                           <div key={s.id} className="p-5 sm:p-6 flex items-start justify-between gap-4 bg-slate-50/30 dark:bg-slate-900/10">
                             <div className="flex items-start gap-3.5 min-w-0">
                               <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
                                 {parsed.category === 'mobile' ? (
-                                  <Smartphone className="w-4 h-4" />
+                                  <Smartphone className="w-4 h-4 text-blue-500" />
                                 ) : parsed.category === 'api' ? (
-                                  <Key className="w-4 h-4" />
+                                  <Key className="w-4 h-4 text-amber-500" />
                                 ) : (
                                   <Laptop className="w-4 h-4" />
                                 )}
                               </div>
                               <div className="space-y-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                  {parsed.displayName}
-                                </p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                    {parsed.displayName}
+                                  </p>
+                                  {parsed.category === 'mobile' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                      Mobile Device
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
                                   IP: {s.ipAddress && !s.ipAddress.startsWith('10.') ? s.ipAddress : resolvedCurrentIp}
                                 </p>
                                 <p className="text-xs text-slate-400">
-                                  Session logged: {formatDateTime(s.createdAt)}
+                                  Last active: {formatDateTime(s.createdAt)}
                                 </p>
                               </div>
                             </div>
                           </div>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </div>
                 </div>
               </div>

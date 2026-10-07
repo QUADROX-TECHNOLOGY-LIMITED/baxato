@@ -509,6 +509,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       kycStatus: user.kycStatus as KycStatus,
     });
 
+    const forwardedIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
+    const realIp = (request.headers['x-real-ip'] as string)?.trim();
+    const clientIp = forwardedIp || realIp || request.ip || '127.0.0.1';
+
     // Record login in audit_logs
     await auditService.log({
       userId: user.id,
@@ -516,7 +520,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       action: 'USER_LOGIN',
       resourceType: 'USER',
       resourceId: user.id,
-      ipAddress: request.ip,
+      ipAddress: clientIp,
       userAgent: (request.headers['user-agent'] as string) || undefined,
       changes: {
         email: user.email,
