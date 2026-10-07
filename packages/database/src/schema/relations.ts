@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { users, businesses, businessMembers, kycVerifications } from './core.js';
+import { users, businesses, businessMembers, kycVerifications, teamInvitations } from './core.js';
 import { wallets, financialLedger } from './wallets.js';
 import { serviceTransactions, providerTransactions, examPins } from './services.js';
 import { apiKeys, idempotencyKeys, webhookDeliveries, auditLogs } from './security.js';
@@ -10,6 +10,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(serviceTransactions),
   kycVerifications: many(kycVerifications),
   auditLogs: many(auditLogs),
+  sentInvitations: many(teamInvitations),
 }));
 
 export const kycVerificationsRelations = relations(kycVerifications, ({ one }) => ({
@@ -25,6 +26,7 @@ export const businessesRelations = relations(businesses, ({ one, many }) => ({
     references: [users.id],
   }),
   members: many(businessMembers),
+  invitations: many(teamInvitations),
   wallets: many(wallets),
   ledgerEntries: many(financialLedger),
   transactions: many(serviceTransactions),
@@ -40,6 +42,17 @@ export const businessMembersRelations = relations(businessMembers, ({ one }) => 
   }),
   user: one(users, {
     fields: [businessMembers.userId],
+    references: [users.id],
+  }),
+}));
+
+export const teamInvitationsRelations = relations(teamInvitations, ({ one }) => ({
+  business: one(businesses, {
+    fields: [teamInvitations.businessId],
+    references: [businesses.id],
+  }),
+  invitedBy: one(users, {
+    fields: [teamInvitations.invitedById],
     references: [users.id],
   }),
 }));

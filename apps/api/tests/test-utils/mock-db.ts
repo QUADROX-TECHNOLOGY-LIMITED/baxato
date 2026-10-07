@@ -51,6 +51,19 @@ export interface MockBusinessMember {
   updatedAt: Date;
 }
 
+export interface MockTeamInvitation {
+  id: string;
+  businessId: string;
+  invitedById: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  status: string;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MockWallet {
   id: string;
   businessId: string;
@@ -190,6 +203,7 @@ export class InMemoryTestDb {
   public apiKeys: MockApiKey[] = [];
   public webhookDeliveries: MockWebhookDelivery[] = [];
   public auditLogs: MockAuditLog[] = [];
+  public teamInvitations: MockTeamInvitation[] = [];
 
   public reset() {
     this.users = [];
@@ -204,6 +218,7 @@ export class InMemoryTestDb {
     this.apiKeys = [];
     this.webhookDeliveries = [];
     this.auditLogs = [];
+    this.teamInvitations = [];
   }
 }
 
@@ -358,6 +373,22 @@ function isAuditLogsTable(t: unknown): boolean {
       ('action' in obj && ('resourceType' in obj || 'resource_type' in obj || 'userId' in obj || 'user_id' in obj)) ||
       obj._name === 'audit_logs' ||
       obj.name === 'audit_logs'
+    );
+  }
+  return false;
+}
+
+function isTeamInvitationsTable(t: unknown): boolean {
+  if (t === 'team_invitations' || t === 'teamInvitations') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      'tokenHash' in obj ||
+      'token_hash' in obj ||
+      ('invitedById' in obj && 'email' in obj) ||
+      ('invited_by_id' in obj && 'email' in obj) ||
+      obj._name === 'team_invitations' ||
+      obj.name === 'team_invitations'
     );
   }
   return false;
@@ -578,6 +609,23 @@ export function createMockDatabase() {
         return [newMember];
       }
 
+      if ('tokenHash' in u || 'token_hash' in u) {
+        const inv: MockTeamInvitation = {
+          id: String(u.id || `inv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+          businessId: String(u.businessId || u.business_id),
+          invitedById: String(u.invitedById || u.invited_by_id),
+          email: String(u.email),
+          role: String(u.role),
+          tokenHash: String(u.tokenHash || u.token_hash),
+          status: String(u.status || 'PENDING'),
+          expiresAt: (u.expiresAt || u.expires_at) as Date,
+          createdAt: (u.createdAt as Date) || new Date(),
+          updatedAt: (u.updatedAt as Date) || new Date(),
+        };
+        inMemoryDb.teamInvitations.push(inv);
+        return [inv];
+      }
+
       if ('action' in u && ('resourceType' in u || 'resource_type' in u)) {
         const aud: MockAuditLog = {
           id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -619,6 +667,18 @@ export function createMockDatabase() {
       userId: 'user_id',
       role: 'role',
       createdAt: 'created_at',
+    },
+    teamInvitations: {
+      id: 'id',
+      businessId: 'business_id',
+      invitedById: 'invited_by_id',
+      email: 'email',
+      role: 'role',
+      tokenHash: 'token_hash',
+      status: 'status',
+      expiresAt: 'expires_at',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
     wallets: {
       id: 'id',
@@ -820,6 +880,38 @@ export function createMockDatabase() {
                 }
               }
               return inMemoryDb.businessMembers;
+            }
+
+            if (isTeamInvitationsTable(table)) {
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'token_hash' || col === 'tokenhash') return inMemoryDb.teamInvitations.filter((i) => i.tokenHash === p.val);
+                  if (col === 'business_id' || col === 'businessid') return inMemoryDb.teamInvitations.filter((i) => i.businessId === p.val);
+                  if (col === 'id') return inMemoryDb.teamInvitations.filter((i) => i.id === p.val);
+                  if (col === 'email') return inMemoryDb.teamInvitations.filter((i) => i.email.toLowerCase() === String(p.val).toLowerCase());
+                }
+                if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ col: unknown; val: unknown; type?: string }>;
+                  return inMemoryDb.teamInvitations.filter((i) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (c.type === 'gt' && (col === 'expires_at' || col === 'expiresat')) {
+                        if (new Date(i.expiresAt) <= new Date(c.val as string | number | Date)) return false;
+                        continue;
+                      }
+                      if ((col === 'business_id' || col === 'businessid') && i.businessId !== c.val) return false;
+                      if (col === 'id' && i.id !== c.val) return false;
+                      if (col === 'status' && i.status !== c.val) return false;
+                      if (col === 'email' && i.email.toLowerCase() !== String(c.val).toLowerCase()) return false;
+                      if ((col === 'token_hash' || col === 'tokenhash') && i.tokenHash !== c.val) return false;
+                    }
+                    return true;
+                  });
+                }
+              }
+              return inMemoryDb.teamInvitations;
             }
 
             if (isWalletsTable(table)) {
@@ -1237,6 +1329,60 @@ export function createMockDatabase() {
                 return {
                   returning: async () => [whd],
                   then: (resolve: (data: unknown) => void) => resolve([whd]),
+                };
+              }
+            }
+
+            if (isBusinessMembersTable(table)) {
+              let mem: MockBusinessMember | undefined;
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'id') mem = inMemoryDb.businessMembers.find((m) => m.id === p.val);
+                }
+              } else if (targetVal) {
+                mem = inMemoryDb.businessMembers.find((m) => m.id === targetVal);
+              }
+              if (mem) {
+                Object.assign(mem, data);
+                return {
+                  returning: async () => [mem],
+                  then: (resolve: (data: unknown) => void) => resolve([mem]),
+                };
+              }
+            }
+
+            if (isTeamInvitationsTable(table)) {
+              let inv: MockTeamInvitation | undefined;
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'id') inv = inMemoryDb.teamInvitations.find((i) => i.id === p.val);
+                  else if (col === 'token_hash' || col === 'tokenhash') inv = inMemoryDb.teamInvitations.find((i) => i.tokenHash === p.val);
+                } else if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
+                  inv = inMemoryDb.teamInvitations.find((i) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (col === 'id' && i.id !== c.val) return false;
+                      if ((col === 'business_id' || col === 'businessid') && i.businessId !== c.val) return false;
+                      if (col === 'email' && i.email.toLowerCase() !== String(c.val).toLowerCase()) return false;
+                      if (col === 'status' && i.status !== c.val) return false;
+                    }
+                    return true;
+                  });
+                }
+              } else if (targetVal) {
+                inv = inMemoryDb.teamInvitations.find((i) => i.id === targetVal);
+              }
+
+              if (inv) {
+                Object.assign(inv, data);
+                return {
+                  returning: async () => [inv],
+                  then: (resolve: (data: unknown) => void) => resolve([inv]),
                 };
               }
             }

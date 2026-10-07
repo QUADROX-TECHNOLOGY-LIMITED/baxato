@@ -86,6 +86,20 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, Permission[]> = {
     Permission.TENANT_TRANSACTIONS_READ,
     Permission.TENANT_SERVICES_EXECUTE,
   ],
+
+  // Business Finance: Can view wallets, transactions, statements, but cannot manage team or API keys
+  [UserRole.FINANCE]: [
+    Permission.TENANT_BUSINESS_READ,
+    Permission.TENANT_MEMBERS_READ,
+    Permission.TENANT_WALLETS_READ,
+    Permission.TENANT_TRANSACTIONS_READ,
+  ],
+
+  // Business Viewer: Read-only access to overview and transactions
+  [UserRole.VIEWER]: [
+    Permission.TENANT_BUSINESS_READ,
+    Permission.TENANT_TRANSACTIONS_READ,
+  ],
 };
 
 /**

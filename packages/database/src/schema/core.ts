@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, boolean, jsonb, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { generateEntityId, UserRole } from '@baxato/common';
+import { generateEntityId, UserRole, InvitationStatus } from '@baxato/common';
 
 export const userRoleEnum = pgEnum('user_role', [
   UserRole.SUPER_ADMIN,
@@ -7,7 +7,16 @@ export const userRoleEnum = pgEnum('user_role', [
   UserRole.SUPPORT,
   UserRole.BUSINESS_OWNER,
   UserRole.BUSINESS_ADMIN,
+  UserRole.FINANCE,
   UserRole.DEVELOPER,
+  UserRole.VIEWER,
+]);
+
+export const invitationStatusEnum = pgEnum('invitation_status', [
+  InvitationStatus.PENDING,
+  InvitationStatus.ACCEPTED,
+  InvitationStatus.REVOKED,
+  InvitationStatus.EXPIRED,
 ]);
 
 export const userStatusEnum = pgEnum('user_status', [
@@ -142,6 +151,33 @@ export const kycVerifications = pgTable(
   ],
 );
 
+// 5. Team Invitations Table
+export const teamInvitations = pgTable(
+  'team_invitations',
+  {
+    id: text('id').primaryKey().$defaultFn(() => generateEntityId('inv')),
+    businessId: text('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    invitedById: text('invited_by_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: userRoleEnum('role').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: invitationStatusEnum('status').default(InvitationStatus.PENDING).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('team_inv_token_hash_idx').on(table.tokenHash),
+    index('team_inv_business_id_idx').on(table.businessId),
+    index('team_inv_email_idx').on(table.email),
+    index('team_inv_status_idx').on(table.status),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Business = typeof businesses.$inferSelect;
@@ -150,3 +186,5 @@ export type BusinessMember = typeof businessMembers.$inferSelect;
 export type NewBusinessMember = typeof businessMembers.$inferInsert;
 export type KycVerification = typeof kycVerifications.$inferSelect;
 export type NewKycVerification = typeof kycVerifications.$inferInsert;
+export type TeamInvitation = typeof teamInvitations.$inferSelect;
+export type NewTeamInvitation = typeof teamInvitations.$inferInsert;

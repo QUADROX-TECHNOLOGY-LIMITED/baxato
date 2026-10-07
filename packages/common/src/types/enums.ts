@@ -63,7 +63,16 @@ export enum UserRole {
   // Merchant Level (External)
   BUSINESS_OWNER = 'BUSINESS_OWNER', // Merchant (Max 3 businesses)
   BUSINESS_ADMIN = 'BUSINESS_ADMIN', // Merchant Team Admin
+  FINANCE = 'FINANCE',               // Merchant Finance / Accounting
   DEVELOPER = 'DEVELOPER',           // Merchant Team Developer
+  VIEWER = 'VIEWER',                 // Merchant Read-only Viewer
+}
+
+export enum InvitationStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REVOKED = 'REVOKED',
+  EXPIRED = 'EXPIRED',
 }
 
 export enum KycStatus {

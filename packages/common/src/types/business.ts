@@ -23,15 +23,37 @@ export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
 
 export const inviteBusinessMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
-  role: z.enum([UserRole.BUSINESS_ADMIN, UserRole.DEVELOPER], {
-    errorMap: () => ({ message: 'Member role must be BUSINESS_ADMIN or DEVELOPER' }),
+  role: z.enum([
+    UserRole.BUSINESS_ADMIN,
+    UserRole.FINANCE,
+    UserRole.DEVELOPER,
+    UserRole.SUPPORT,
+    UserRole.VIEWER,
+  ], {
+    errorMap: () => ({ message: 'Member role must be BUSINESS_ADMIN, FINANCE, DEVELOPER, SUPPORT, or VIEWER' }),
   }),
 });
 
 export type InviteBusinessMemberInput = z.infer<typeof inviteBusinessMemberSchema>;
 
 export const updateBusinessMemberSchema = z.object({
-  role: z.enum([UserRole.BUSINESS_ADMIN, UserRole.DEVELOPER]),
+  role: z.enum([
+    UserRole.BUSINESS_ADMIN,
+    UserRole.FINANCE,
+    UserRole.DEVELOPER,
+    UserRole.SUPPORT,
+    UserRole.VIEWER,
+  ]),
 });
 
 export type UpdateBusinessMemberInput = z.infer<typeof updateBusinessMemberSchema>;
+
+export const acceptTeamInvitationSchema = z.object({
+  token: z.string().min(1, 'Invitation token is required'),
+  firstName: z.string().min(1, 'First name is required').optional(),
+  lastName: z.string().min(1, 'Last name is required').optional(),
+  password: z.string().min(8, 'Password must be at least 8 characters').optional(),
+  phoneNumber: z.string().optional(),
+});
+
+export type AcceptTeamInvitationInput = z.infer<typeof acceptTeamInvitationSchema>;

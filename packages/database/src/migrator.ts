@@ -42,6 +42,42 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_backup_codes JSONB DEFAULT '[]'::jsonb NOT NULL;`;
 
+    // Idempotent schema guarantee for Team & RBAC
+    try {
+      await sql`ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'FINANCE';`;
+      await sql`ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'VIEWER';`;
+    } catch {
+      // Ignore if already added or not supported in transaction
+    }
+
+    await sql`
+      DO $$ BEGIN
+        CREATE TYPE invitation_status AS ENUM ('PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS team_invitations (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+        invited_by_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        role user_role NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        status invitation_status DEFAULT 'PENDING' NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+    `;
+
+    await sql`CREATE INDEX IF NOT EXISTS team_inv_token_hash_idx ON team_invitations(token_hash);`;
+    await sql`CREATE INDEX IF NOT EXISTS team_inv_business_id_idx ON team_invitations(business_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS team_inv_email_idx ON team_invitations(email);`;
+    await sql`CREATE INDEX IF NOT EXISTS team_inv_status_idx ON team_invitations(status);`;
+
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;
   } catch (err: any) {

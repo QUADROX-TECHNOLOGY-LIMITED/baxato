@@ -373,6 +373,102 @@ export class ZeptoMailService {
     this.otpStore.delete(key);
     return { valid: true };
   }
+
+  /**
+   * Dispatches a branded Team Invitation email with secure /invite/:token link.
+   */
+  async sendTeamInvitationEmail(params: {
+    toEmail: string;
+    inviterName: string;
+    businessName: string;
+    role: string;
+    rawToken: string;
+    expiresAt: Date;
+  }): Promise<{ success: boolean; error?: string }> {
+    const { toEmail, inviterName, businessName, role, rawToken, expiresAt } = params;
+    const subject = `${inviterName} invited you to join ${businessName} on BAXATO`;
+    const inviteUrl = `${env.DASHBOARD_URL || 'https://dashboard.baxato.com'}/invite/${encodeURIComponent(rawToken)}`;
+    const formattedRole = role.replace('BUSINESS_', '').replace('_', ' ');
+    const expiryFormatted = expiresAt.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0A0F1D; color: #E2E8F0;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0A0F1D; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="560" border="0" cellspacing="0" cellpadding="0" style="background-color: #0F172A; border: 1px solid #1E293B; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px 32px; text-align: center; border-bottom: 1px solid #1E293B; background: linear-gradient(180deg, #131E36 0%, #0F172A 100%);">
+              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #38BDF8;">
+                BAXATO
+              </h1>
+              <p style="margin: 4px 0 0 0; font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
+                Enterprise Telecom & Utility Infrastructure
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 36px 32px; color: #94A3B8; font-size: 15px; line-height: 1.6;">
+              <p style="margin-top: 0; font-size: 18px; font-weight: 600; color: #F8FAFC;">
+                You've been invited to join <span style="color: #38BDF8; font-weight: 700;">${businessName}</span>!
+              </p>
+              <p style="color: #CBD5E1;">
+                <strong>${inviterName}</strong> has invited you to collaborate as a team member on BAXATO with the following role:
+              </p>
+              
+              <div style="margin: 24px 0; background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748B; font-weight: 600;">ASSIGNED ROLE</span>
+                <h3 style="margin: 4px 0 0 0; font-size: 18px; color: #38BDF8; font-weight: 700;">${formattedRole}</h3>
+              </div>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 32px 0 24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${inviteUrl}" style="background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); color: #FFFFFF; text-decoration: none; padding: 14px 36px; font-size: 15px; font-weight: 600; border-radius: 10px; display: inline-block; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
+                      Accept Invitation & Join Team
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size: 12px; color: #64748B; text-align: center; margin-bottom: 0;">
+                This invitation link will expire on <strong>${expiryFormatted}</strong>. If you did not expect this invitation, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 32px; text-align: center; background-color: #0B1120; border-top: 1px solid #1E293B;">
+              <p style="margin: 0; font-size: 11px; color: #64748B;">
+                &copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    return this.sendEmail([{ email: toEmail.toLowerCase().trim(), name: toEmail }], subject, html);
+  }
 }
 
 export const zeptoMailService = new ZeptoMailService();

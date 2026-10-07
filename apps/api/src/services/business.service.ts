@@ -354,7 +354,7 @@ export class BusinessService {
     businessId: string,
     callerId: string,
     email: string,
-    role: UserRole.BUSINESS_ADMIN | UserRole.DEVELOPER,
+    role: UserRole,
   ) {
     const [biz] = await db
       .select()
