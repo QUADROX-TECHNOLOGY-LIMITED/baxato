@@ -263,11 +263,10 @@ export default function InviteAcceptancePage({
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 font-sans transition-colors duration-150">
       <div className="w-full max-w-lg space-y-6">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            <Sparkles className="w-3.5 h-3.5 text-[#126BEB]" />
-            <span>BAXATO Workspace Invitation</span>
-          </div>
+        <div className="text-center space-y-1.5">
+          <p className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+            Workspace Invitation
+          </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Join {validationData?.businessName}
           </h1>
@@ -281,7 +280,7 @@ export default function InviteAcceptancePage({
           {/* Organization & Role Callout */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#080E1A] border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center text-[#126BEB] dark:text-[#38BDF8] shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
                 <Building2 className="w-5 h-5" />
               </div>
               <div className="min-w-0">
@@ -293,13 +292,10 @@ export default function InviteAcceptancePage({
             </div>
 
             <div className="text-right shrink-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Your Role</p>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium border ${roleCfg.badgeStyle}`}
-              >
-                <RoleIcon className="w-3 h-3" />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Role</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
                 {roleCfg.name}
-              </span>
+              </p>
             </div>
           </div>
 

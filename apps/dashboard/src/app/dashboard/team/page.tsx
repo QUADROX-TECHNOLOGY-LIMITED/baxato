@@ -5,12 +5,6 @@ import Link from 'next/link';
 import {
   Users,
   UserPlus,
-  Shield,
-  ShieldCheck,
-  Key,
-  Wallet,
-  Headphones,
-  Eye,
   Mail,
   Clock,
   CheckCircle2,
@@ -21,11 +15,8 @@ import {
   Check,
   X,
   Search,
-  Filter,
   ArrowLeft,
   ChevronDown,
-  Building2,
-  Lock,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -66,243 +57,163 @@ interface TeamInvitation {
   invitedBy: string;
 }
 
-interface RoleMetadata {
-  name: string;
-  shortDesc: string;
-  fullDesc: string;
-  badgeClass: string;
-  icon: React.ElementType;
-}
-
-const ROLE_METADATA: Record<UserRole, RoleMetadata> = {
+const ROLE_DISPLAY: Record<UserRole, { name: string; description: string }> = {
   BUSINESS_OWNER: {
-    name: 'Business Owner',
-    shortDesc: 'Full root control over all business resources, legal settings, and financials.',
-    fullDesc: 'Root merchant authority with unrestricted control over organization, legal profile, wallet, and team.',
-    badgeClass: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60',
-    icon: ShieldCheck,
+    name: 'Owner',
+    description: 'Full root access to all organization resources, legal settings, and financials.',
   },
   BUSINESS_ADMIN: {
     name: 'Administrator',
-    shortDesc: 'General operational access across settings, services, and team management.',
-    fullDesc: 'Operations manager who can invite members, inspect transactions, configure webhooks, and manage KYC.',
-    badgeClass: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
-    icon: Shield,
+    description: 'Full access to business settings, vending services, team members, and operations.',
   },
   DEVELOPER: {
     name: 'Developer',
-    shortDesc: 'Manage API keys, configure webhooks, and review technical delivery logs.',
-    fullDesc: 'Technical engineer integrating BAXATO /v1 APIs, rotating keys, and debugging webhook events.',
-    badgeClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
-    icon: Key,
+    description: 'Access to API keys, webhooks, vending integrations, technical logs, and docs.',
   },
   FINANCE: {
     name: 'Finance & Billing',
-    shortDesc: 'Monitor operational balances, verify bank deposits, and reconcile debits.',
-    fullDesc: 'Accountant overseeing wallet balance, virtual accounts, statement exports, and financial ledgers.',
-    badgeClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
-    icon: Wallet,
+    description: 'Access to wallet balances, bank funding, transaction accounting, and statements.',
   },
   SUPPORT: {
     name: 'Customer Support',
-    shortDesc: 'Look up transactions, retrieve electricity PINs, and download receipts.',
-    fullDesc: 'Customer care specialist assisting users, retrieving vending tokens, and downloading receipts.',
-    badgeClass: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/60',
-    icon: Headphones,
+    description: 'Access to transaction lookups, receipt generation, and token retrieval.',
   },
   VIEWER: {
     name: 'Viewer',
-    shortDesc: 'Read-only access to overview analytics and aggregated metrics.',
-    fullDesc: 'Observer with read-only visibility into transaction volume and basic workspace metrics.',
-    badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
-    icon: Eye,
+    description: 'Read-only access to overview metrics and transaction summaries.',
   },
 };
 
 interface MatrixRow {
-  capability: string;
-  owner: boolean | string;
-  admin: boolean | string;
-  finance: boolean | string;
-  developer: boolean | string;
-  support: boolean | string;
-  viewer: boolean | string;
+  permission: string;
+  owner: boolean;
+  admin: boolean;
+  developer: boolean;
+  finance: boolean;
+  support: boolean;
+  viewer: boolean;
 }
 
 interface MatrixCategory {
-  title: string;
-  rows: MatrixRow[];
+  category: string;
+  items: MatrixRow[];
 }
 
-const PERMISSION_MATRIX: MatrixCategory[] = [
+const PERMISSION_GRID: MatrixCategory[] = [
   {
-    title: 'Organization & Workspace',
-    rows: [
+    category: 'Workspace & Administration',
+    items: [
       {
-        capability: 'View workspace profile and team members',
+        permission: 'Manage business profile & KYC',
         owner: true,
         admin: true,
-        finance: true,
+        developer: false,
+        finance: false,
+        support: false,
+        viewer: false,
+      },
+      {
+        permission: 'Invite and manage team members',
+        owner: true,
+        admin: true,
+        developer: false,
+        finance: false,
+        support: false,
+        viewer: false,
+      },
+      {
+        permission: 'Transfer workspace ownership',
+        owner: true,
+        admin: false,
+        developer: false,
+        finance: false,
+        support: false,
+        viewer: false,
+      },
+    ],
+  },
+  {
+    category: 'Vending & Transactions',
+    items: [
+      {
+        permission: 'Vend services (Airtime, Data, Electricity, Cable TV)',
+        owner: true,
+        admin: true,
         developer: true,
+        finance: false,
+        support: false,
+        viewer: false,
+      },
+      {
+        permission: 'Search transactions & download receipts',
+        owner: true,
+        admin: true,
+        developer: true,
+        finance: true,
         support: true,
         viewer: true,
       },
       {
-        capability: 'Update legal business details & KYC credentials',
+        permission: 'View electricity PINs & scratch tokens',
         owner: true,
         admin: true,
-        finance: false,
         developer: false,
-        support: false,
+        finance: false,
+        support: true,
         viewer: false,
       },
+    ],
+  },
+  {
+    category: 'Wallet & Billing',
+    items: [
       {
-        capability: 'Invite new collaborators & resend invitations',
+        permission: 'View wallet balances & funding accounts',
         owner: true,
         admin: true,
-        finance: false,
         developer: false,
+        finance: true,
         support: false,
         viewer: false,
       },
       {
-        capability: 'Modify member roles & revoke team access',
+        permission: 'Export financial reports & ledger statements',
         owner: true,
-        admin: 'Non-owners',
-        finance: false,
+        admin: true,
         developer: false,
+        finance: true,
         support: false,
         viewer: false,
       },
+    ],
+  },
+  {
+    category: 'Developer & Technical',
+    items: [
       {
-        capability: 'Transfer organization ownership or close workspace',
+        permission: 'Manage API keys (Live & Test)',
         owner: true,
         admin: false,
-        finance: false,
-        developer: false,
-        support: false,
-        viewer: false,
-      },
-    ],
-  },
-  {
-    title: 'Wallet & Financial Operations',
-    rows: [
-      {
-        capability: 'View operational balance & reserved funds',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: false,
-        support: false,
-        viewer: false,
-      },
-      {
-        capability: 'Access dedicated funding virtual accounts',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: false,
-        support: false,
-        viewer: false,
-      },
-      {
-        capability: 'Inspect ledger debits, fees, and credit adjustments',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: false,
-        support: false,
-        viewer: false,
-      },
-      {
-        capability: 'Export financial accounting statements (CSV/PDF)',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: false,
-        support: false,
-        viewer: false,
-      },
-    ],
-  },
-  {
-    title: 'Vending Services & Transactions',
-    rows: [
-      {
-        capability: 'Direct vending (Airtime, Data, Electricity, Cable TV)',
-        owner: true,
-        admin: true,
-        finance: false,
-        developer: 'Sandbox only',
-        support: false,
-        viewer: false,
-      },
-      {
-        capability: 'Lookup customer transactions by reference / phone',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: 'API logs',
-        support: true,
-        viewer: 'Summary',
-      },
-      {
-        capability: 'View generated electricity PINs & scratch tokens',
-        owner: true,
-        admin: true,
-        finance: false,
-        developer: false,
-        support: true,
-        viewer: false,
-      },
-      {
-        capability: 'Download transaction receipts for customer disputes',
-        owner: true,
-        admin: true,
-        finance: true,
-        developer: false,
-        support: true,
-        viewer: false,
-      },
-    ],
-  },
-  {
-    title: 'Developer APIs & Technical Infrastructure',
-    rows: [
-      {
-        capability: 'Generate, rotate, and revoke Live and Test API keys',
-        owner: true,
-        admin: false,
-        finance: false,
         developer: true,
-        support: false,
-        viewer: false,
-      },
-      {
-        capability: 'Register webhook endpoints & view HMAC secret',
-        owner: true,
-        admin: true,
         finance: false,
-        developer: true,
         support: false,
         viewer: false,
       },
       {
-        capability: 'Inspect webhook delivery attempts & trigger retries',
+        permission: 'Configure webhooks & inspect event logs',
         owner: true,
         admin: true,
+        developer: true,
         finance: false,
-        developer: true,
         support: false,
         viewer: false,
       },
       {
-        capability: 'Interactive API sandbox & Scalar documentation',
+        permission: 'Access API sandbox & technical documentation',
         owner: true,
         admin: true,
+        developer: true,
         finance: true,
-        developer: true,
         support: true,
         viewer: true,
       },
@@ -318,7 +229,7 @@ export default function TeamManagementPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'matrix'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'roles'>('members');
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -416,12 +327,12 @@ export default function TeamManagementPage() {
       if (!res.ok || !json?.success) {
         setInviteFeedback({
           type: 'error',
-          message: json?.error?.message || 'Failed to dispatch invitation. Please try again.',
+          message: json?.error?.message || 'Failed to send invitation. Please try again.',
         });
       } else {
         setInviteFeedback({
           type: 'success',
-          message: `Invitation email sent to ${inviteEmail}.`,
+          message: `Invitation email dispatched to ${inviteEmail}.`,
           rawToken: json.data?.rawToken,
         });
         setInviteEmail('');
@@ -430,7 +341,7 @@ export default function TeamManagementPage() {
     } catch {
       setInviteFeedback({
         type: 'error',
-        message: 'Network error while dispatching invitation.',
+        message: 'Network error while sending invitation.',
       });
     } finally {
       setIsSubmittingInvite(false);
@@ -592,8 +503,8 @@ export default function TeamManagementPage() {
 
   const tabs = [
     { id: 'members' as const, label: 'Members', count: members.length },
-    { id: 'invitations' as const, label: 'Pending Invitations', count: invitations.length },
-    { id: 'matrix' as const, label: 'Roles & Permissions', count: null },
+    { id: 'invitations' as const, label: 'Invitations', count: invitations.length },
+    { id: 'roles' as const, label: 'Roles & permissions', count: null },
   ];
 
   return (
@@ -639,11 +550,11 @@ export default function TeamManagementPage() {
                   <span>Back</span>
                 </Link>
                 <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                  Team
+                  Team members
                 </h1>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                Manage workspace members, invite collaborators, and review account permissions.
+                Manage team members and their account permissions.
               </p>
             </div>
 
@@ -706,7 +617,7 @@ export default function TeamManagementPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search members by name or email..."
+                    placeholder="Search by name or email..."
                     className="w-full pl-9 pr-3.5 py-1.5 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0A1220] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                   />
                   {searchQuery && (
@@ -727,7 +638,7 @@ export default function TeamManagementPage() {
                       className="appearance-none pl-3 pr-8 py-1.5 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0A1220] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#126BEB] cursor-pointer"
                     >
                       <option value="ALL">All roles</option>
-                      <option value="BUSINESS_OWNER">Business Owner</option>
+                      <option value="BUSINESS_OWNER">Owner</option>
                       <option value="BUSINESS_ADMIN">Administrator</option>
                       <option value="DEVELOPER">Developer</option>
                       <option value="FINANCE">Finance & Billing</option>
@@ -739,13 +650,13 @@ export default function TeamManagementPage() {
                 </div>
               </div>
 
-              {/* Members Table */}
+              {/* Members Table (Clean Standard) */}
               <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs sm:text-sm border-collapse">
                     <thead className="bg-slate-50/80 dark:bg-[#080E1A] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
                       <tr>
-                        <th className="py-3 px-4 sm:px-6">Member</th>
+                        <th className="py-3 px-4 sm:px-6">Name</th>
                         <th className="py-3 px-4 sm:px-6">Role</th>
                         <th className="py-3 px-4 sm:px-6">Status</th>
                         <th className="py-3 px-4 sm:px-6">Date Added</th>
@@ -758,7 +669,7 @@ export default function TeamManagementPage() {
                           <td colSpan={5} className="py-12 text-center text-slate-400">
                             <div className="inline-flex items-center gap-2">
                               <RefreshCw className="w-4 h-4 animate-spin text-[#126BEB]" />
-                              <span>Loading team members...</span>
+                              <span>Loading members...</span>
                             </div>
                           </td>
                         </tr>
@@ -784,8 +695,8 @@ export default function TeamManagementPage() {
                         </tr>
                       ) : (
                         filteredMembers.map((member) => {
-                          const meta = ROLE_METADATA[member.role] || ROLE_METADATA.VIEWER;
-                          const isCurrentUser = member.email === user?.email;
+                          const roleInfo = ROLE_DISPLAY[member.role] || ROLE_DISPLAY.VIEWER;
+                          const roleName = member.isOwner ? 'Owner' : roleInfo.name;
 
                           return (
                             <tr
@@ -799,21 +710,9 @@ export default function TeamManagementPage() {
                                     {getInitials(member.name, member.email)}
                                   </div>
                                   <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-slate-900 dark:text-white truncate">
-                                        {member.name || 'Workspace Member'}
-                                      </span>
-                                      {isCurrentUser && (
-                                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                          You
-                                        </span>
-                                      )}
-                                      {member.isOwner && (
-                                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                          Owner
-                                        </span>
-                                      )}
-                                    </div>
+                                    <span className="font-medium text-slate-900 dark:text-white block truncate">
+                                      {member.name || member.email}
+                                    </span>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                       {member.email}
                                     </p>
@@ -821,19 +720,14 @@ export default function TeamManagementPage() {
                                 </div>
                               </td>
 
-                              {/* Role Pill */}
-                              <td className="py-3.5 px-4 sm:px-6">
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium border ${meta.badgeClass}`}
-                                >
-                                  <meta.icon className="w-3 h-3" />
-                                  {meta.name}
-                                </span>
+                              {/* Role (Clean Standard Text) */}
+                              <td className="py-3.5 px-4 sm:px-6 text-slate-700 dark:text-slate-300 font-normal">
+                                {roleName}
                               </td>
 
                               {/* Status */}
                               <td className="py-3.5 px-4 sm:px-6">
-                                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-normal">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                   Active
                                 </span>
@@ -847,7 +741,7 @@ export default function TeamManagementPage() {
                               {/* Actions */}
                               <td className="py-3.5 px-4 sm:px-6 text-right">
                                 {member.isOwner ? (
-                                  <span className="text-xs text-slate-400 italic">Protected</span>
+                                  <span className="text-xs text-slate-400">—</span>
                                 ) : (
                                   <div className="flex items-center justify-end gap-2">
                                     <button
@@ -857,7 +751,7 @@ export default function TeamManagementPage() {
                                       }}
                                       className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                                     >
-                                      Change role
+                                      Edit role
                                     </button>
                                     <button
                                       onClick={() => setRemoveTarget(member)}
@@ -880,7 +774,7 @@ export default function TeamManagementPage() {
             </div>
           )}
 
-          {/* TAB 2: PENDING INVITATIONS */}
+          {/* TAB 2: INVITATIONS */}
           {activeTab === 'invitations' && (
             <div className="space-y-4">
               {/* Search Toolbar */}
@@ -924,7 +818,7 @@ export default function TeamManagementPage() {
                     <thead className="bg-slate-50/80 dark:bg-[#080E1A] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
                       <tr>
                         <th className="py-3 px-4 sm:px-6">Invitee</th>
-                        <th className="py-3 px-4 sm:px-6">Assigned Role</th>
+                        <th className="py-3 px-4 sm:px-6">Role</th>
                         <th className="py-3 px-4 sm:px-6">Invited By</th>
                         <th className="py-3 px-4 sm:px-6">Expires In</th>
                         <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
@@ -960,7 +854,7 @@ export default function TeamManagementPage() {
                         </tr>
                       ) : (
                         filteredInvitations.map((inv) => {
-                          const meta = ROLE_METADATA[inv.role] || ROLE_METADATA.VIEWER;
+                          const roleInfo = ROLE_DISPLAY[inv.role] || ROLE_DISPLAY.VIEWER;
                           const remainingDays = getRemainingDays(inv.expiresAt);
 
                           return (
@@ -981,13 +875,8 @@ export default function TeamManagementPage() {
                               </td>
 
                               {/* Role */}
-                              <td className="py-3.5 px-4 sm:px-6">
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium border ${meta.badgeClass}`}
-                                >
-                                  <meta.icon className="w-3 h-3" />
-                                  {meta.name}
-                                </span>
+                              <td className="py-3.5 px-4 sm:px-6 text-slate-700 dark:text-slate-300 font-normal">
+                                {roleInfo.name}
                               </td>
 
                               {/* Inviter */}
@@ -997,7 +886,7 @@ export default function TeamManagementPage() {
 
                               {/* Expiration */}
                               <td className="py-3.5 px-4 sm:px-6">
-                                <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-normal">
                                   <Clock className="w-3.5 h-3.5" />
                                   {remainingDays === 0
                                     ? 'Expires today'
@@ -1040,81 +929,58 @@ export default function TeamManagementPage() {
             </div>
           )}
 
-          {/* TAB 3: ROLES & PERMISSIONS MATRIX (Stripe / Linear Standard) */}
-          {activeTab === 'matrix' && (
+          {/* TAB 3: ROLES & PERMISSIONS */}
+          {activeTab === 'roles' && (
             <div className="space-y-6">
-              {/* Summary Description Card */}
-              <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center text-[#126BEB] dark:text-[#38BDF8] shrink-0">
-                    <Shield className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      Role-Based Access Control (RBAC) Matrix
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                      Every role in BAXATO enforces strict boundary limits to ensure operational security, compliance, and least privilege access.
-                    </p>
-                  </div>
-                </div>
+              {/* Header Description */}
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Roles & permissions
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  An overview of capabilities available to each workspace role.
+                </p>
               </div>
 
-              {/* Matrix Table */}
+              {/* Grid Table */}
               <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-slate-50/80 dark:bg-[#080E1A] border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                       <tr>
-                        <th className="py-3 px-4 font-semibold uppercase tracking-wider min-w-[260px]">
-                          Permission / Resource
+                        <th className="py-3 px-4 font-semibold uppercase tracking-wider min-w-[240px]">
+                          Permission
                         </th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Owner</th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Admin</th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Finance</th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Developer</th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Support</th>
-                        <th className="py-3 px-3 font-semibold text-center min-w-[90px]">Viewer</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Owner</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Admin</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Developer</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Finance</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Support</th>
+                        <th className="py-3 px-3 font-semibold text-center min-w-[80px]">Viewer</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                      {PERMISSION_MATRIX.map((category, catIdx) => (
+                      {PERMISSION_GRID.map((cat, catIdx) => (
                         <React.Fragment key={catIdx}>
-                          {/* Category Header */}
                           <tr className="bg-slate-50/50 dark:bg-slate-900/40">
                             <td
                               colSpan={7}
                               className="py-2.5 px-4 font-semibold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wide border-y border-slate-200 dark:border-slate-800"
                             >
-                              {category.title}
+                              {cat.category}
                             </td>
                           </tr>
 
-                          {/* Rows */}
-                          {category.rows.map((row, rIdx) => {
-                            const renderCell = (val: boolean | string) => {
-                              if (val === true) {
-                                return (
-                                  <div className="flex items-center justify-center">
-                                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-                                  </div>
-                                );
-                              }
-                              if (val === false) {
-                                return (
-                                  <div className="flex items-center justify-center text-slate-300 dark:text-slate-600 font-bold">
-                                    —
-                                  </div>
-                                );
-                              }
-                              return (
-                                <div className="text-center">
-                                  <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                    {val}
-                                  </span>
-                                </div>
-                              );
-                            };
+                          {cat.items.map((row, rIdx) => {
+                            const renderCheck = (allowed: boolean) => (
+                              <div className="flex items-center justify-center">
+                                {allowed ? (
+                                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600 font-bold">—</span>
+                                )}
+                              </div>
+                            );
 
                             return (
                               <tr
@@ -1122,14 +988,14 @@ export default function TeamManagementPage() {
                                 className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                               >
                                 <td className="py-3 px-4 text-xs font-medium text-slate-800 dark:text-slate-200">
-                                  {row.capability}
+                                  {row.permission}
                                 </td>
-                                <td className="py-3 px-3">{renderCell(row.owner)}</td>
-                                <td className="py-3 px-3">{renderCell(row.admin)}</td>
-                                <td className="py-3 px-3">{renderCell(row.finance)}</td>
-                                <td className="py-3 px-3">{renderCell(row.developer)}</td>
-                                <td className="py-3 px-3">{renderCell(row.support)}</td>
-                                <td className="py-3 px-3">{renderCell(row.viewer)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.owner)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.admin)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.developer)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.finance)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.support)}</td>
+                                <td className="py-3 px-3">{renderCheck(row.viewer)}</td>
                               </tr>
                             );
                           })}
@@ -1154,7 +1020,7 @@ export default function TeamManagementPage() {
                   Invite team member
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Give collaborators access to this BAXATO workspace.
+                  Invite collaborators to your workspace.
                 </p>
               </div>
               <button
@@ -1245,7 +1111,7 @@ export default function TeamManagementPage() {
                       'VIEWER',
                     ] as UserRole[]
                   ).map((roleOption) => {
-                    const meta = ROLE_METADATA[roleOption];
+                    const info = ROLE_DISPLAY[roleOption];
                     const isSelected = inviteRole === roleOption;
 
                     return (
@@ -1267,10 +1133,10 @@ export default function TeamManagementPage() {
                         />
                         <div className="min-w-0 flex-1">
                           <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                            {meta.name}
+                            {info.name}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            {meta.shortDesc}
+                            {info.description}
                           </p>
                         </div>
                       </label>
@@ -1307,10 +1173,10 @@ export default function TeamManagementPage() {
           <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-5">
             <div>
               <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                Change member role
+                Edit role
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Update account permissions for{' '}
+                Update permissions for{' '}
                 <strong className="text-slate-800 dark:text-slate-200">
                   {roleChangeTarget.name || roleChangeTarget.email}
                 </strong>
@@ -1328,7 +1194,7 @@ export default function TeamManagementPage() {
                   'VIEWER',
                 ] as UserRole[]
               ).map((roleOption) => {
-                const meta = ROLE_METADATA[roleOption];
+                const info = ROLE_DISPLAY[roleOption];
                 const isSelected = selectedNewRole === roleOption;
 
                 return (
@@ -1350,10 +1216,10 @@ export default function TeamManagementPage() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        {meta.name}
+                        {info.name}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {meta.shortDesc}
+                        {info.description}
                       </p>
                     </div>
                   </label>
@@ -1400,7 +1266,7 @@ export default function TeamManagementPage() {
                 <strong className="text-slate-900 dark:text-white">
                   {removeTarget.name || removeTarget.email}
                 </strong>{' '}
-                from this workspace? They will immediately lose access to all resources and APIs.
+                from this workspace? They will immediately lose access to all resources.
               </p>
             </div>
 
@@ -1419,7 +1285,7 @@ export default function TeamManagementPage() {
                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center gap-1.5"
               >
                 {isRemovingMember && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Remove member</span>
+                <span>Remove</span>
               </button>
             </div>
           </div>

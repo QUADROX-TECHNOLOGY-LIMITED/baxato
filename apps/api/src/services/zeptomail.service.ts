@@ -386,9 +386,35 @@ export class ZeptoMailService {
     expiresAt: Date;
   }): Promise<{ success: boolean; error?: string }> {
     const { toEmail, inviterName, businessName, role, rawToken, expiresAt } = params;
-    const subject = `${inviterName} invited you to join ${businessName} on BAXATO`;
-    const inviteUrl = `${env.DASHBOARD_URL || 'https://dashboard.baxato.com'}/invite/${encodeURIComponent(rawToken)}`;
-    const formattedRole = role.replace('BUSINESS_', '').replace('_', ' ');
+    const subject = `${inviterName} invited you to join ${businessName} on Baxato`;
+
+    // Dynamically resolve public app base URL from CORS_ORIGINS or configured domain
+    let baseUrl = 'https://baxato.com';
+    if (env.CORS_ORIGINS) {
+      const origins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
+      const prodOrigin = origins.find((o) => !o.includes('localhost') && o.startsWith('http'));
+      if (prodOrigin) {
+        baseUrl = prodOrigin.replace(/\/+$/, '');
+      } else if (origins[0] && origins[0].startsWith('http') && !origins[0].includes('localhost')) {
+        baseUrl = origins[0].replace(/\/+$/, '');
+      }
+    } else if (env.DASHBOARD_URL && !env.DASHBOARD_URL.includes('localhost')) {
+      baseUrl = env.DASHBOARD_URL.replace(/\/+$/, '');
+    }
+
+    const inviteUrl = `${baseUrl}/invite/${encodeURIComponent(rawToken)}`;
+    const logoUrl = `${baseUrl}/baxato-logo.jpg`;
+
+    const roleDisplayMap: Record<string, string> = {
+      BUSINESS_OWNER: 'Business Owner',
+      BUSINESS_ADMIN: 'Administrator',
+      DEVELOPER: 'Developer',
+      FINANCE: 'Finance & Billing',
+      SUPPORT: 'Customer Support',
+      VIEWER: 'Viewer',
+    };
+    const formattedRole = roleDisplayMap[role] || role.replace('BUSINESS_', '').replace('_', ' ');
+
     const expiryFormatted = expiresAt.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -397,66 +423,66 @@ export class ZeptoMailService {
 
     const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject}</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0A0F1D; color: #E2E8F0;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0A0F1D; padding: 40px 16px;">
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 48px 16px;">
     <tr>
       <td align="center">
-        <table width="560" border="0" cellspacing="0" cellpadding="0" style="background-color: #0F172A; border: 1px solid #1E293B; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
-          <!-- Header -->
+        <table width="560" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; width: 100%;">
+          <!-- Logo Header -->
           <tr>
-            <td style="padding: 32px 32px 24px 32px; text-align: center; border-bottom: 1px solid #1E293B; background: linear-gradient(180deg, #131E36 0%, #0F172A 100%);">
-              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #38BDF8;">
-                BAXATO
-              </h1>
-              <p style="margin: 4px 0 0 0; font-size: 11px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
-                Enterprise Telecom & Utility Infrastructure
-              </p>
+            <td align="center" style="padding-bottom: 28px;">
+              <img src="${logoUrl}" alt="Baxato" width="130" style="display: block; border: 0; outline: none; border-radius: 8px;" />
             </td>
           </tr>
 
-          <!-- Content -->
+          <!-- Main Content Card -->
           <tr>
-            <td style="padding: 36px 32px; color: #94A3B8; font-size: 15px; line-height: 1.6;">
-              <p style="margin-top: 0; font-size: 18px; font-weight: 600; color: #F8FAFC;">
-                You've been invited to join <span style="color: #38BDF8; font-weight: 700;">${businessName}</span>!
-              </p>
-              <p style="color: #CBD5E1;">
-                <strong>${inviterName}</strong> has invited you to collaborate as a team member on BAXATO with the following role:
-              </p>
-              
-              <div style="margin: 24px 0; background-color: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 20px;">
-                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748B; font-weight: 600;">ASSIGNED ROLE</span>
-                <h3 style="margin: 4px 0 0 0; font-size: 18px; color: #38BDF8; font-weight: 700;">${formattedRole}</h3>
-              </div>
+            <td style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 40px 36px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+              <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; line-height: 28px; color: #0F172A; letter-spacing: -0.2px;">
+                Join ${businessName} on Baxato
+              </h1>
 
-              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 32px 0 24px 0;">
+              <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 22px; color: #475569;">
+                <strong>${inviterName}</strong> has invited you to join the <strong>${businessName}</strong> workspace on Baxato as a <strong>${formattedRole}</strong>.
+              </p>
+
+              <!-- CTA Button -->
+              <table border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0 32px 0;">
                 <tr>
-                  <td align="center">
-                    <a href="${inviteUrl}" style="background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); color: #FFFFFF; text-decoration: none; padding: 14px 36px; font-size: 15px; font-weight: 600; border-radius: 10px; display: inline-block; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
-                      Accept Invitation & Join Team
+                  <td>
+                    <a href="${inviteUrl}" style="background-color: #126BEB; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px; display: inline-block;">
+                      Accept invitation
                     </a>
                   </td>
                 </tr>
               </table>
 
-              <p style="font-size: 12px; color: #64748B; text-align: center; margin-bottom: 0;">
-                This invitation link will expire on <strong>${expiryFormatted}</strong>. If you did not expect this invitation, you can safely ignore this email.
+              <!-- Alternative Link -->
+              <p style="margin: 0 0 16px 0; font-size: 12px; line-height: 20px; color: #64748B;">
+                If you have trouble with the button above, copy and paste this link into your web browser:
+              </p>
+              <p style="margin: 0 0 28px 0; font-size: 12px; line-height: 18px; color: #126BEB; word-break: break-all;">
+                <a href="${inviteUrl}" style="color: #126BEB; text-decoration: underline;">${inviteUrl}</a>
+              </p>
+
+              <!-- Expiry Note -->
+              <p style="margin: 0; padding-top: 20px; border-top: 1px solid #F1F5F9; font-size: 12px; line-height: 18px; color: #94A3B8;">
+                This invitation link was sent to <span style="color: #475569;">${toEmail}</span> and will expire on <strong>${expiryFormatted}</strong>. If you did not expect this invitation, you can safely ignore this email.
               </p>
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; text-align: center; background-color: #0B1120; border-top: 1px solid #1E293B;">
-              <p style="margin: 0; font-size: 11px; color: #64748B;">
-                &copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.
-              </p>
+            <td align="center" style="padding-top: 28px; font-size: 12px; line-height: 18px; color: #94A3B8;">
+              <p style="margin: 0 0 4px 0;">&copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.</p>
+              <p style="margin: 0;">Enterprise Digital Vending & Telecom Infrastructure.</p>
             </td>
           </tr>
         </table>
