@@ -17,6 +17,7 @@ import {
   Search,
   ArrowLeft,
   ChevronDown,
+  ShieldAlert,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -264,14 +265,20 @@ export default function TeamManagementPage() {
   const businessName = business?.name || 'Workspace';
   const merchantName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Merchant';
   const kycStatus = user?.kycStatus || 'UNVERIFIED';
+  const userRole = user?.role || 'BUSINESS_OWNER';
+  const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
 
   useEffect(() => {
     if (!token) {
       clearSessionAndRedirect();
       return;
     }
-    fetchTeamData();
-  }, [token]);
+    if (isOwnerOrAdmin) {
+      fetchTeamData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [token, isOwnerOrAdmin]);
 
   const fetchTeamData = async () => {
     setIsLoading(true);
@@ -514,6 +521,7 @@ export default function TeamManagementPage() {
         businessName={businessName}
         merchantName={merchantName}
         kycStatus={kycStatus}
+        userRole={userRole}
         onOpenKycModal={() => setIsKycModalOpen(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -527,16 +535,41 @@ export default function TeamManagementPage() {
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
           kycStatus={kycStatus}
+          userRole={userRole}
           isRefreshing={isLoading}
           onRefresh={fetchTeamData}
         />
 
         {/* Page Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-6 min-w-0">
-          {/* KYC Banner if unverified */}
-          {kycStatus !== 'VERIFIED' && (
-            <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
-          )}
+          {!isOwnerOrAdmin ? (
+            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-xs mt-12">
+              <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Access Restricted
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Team and collaborator management is restricted to Workspace Owners and Administrators.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#126BEB] text-white font-medium text-xs sm:text-sm hover:bg-[#0B5CC7] transition-colors"
+                >
+                  Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* KYC Banner if unverified */}
+              {kycStatus !== 'VERIFIED' && (
+                <KycBanner kycStatus={kycStatus} userRole={userRole} onOpenKycModal={() => setIsKycModalOpen(true)} />
+              )}
 
           {/* Page Header (Stripe Standard) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1007,7 +1040,9 @@ export default function TeamManagementPage() {
               </div>
             </div>
           )}
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* MODAL: INVITE TEAM MEMBER (Stripe Style) */}

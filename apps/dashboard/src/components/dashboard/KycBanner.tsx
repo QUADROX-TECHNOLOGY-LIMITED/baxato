@@ -5,10 +5,33 @@ import { ArrowRight, ShieldAlert, AlertCircle } from 'lucide-react';
 
 interface KycBannerProps {
   kycStatus: string;
+  userRole?: string;
   onOpenKycModal: () => void;
 }
 
-export default function KycBanner({ kycStatus, onOpenKycModal }: KycBannerProps) {
+export default function KycBanner({ kycStatus, userRole, onOpenKycModal }: KycBannerProps) {
+  const [activeRole, setActiveRole] = React.useState<string>(userRole || 'BUSINESS_OWNER');
+
+  React.useEffect(() => {
+    if (userRole) {
+      setActiveRole(userRole);
+    } else {
+      try {
+        const raw = localStorage.getItem('bx_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.role) setActiveRole(parsed.role);
+        }
+      } catch {}
+    }
+  }, [userRole]);
+
+  const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
+
+  if (!isOwnerOrAdmin) {
+    return null;
+  }
+
   if (!kycStatus || kycStatus === 'VERIFIED' || kycStatus === 'INITIALIZING' || kycStatus === 'LOADING') {
     return null;
   }

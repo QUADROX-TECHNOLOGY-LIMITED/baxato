@@ -672,6 +672,31 @@ export class TeamService {
       .where(eq(users.email, invitation.email.toLowerCase()))
       .limit(1);
 
+    let isAlreadyMember = false;
+    let isOwner = false;
+
+    if (existingUser) {
+      if (biz && biz.ownerId === existingUser.id) {
+        isAlreadyMember = true;
+        isOwner = true;
+      } else {
+        const [existingMember] = await db
+          .select({ id: businessMembers.id })
+          .from(businessMembers)
+          .where(
+            and(
+              eq(businessMembers.businessId, invitation.businessId),
+              eq(businessMembers.userId, existingUser.id),
+            ),
+          )
+          .limit(1);
+
+        if (existingMember) {
+          isAlreadyMember = true;
+        }
+      }
+    }
+
     return {
       valid: true,
       invitationId: invitation.id,
@@ -684,6 +709,8 @@ export class TeamService {
       expiresAt: invitation.expiresAt,
       existingAccount: Boolean(existingUser),
       userName: existingUser ? `${existingUser.firstName} ${existingUser.lastName}`.trim() : null,
+      isAlreadyMember,
+      isOwner,
     };
   }
 
@@ -718,6 +745,40 @@ export class TeamService {
 
       if (!existingCaller) {
         throw new NotFoundError('User');
+      }
+
+      // Security & Session integrity check: Caller must match invited email!
+      if (existingCaller.email.toLowerCase() !== validation.email.toLowerCase()) {
+        throw new ConflictError(
+          `You are currently signed in as ${existingCaller.email}, but this invitation was sent to ${validation.email}. Please sign out to accept this invitation.`,
+        );
+      }
+
+      // Check if already owner of this business
+      const [biz] = await db
+        .select({ id: businesses.id, ownerId: businesses.ownerId })
+        .from(businesses)
+        .where(eq(businesses.id, validation.businessId))
+        .limit(1);
+
+      if (biz && biz.ownerId === existingCaller.id) {
+        throw new ConflictError('You are already the owner of this workspace.');
+      }
+
+      // Check if already an active member of this business
+      const [existingMember] = await db
+        .select({ id: businessMembers.id })
+        .from(businessMembers)
+        .where(
+          and(
+            eq(businessMembers.businessId, validation.businessId),
+            eq(businessMembers.userId, existingCaller.id),
+          ),
+        )
+        .limit(1);
+
+      if (existingMember) {
+        throw new ConflictError('You are already an active member of this workspace.');
       }
 
       resolvedUserId = existingCaller.id;

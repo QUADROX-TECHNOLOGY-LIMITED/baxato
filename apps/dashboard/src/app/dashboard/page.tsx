@@ -81,6 +81,8 @@ export default function DashboardOverviewPage() {
     }
   };
 
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
+
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
@@ -93,6 +95,9 @@ export default function DashboardOverviewPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
+        if (storedUser.role) {
+          setUserRole(storedUser.role);
+        }
         if (storedUser.firstName) {
           setMerchantName(storedUser.firstName);
           setUserFirstName(storedUser.firstName);
@@ -163,8 +168,10 @@ export default function DashboardOverviewPage() {
     if (updatedUser?.lastName) setUserLastName(updatedUser.lastName);
   };
 
+  const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
+
   const handleServiceClick = (serviceName: string, serviceRoute: string) => {
-    if (kycStatus !== 'VERIFIED') {
+    if (isOwnerOrAdmin && kycStatus !== 'VERIFIED') {
       setIsKycModalOpen(true);
       return;
     }
@@ -173,7 +180,7 @@ export default function DashboardOverviewPage() {
 
   const handleFundWalletClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (kycStatus !== 'VERIFIED') {
+    if (isOwnerOrAdmin && kycStatus !== 'VERIFIED') {
       setIsKycModalOpen(true);
       return;
     }
@@ -269,6 +276,7 @@ export default function DashboardOverviewPage() {
         businessName={businessName}
         merchantName={merchantName}
         kycStatus={kycStatus}
+        userRole={userRole}
         onOpenKycModal={() => setIsKycModalOpen(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -281,6 +289,7 @@ export default function DashboardOverviewPage() {
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
           kycStatus={kycStatus}
+          userRole={userRole}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
         />
@@ -289,6 +298,7 @@ export default function DashboardOverviewPage() {
           {/* Identity Verification Warning Banner */}
           <KycBanner
             kycStatus={kycStatus}
+            userRole={userRole}
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 

@@ -17,21 +17,49 @@ interface HeaderProps {
   onOpenKycModal: () => void;
   merchantName: string;
   kycStatus: string;
+  userRole?: string;
   isRefreshing: boolean;
   onRefresh: () => void;
   sticky?: boolean;
 }
+
+const ROLE_TITLES: Record<string, string> = {
+  BUSINESS_OWNER: 'Business Owner',
+  BUSINESS_ADMIN: 'Administrator',
+  DEVELOPER: 'Developer',
+  FINANCE: 'Finance',
+  SUPPORT: 'Customer Support',
+  VIEWER: 'Viewer',
+};
 
 export default function Header({
   onToggleSidebar,
   onOpenKycModal,
   merchantName,
   kycStatus,
+  userRole,
   isRefreshing,
   onRefresh,
   sticky = true,
 }: HeaderProps) {
   const isVerified = kycStatus === 'VERIFIED';
+  const [activeRole, setActiveRole] = React.useState<string>(userRole || 'BUSINESS_OWNER');
+
+  React.useEffect(() => {
+    if (userRole) {
+      setActiveRole(userRole);
+    } else {
+      try {
+        const raw = localStorage.getItem('bx_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.role) setActiveRole(parsed.role);
+        }
+      } catch {}
+    }
+  }, [userRole]);
+
+  const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
 
   return (
     <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-150`}>
@@ -89,22 +117,28 @@ export default function Header({
           {/* User Profile & Status */}
           <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
             <button
-              onClick={!isVerified ? onOpenKycModal : undefined}
-              className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+              onClick={isOwnerOrAdmin && !isVerified ? onOpenKycModal : undefined}
+              className={`flex items-center gap-2 p-1 rounded-xl transition-colors text-left ${
+                isOwnerOrAdmin && !isVerified
+                  ? 'hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer'
+                  : 'cursor-default'
+              }`}
             >
               <div className="relative">
                 <div className="w-8 h-8 rounded-full bg-[#126BEB] text-white font-bold text-xs flex items-center justify-center shadow-sm">
                   {merchantName ? merchantName.charAt(0).toUpperCase() : 'M'}
                 </div>
-                {isVerified ? (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#070D18] flex items-center justify-center text-white">
-                    <ShieldCheck className="w-2.5 h-2.5" />
-                  </span>
-                ) : (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white dark:border-[#070D18] flex items-center justify-center text-white">
-                    <AlertCircle className="w-2.5 h-2.5" />
-                  </span>
-                )}
+                {isOwnerOrAdmin ? (
+                  isVerified ? (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#070D18] flex items-center justify-center text-white">
+                      <ShieldCheck className="w-2.5 h-2.5" />
+                    </span>
+                  ) : (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white dark:border-[#070D18] flex items-center justify-center text-white">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                    </span>
+                  )
+                ) : null}
               </div>
               <div className="hidden lg:block text-left">
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">
@@ -112,10 +146,18 @@ export default function Header({
                 </span>
                 <span
                   className={`block text-[10px] font-semibold ${
-                    isVerified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                    isOwnerOrAdmin
+                      ? isVerified
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                      : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  {isVerified ? 'Verified' : 'Verify Identity'}
+                  {isOwnerOrAdmin
+                    ? isVerified
+                      ? 'Verified'
+                      : 'Verify Identity'
+                    : (ROLE_TITLES[activeRole] || 'Team Collaborator')}
                 </span>
               </div>
             </button>

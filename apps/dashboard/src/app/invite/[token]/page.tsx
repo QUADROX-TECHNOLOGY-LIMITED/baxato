@@ -6,14 +6,17 @@ import { useRouter } from 'next/navigation';
 import {
   Building2,
   AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
   ArrowRight,
   RefreshCw,
   Eye,
   EyeOff,
   Check,
   X,
+  ShieldCheck,
 } from 'lucide-react';
-import { getStoredAuthToken, getStoredUser } from '@/lib/auth-session';
+import { getStoredAuthToken, getStoredUser, StoredUser } from '@/lib/auth-session';
 
 const ROLE_INFO: Record<
   string,
@@ -140,14 +143,21 @@ export default function InviteAcceptancePage({
     valid: boolean;
     businessName: string;
     businessSlug: string;
+    businessId?: string;
     email: string;
     role: string;
     inviterName: string;
     expiresAt: string;
     existingAccount: boolean;
     userName: string | null;
+    isAlreadyMember?: boolean;
+    isOwner?: boolean;
   } | null>(null);
   const [errorState, setErrorState] = useState<string | null>(null);
+
+  // Active Session State
+  const [activeAuthToken, setActiveAuthToken] = useState<string | null>(null);
+  const [activeUser, setActiveUser] = useState<StoredUser | null>(null);
 
   // Form State
   const [firstName, setFirstName] = useState('');
@@ -160,8 +170,22 @@ export default function InviteAcceptancePage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const activeAuthToken = typeof window !== 'undefined' ? getStoredAuthToken() : null;
-  const activeUser = typeof window !== 'undefined' ? getStoredUser() : null;
+  // Sync client session on mount
+  useEffect(() => {
+    setActiveAuthToken(getStoredAuthToken());
+    setActiveUser(getStoredUser());
+  }, []);
+
+  const handleSignOutAndAccept = () => {
+    try {
+      localStorage.removeItem('bx_auth_token');
+      localStorage.removeItem('bx_user');
+      localStorage.removeItem('bx_business');
+    } catch {}
+    setActiveAuthToken(null);
+    setActiveUser(null);
+    setSubmitError(null);
+  };
 
   // Password Health Calculation
   const passwordHealth = useMemo(() => evaluatePasswordHealth(password), [password]);
@@ -380,11 +404,69 @@ export default function InviteAcceptancePage({
               </div>
             )}
 
-            {/* CASE 1: Logged in caller */}
-            {activeAuthToken ? (
+            {/* CASE 0: Already a member of this workspace */}
+            {validationData?.isAlreadyMember ? (
+              <div className="p-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 space-y-3">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-[#126BEB] dark:text-[#38BDF8] shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      Already a Workspace Member
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {validationData.isOwner
+                        ? `You are the registered Owner of ${validationData.businessName}.`
+                        : `You are already an active member of ${validationData.businessName}.`}
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-blue-200 dark:border-blue-900/60">
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center justify-center w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs"
+                  >
+                    Open Workspace Dashboard
+                  </Link>
+                </div>
+              </div>
+            ) : activeAuthToken && activeUser?.email && validationData?.email && activeUser.email.toLowerCase() !== validationData.email.toLowerCase() ? (
+              /* CASE 1: Active session mismatch (e.g. Admin testing or another user logged in) */
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      Active Session Conflict
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      You are currently signed in as <strong className="text-slate-900 dark:text-white">{activeUser?.email}</strong>, but this invitation was sent to <strong className="text-slate-900 dark:text-white">{validationData?.email}</strong>.
+                    </p>
+                    <p className="text-[11.5px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      To prevent accidental account linkage or session corruption, please sign out to accept this invitation as <strong>{validationData?.email}</strong>, or return to your current dashboard.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-amber-500/20">
+                  <button
+                    type="button"
+                    onClick={handleSignOutAndAccept}
+                    className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors shadow-xs text-center"
+                  >
+                    Sign out & accept as {validationData?.email}
+                  </button>
+                  <Link
+                    href="/dashboard"
+                    className="flex-1 py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors text-center border border-slate-300 dark:border-slate-700"
+                  >
+                    Return to Dashboard
+                  </Link>
+                </div>
+              </div>
+            ) : activeAuthToken ? (
+              /* CASE 2: Logged in caller matching the invited email */
               <div className="space-y-4">
                 <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
-                  Signed in as <strong className="text-slate-900 dark:text-white">{activeUser?.email || 'Current Account'}</strong>.
+                  Signed in as <strong className="text-slate-900 dark:text-white">{activeUser?.email || validationData?.email}</strong>.
                 </div>
                 <button
                   type="submit"

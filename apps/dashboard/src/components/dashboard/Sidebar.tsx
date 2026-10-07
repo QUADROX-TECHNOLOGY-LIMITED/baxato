@@ -30,15 +30,26 @@ interface SidebarProps {
   businessName: string;
   merchantName: string;
   kycStatus: string;
+  userRole?: string;
   onOpenKycModal: () => void;
   isOpen: boolean;
   onClose: () => void;
 }
 
+const ROLE_TITLES: Record<string, string> = {
+  BUSINESS_OWNER: 'Business Owner',
+  BUSINESS_ADMIN: 'Administrator',
+  DEVELOPER: 'Developer',
+  FINANCE: 'Finance',
+  SUPPORT: 'Customer Support',
+  VIEWER: 'Viewer',
+};
+
 export default function Sidebar({
   businessName,
   merchantName,
   kycStatus,
+  userRole,
   onOpenKycModal,
   isOpen,
   onClose,
@@ -46,45 +57,126 @@ export default function Sidebar({
   const pathname = usePathname();
   const isVerified = kycStatus === 'VERIFIED';
 
-  const navGroups = [
-    {
-      title: 'CORE PLATFORM',
-      items: [
-        { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-        { label: 'Live Ledger', href: '/dashboard/ledger', icon: Receipt },
-      ],
-    },
-    {
-      title: 'SERVICES',
-      items: [
-        { label: 'Airtime Top-up', href: '/dashboard/airtime', icon: Smartphone },
-        { label: 'Data Bundles', href: '/dashboard/data', icon: Wifi },
-        { label: 'Electricity Tokens', href: '/dashboard/electricity', icon: Zap },
-        { label: 'Cable TV (PayTV)', href: '/dashboard/cable', icon: Tv },
-        { label: 'Exam PINs (WAEC/JAMB)', href: '/dashboard/education', icon: GraduationCap },
-      ],
-    },
-    {
-      title: 'FINANCE & PAYOUTS',
-      items: [
-        { label: 'Settlement Wallets', href: '/dashboard/wallets', icon: Wallet },
-      ],
-    },
-    {
-      title: 'DEVELOPERS & API',
-      items: [
-        { label: 'API Keys', href: '/dashboard/developer', icon: Key },
-        { label: 'Webhooks & Events', href: '/dashboard/webhooks', icon: Webhook },
-      ],
-    },
-    {
-      title: 'ORGANIZATION',
-      items: [
-        { label: 'Team Members', href: '/dashboard/team', icon: Users },
-        { label: 'Settings', href: '/dashboard/settings', icon: Settings },
-      ],
-    },
-  ];
+  const [activeRole, setActiveRole] = React.useState<string>(userRole || 'BUSINESS_OWNER');
+
+  React.useEffect(() => {
+    if (userRole) {
+      setActiveRole(userRole);
+    } else {
+      try {
+        const raw = localStorage.getItem('bx_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.role) setActiveRole(parsed.role);
+        }
+      } catch {}
+    }
+  }, [userRole]);
+
+  const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
+
+  // Role-filtered navigation
+  const navGroups = React.useMemo(() => {
+    const allGroups = [
+      {
+        id: 'CORE',
+        title: 'CORE PLATFORM',
+        items: [
+          { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
+          { label: 'Live Ledger', href: '/dashboard/ledger', icon: Receipt },
+        ],
+      },
+      {
+        id: 'SERVICES',
+        title: 'SERVICES',
+        items: [
+          { label: 'Airtime Top-up', href: '/dashboard/airtime', icon: Smartphone },
+          { label: 'Data Bundles', href: '/dashboard/data', icon: Wifi },
+          { label: 'Electricity Tokens', href: '/dashboard/electricity', icon: Zap },
+          { label: 'Cable TV (PayTV)', href: '/dashboard/cable', icon: Tv },
+          { label: 'Exam PINs (WAEC/JAMB)', href: '/dashboard/education', icon: GraduationCap },
+        ],
+      },
+      {
+        id: 'FINANCE',
+        title: 'FINANCE & PAYOUTS',
+        items: [
+          { label: 'Settlement Wallets', href: '/dashboard/wallets', icon: Wallet },
+        ],
+      },
+      {
+        id: 'DEVELOPER',
+        title: 'DEVELOPERS & API',
+        items: [
+          { label: 'API Keys', href: '/dashboard/developer', icon: Key },
+          { label: 'Webhooks & Events', href: '/dashboard/webhooks', icon: Webhook },
+        ],
+      },
+      {
+        id: 'ORGANIZATION',
+        title: 'ORGANIZATION',
+        items: [
+          { label: 'Team Members', href: '/dashboard/team', icon: Users },
+          { label: 'Settings', href: '/dashboard/settings', icon: Settings },
+        ],
+      },
+    ];
+
+    if (isOwnerOrAdmin) {
+      return allGroups;
+    }
+
+    // Role-specific filtering
+    if (activeRole === 'DEVELOPER') {
+      return [
+        allGroups[0], // CORE
+        allGroups[1], // SERVICES
+        allGroups[3], // DEVELOPER
+        {
+          id: 'ORGANIZATION',
+          title: 'ORGANIZATION',
+          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+        },
+      ];
+    }
+
+    if (activeRole === 'FINANCE') {
+      return [
+        allGroups[0], // CORE
+        allGroups[2], // FINANCE
+        {
+          id: 'ORGANIZATION',
+          title: 'ORGANIZATION',
+          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+        },
+      ];
+    }
+
+    if (activeRole === 'SUPPORT') {
+      return [
+        allGroups[0], // CORE
+        allGroups[1], // SERVICES
+        {
+          id: 'ORGANIZATION',
+          title: 'ORGANIZATION',
+          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+        },
+      ];
+    }
+
+    if (activeRole === 'VIEWER') {
+      return [
+        allGroups[0], // CORE
+        {
+          id: 'ORGANIZATION',
+          title: 'ORGANIZATION',
+          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+        },
+      ];
+    }
+
+    return allGroups;
+  }, [activeRole, isOwnerOrAdmin]);
 
   const handleLogout = () => {
     try {
@@ -176,6 +268,7 @@ export default function Sidebar({
                       onClick={(e) => {
                         onClose();
                         if (
+                          isOwnerOrAdmin &&
                           !isVerified &&
                           (item.href.startsWith('/dashboard/airtime') ||
                             item.href.startsWith('/dashboard/data') ||
@@ -212,41 +305,59 @@ export default function Sidebar({
 
         {/* Bottom Profile & KYC Verification Box */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#071120]/70 space-y-3">
-          {/* KYC Status Card */}
-          <div
-            onClick={!isVerified ? onOpenKycModal : undefined}
-            className={`p-3 rounded-xl border text-xs transition-all ${
-              isVerified
-                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
-                : 'bg-amber-500/5 border-amber-500/25 text-amber-800 dark:text-amber-300 cursor-pointer hover:border-amber-400/50 shadow-sm hover:shadow'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-bold flex items-center gap-1.5 text-[11px]">
-                {isVerified ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    Identity Verified
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
-                    Identity Verification
-                  </>
-                )}
-              </span>
-              {!isVerified && (
-                <span className="text-[10px] font-black uppercase text-[#126BEB] dark:text-[#38BDF8] underline">
-                  Verify Now
+          {isOwnerOrAdmin ? (
+            /* KYC Status Card for Owner & Admin */
+            <div
+              onClick={!isVerified ? onOpenKycModal : undefined}
+              className={`p-3 rounded-xl border text-xs transition-all ${
+                isVerified
+                  ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-amber-500/5 border-amber-500/25 text-amber-800 dark:text-amber-300 cursor-pointer hover:border-amber-400/50 shadow-sm hover:shadow'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold flex items-center gap-1.5 text-[11px]">
+                  {isVerified ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      Identity Verified
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                      Identity Verification
+                    </>
+                  )}
                 </span>
-              )}
+                {!isVerified && (
+                  <span className="text-[10px] font-black uppercase text-[#126BEB] dark:text-[#38BDF8] underline">
+                    Verify Now
+                  </span>
+                )}
+              </div>
+              <p className="text-[10.5px] leading-tight text-slate-500 dark:text-slate-400">
+                {isVerified
+                  ? 'Full production vending & payouts active.'
+                  : 'Verify your NIMC identity to activate live services.'}
+              </p>
             </div>
-            <p className="text-[10.5px] leading-tight text-slate-500 dark:text-slate-400">
-              {isVerified
-                ? 'Full production vending & payouts active.'
-                : 'Verify your NIMC identity to activate live services.'}
-            </p>
-          </div>
+          ) : (
+            /* Assigned Role Profile Card for Non-Admin Collaborators */
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-[#0C1527] text-xs">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold flex items-center gap-1.5 text-[11px] text-slate-800 dark:text-slate-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8] shrink-0" />
+                  Assigned Role
+                </span>
+                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-[#126BEB] dark:text-[#38BDF8] border border-blue-200 dark:border-blue-800/60">
+                  {ROLE_TITLES[activeRole] || activeRole}
+                </span>
+              </div>
+              <p className="text-[10.5px] leading-tight text-slate-500 dark:text-slate-400">
+                Workspace collaborator permissions active.
+              </p>
+            </div>
+          )}
 
           {/* User Profile & Logout */}
           <div className="flex items-center justify-between pt-0.5">
@@ -259,7 +370,11 @@ export default function Sidebar({
                   {merchantName || 'Merchant'}
                 </span>
                 <span className="block text-[10px] font-medium text-slate-400 truncate">
-                  {isVerified ? 'Verified Merchant' : 'Unverified Account'}
+                  {isOwnerOrAdmin
+                    ? isVerified
+                      ? 'Verified Merchant'
+                      : 'Unverified Account'
+                    : (ROLE_TITLES[activeRole] || 'Team Collaborator')}
                 </span>
               </div>
             </div>

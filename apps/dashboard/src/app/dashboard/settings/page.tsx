@@ -265,6 +265,7 @@ export default function SettingsPage() {
   const [merchantName, setMerchantName] = useState('Merchant');
   const [businessName, setBusinessName] = useState('My Business');
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -369,6 +370,7 @@ export default function SettingsPage() {
         setFirstName(u.firstName || '');
         setLastName(u.lastName || '');
         setMiddleName(u.middleName || '');
+        if (u.role) setUserRole(u.role);
         setKycStatus(u.kycStatus || 'UNVERIFIED');
         if (u.firstName) setMerchantName(u.firstName);
 
@@ -826,6 +828,7 @@ export default function SettingsPage() {
         businessName={businessName}
         merchantName={merchantName}
         kycStatus={kycStatus}
+        userRole={userRole}
         onOpenKycModal={() => setIsKycModalOpen(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -839,15 +842,16 @@ export default function SettingsPage() {
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
           kycStatus={kycStatus}
+          userRole={userRole}
           isRefreshing={isRefreshing}
           onRefresh={refreshAll}
         />
 
         {/* Page Body - Constrained max width & min-w-0 to prevent Safari horizontal pinch */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-4xl w-full mx-auto space-y-6 min-w-0">
-          {/* KYC Alert Banner (if unverified) */}
+          {/* KYC Alert Banner (if unverified and owner/admin) */}
           {!isVerified && (
-            <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
+            <KycBanner kycStatus={kycStatus} userRole={userRole} onOpenKycModal={() => setIsKycModalOpen(true)} />
           )}
 
           {/* Back Button & Page Title */}
