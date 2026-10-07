@@ -5,8 +5,8 @@ import {
   Permission,
   TelecomNetwork,
 } from '@baxato/common';
-import { dataService, type DataPlanCategory } from '../../services/data.service';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
+import { dataService, type DataPlanCategory } from '../../services/data.service.js';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const dataRoutes: FastifyPluginAsync = async (fastify) => {
   /**

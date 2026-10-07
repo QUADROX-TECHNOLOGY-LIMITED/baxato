@@ -5,9 +5,9 @@ import {
   Permission,
   TelecomNetwork,
 } from '@baxato/common';
-import { airtimeService } from '../../services/airtime.service';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
-import { authenticate } from '../../plugins/auth.plugin';
+import { airtimeService } from '../../services/airtime.service.js';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { authenticate } from '../../plugins/auth.plugin.js';
 
 export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
   /**

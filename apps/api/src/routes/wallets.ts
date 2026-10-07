@@ -7,8 +7,8 @@ import {
   WalletType,
   nairaToKobo,
 } from '@baxato/common';
-import { walletService } from '../services/wallet.service';
-import { requireTenantPermission } from '../plugins/rbac.plugin';
+import { walletService } from '../services/wallet.service.js';
+import { requireTenantPermission } from '../plugins/rbac.plugin.js';
 
 export const walletRoutes: FastifyPluginAsync = async (fastify) => {
   /**

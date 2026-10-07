@@ -7,7 +7,7 @@ import {
   ValidationError,
 } from '@baxato/common';
 import { db, businesses, businessMembers, eq, and } from '@baxato/database';
-import { authenticate } from './auth.plugin';
+import { authenticate } from './auth.plugin.js';
 
 /**
  * Fastify pre-handler guard requiring a platform-level permission (Platform Owner / Staff).

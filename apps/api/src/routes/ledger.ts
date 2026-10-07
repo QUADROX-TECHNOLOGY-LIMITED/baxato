@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { createSuccessResponse, ValidationError, Permission } from '@baxato/common';
-import { ledgerService } from '../services/ledger.service';
-import { requireTenantPermission } from '../plugins/rbac.plugin';
+import { ledgerService } from '../services/ledger.service.js';
+import { requireTenantPermission } from '../plugins/rbac.plugin.js';
 
 export const ledgerRoutes: FastifyPluginAsync = async (fastify) => {
   /**

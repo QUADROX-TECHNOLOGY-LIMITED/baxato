@@ -8,8 +8,8 @@ import {
 import {
   providerRouterService,
   ProviderRoutingStrategy,
-} from '../services/providers';
-import { requirePlatformPermission } from '../plugins/rbac.plugin';
+} from '../services/providers/index.js';
+import { requirePlatformPermission } from '../plugins/rbac.plugin.js';
 
 export const providerRoutes: FastifyPluginAsync = async (fastify) => {
   /**

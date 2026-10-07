@@ -22,11 +22,11 @@ import {
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { env } from '@baxato/config';
-import { whatsAppService } from '../services/whatsapp.service';
-import { zeptoMailService } from '../services/zeptomail.service';
-import { twoFactorService } from '../services/two-factor.service';
-import { generateToken, authenticate } from '../plugins/auth.plugin';
-import { auditService } from '../services/audit.service';
+import { whatsAppService } from '../services/whatsapp.service.js';
+import { zeptoMailService } from '../services/zeptomail.service.js';
+import { twoFactorService } from '../services/two-factor.service.js';
+import { generateToken, authenticate } from '../plugins/auth.plugin.js';
+import { auditService } from '../services/audit.service.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /**

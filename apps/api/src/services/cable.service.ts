@@ -22,14 +22,14 @@ import {
   and,
   desc,
 } from '@baxato/database';
-import { walletService } from './wallet.service';
-import { ledgerService } from './ledger.service';
-import { idempotencyService } from './idempotency.service';
-import { webhookDispatcherService } from './webhook-dispatcher.service';
+import { walletService } from './wallet.service.js';
+import { ledgerService } from './ledger.service.js';
+import { idempotencyService } from './idempotency.service.js';
+import { webhookDispatcherService } from './webhook-dispatcher.service.js';
 import {
   providerRouterService,
   ProviderRouterService,
-} from './providers';
+} from './providers/index.js';
 
 export interface CableOperatorInfo {
   code: CableOperator;

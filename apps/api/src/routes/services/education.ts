@@ -5,8 +5,8 @@ import {
   Permission,
   ExamBody,
 } from '@baxato/common';
-import { educationService, EXAM_PACKAGES } from '../../services/education.service';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
+import { educationService, EXAM_PACKAGES } from '../../services/education.service.js';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const educationRoutes: FastifyPluginAsync = async (fastify) => {
   /**

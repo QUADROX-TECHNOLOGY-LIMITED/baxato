@@ -11,7 +11,7 @@ import {
   type ApiKeyEnvironment,
 } from '@baxato/common';
 import { db, users, businesses, eq } from '@baxato/database';
-import { apiKeyService } from '../services/api-key.service';
+import { apiKeyService } from '../services/api-key.service.js';
 
 declare module 'fastify' {
   interface FastifyRequest {

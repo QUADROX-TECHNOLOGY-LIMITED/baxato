@@ -9,8 +9,8 @@ import {
   type TestWebhookInput,
   type WebhookDeliveryStatus,
 } from '@baxato/common';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
-import { webhookDispatcherService } from '../../services/webhook-dispatcher.service';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { webhookDispatcherService } from '../../services/webhook-dispatcher.service.js';
 
 export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
   /**

@@ -6,8 +6,8 @@ import {
   DiscoCode,
   ElectricityMeterType,
 } from '@baxato/common';
-import { electricityService } from '../../services/electricity.service';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
+import { electricityService } from '../../services/electricity.service.js';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
   /**

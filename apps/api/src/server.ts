@@ -55,7 +55,27 @@ export function buildServer(): FastifyInstance {
     contentSecurityPolicy: false,
   });
   app.register(cors, {
-    origin: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      const configured = env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);
+      if (configured.includes('*') || configured.includes(origin)) {
+        return cb(null, true);
+      }
+      try {
+        const u = new URL(origin);
+        if (
+          u.hostname.endsWith('baxato.com') ||
+          u.hostname.endsWith('baxato.ng') ||
+          u.hostname === 'localhost' ||
+          u.hostname === '127.0.0.1'
+        ) {
+          return cb(null, true);
+        }
+      } catch {
+        // Invalid URL format
+      }
+      return cb(null, false);
+    },
     credentials: true,
   });
   app.register(rateLimit, {

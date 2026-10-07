@@ -7,7 +7,7 @@ import {
   formatNairaFromKobo,
 } from '@baxato/common';
 import { db, serviceTransactions, eq, and, desc, sql, or, ilike } from '@baxato/database';
-import { requireTenantPermission } from '../plugins/rbac.plugin';
+import { requireTenantPermission } from '../plugins/rbac.plugin.js';
 
 export const transactionRoutes: FastifyPluginAsync = async (fastify) => {
   /**

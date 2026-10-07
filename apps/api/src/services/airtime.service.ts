@@ -24,15 +24,15 @@ import {
   or,
   desc,
 } from '@baxato/database';
-import { walletService } from './wallet.service';
-import { ledgerService } from './ledger.service';
-import { idempotencyService } from './idempotency.service';
-import { webhookDispatcherService } from './webhook-dispatcher.service';
+import { walletService } from './wallet.service.js';
+import { ledgerService } from './ledger.service.js';
+import { idempotencyService } from './idempotency.service.js';
+import { webhookDispatcherService } from './webhook-dispatcher.service.js';
 import {
   providerRouterService,
   ProviderRouterService,
-} from './providers';
-import { auditService } from './audit.service';
+} from './providers/index.js';
+import { auditService } from './audit.service.js';
 
 export interface TelcoNetworkConfig {
   network: TelecomNetwork;

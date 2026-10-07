@@ -6,8 +6,8 @@ import {
   ValidationError,
   type CreateApiKeyInput,
 } from '@baxato/common';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
-import { apiKeyService } from '../../services/api-key.service';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { apiKeyService } from '../../services/api-key.service.js';
 
 export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
   /**

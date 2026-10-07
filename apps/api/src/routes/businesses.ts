@@ -6,8 +6,8 @@ import {
   createSuccessResponse,
   ValidationError,
 } from '@baxato/common';
-import { businessService } from '../services/business.service';
-import { authenticate } from '../plugins/auth.plugin';
+import { businessService } from '../services/business.service.js';
+import { authenticate } from '../plugins/auth.plugin.js';
 
 export const businessRoutes: FastifyPluginAsync = async (fastify) => {
   // Require authentication for all business routes

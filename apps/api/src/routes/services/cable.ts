@@ -5,8 +5,8 @@ import {
   Permission,
   CableOperator,
 } from '@baxato/common';
-import { cableService } from '../../services/cable.service';
-import { requireTenantPermission } from '../../plugins/rbac.plugin';
+import { cableService } from '../../services/cable.service.js';
+import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const cableRoutes: FastifyPluginAsync = async (fastify) => {
   /**

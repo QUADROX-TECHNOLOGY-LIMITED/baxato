@@ -16,11 +16,11 @@ import {
   ProviderHealthStatus,
   ProviderRoutingStrategy,
   ServiceRoutingConfig,
-} from './provider.interface';
-import { InterswitchProvider } from './interswitch.provider';
-import { MonnifyProvider } from './monnify.provider';
-import { CircuitBreaker, CircuitBreakerMetrics } from './circuit-breaker';
-import { sanitizeForJson } from '../audit.service';
+} from './provider.interface.js';
+import { InterswitchProvider } from './interswitch.provider.js';
+import { MonnifyProvider } from './monnify.provider.js';
+import { CircuitBreaker, CircuitBreakerMetrics } from './circuit-breaker.js';
+import { sanitizeForJson } from '../audit.service.js';
 
 export interface ProviderRouterOptions {
   env: Env;

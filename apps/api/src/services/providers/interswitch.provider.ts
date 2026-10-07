@@ -13,7 +13,7 @@ import {
   ServiceVendingResult,
   TransactionStatusResult,
   ProviderHealthStatus,
-} from './provider.interface';
+} from './provider.interface.js';
 
 export interface InterswitchConfig {
   clientId: string;

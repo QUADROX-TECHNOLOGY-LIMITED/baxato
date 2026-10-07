@@ -8,8 +8,8 @@ import {
   koboToNaira,
 } from '@baxato/common';
 import { db, users, businesses, wallets, eq } from '@baxato/database';
-import { authenticate } from '../plugins/auth.plugin';
-import { auditService } from '../services/audit.service';
+import { authenticate } from '../plugins/auth.plugin.js';
+import { auditService } from '../services/audit.service.js';
 
 export const userRoutes: FastifyPluginAsync = async (fastify) => {
   // Apply authentication hook to all user routes

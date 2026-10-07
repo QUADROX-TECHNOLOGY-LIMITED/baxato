@@ -7,8 +7,8 @@ import {
   KycStatus,
 } from '@baxato/common';
 import { db, users, kycVerifications, eq, desc } from '@baxato/database';
-import { kycService } from '../services/kyc.service';
-import { authenticate } from '../plugins/auth.plugin';
+import { kycService } from '../services/kyc.service.js';
+import { authenticate } from '../plugins/auth.plugin.js';
 
 export const kycRoutes: FastifyPluginAsync = async (fastify) => {
   // Apply authentication hook to all KYC routes
