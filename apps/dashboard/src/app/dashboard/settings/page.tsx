@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   Mail,
   QrCode,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -201,6 +202,62 @@ function parseDeviceSession(ua?: string | null): ParsedClientDevice {
   };
 }
 
+interface PasswordHealth {
+  score: number;
+  hasMinLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+  isValid: boolean;
+  label: string;
+  color: string;
+}
+
+function evaluatePasswordHealth(password: string): PasswordHealth {
+  const hasMinLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+  let score = 0;
+  if (hasMinLength) score++;
+  if (hasUpper) score++;
+  if (hasLower) score++;
+  if (hasNumber) score++;
+  if (hasSpecial) score++;
+
+  let label = 'Too weak';
+  let color = 'bg-slate-300 dark:bg-slate-700';
+
+  if (score === 1 || score === 2) {
+    label = 'Weak';
+    color = 'bg-red-500';
+  } else if (score === 3) {
+    label = 'Fair';
+    color = 'bg-amber-500';
+  } else if (score === 4) {
+    label = 'Good';
+    color = 'bg-blue-500';
+  } else if (score === 5) {
+    label = 'Strong';
+    color = 'bg-emerald-500';
+  }
+
+  return {
+    score,
+    hasMinLength,
+    hasUpper,
+    hasLower,
+    hasNumber,
+    hasSpecial,
+    isValid: score === 5,
+    label,
+    color,
+  };
+}
+
 export default function SettingsPage() {
   const clerk = useClerk();
 
@@ -237,6 +294,10 @@ export default function SettingsPage() {
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [passErrorMsg, setPassErrorMsg] = useState('');
   const [passSuccessMsg, setPassSuccessMsg] = useState('');
+
+  // Password Health Calculation for Change Password
+  const newPasswordHealth = useMemo(() => evaluatePasswordHealth(newPassword), [newPassword]);
+  const newPasswordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
   // 2FA Interactive Setup State (Live Real-Time Integration)
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
@@ -409,8 +470,8 @@ export default function SettingsPage() {
       setPassErrorMsg('Please enter your current password.');
       return;
     }
-    if (newPassword.length < 8) {
-      setPassErrorMsg('New password must be at least 8 characters.');
+    if (!newPasswordHealth.isValid) {
+      setPassErrorMsg('New password must satisfy all 5 security health requirements.');
       return;
     }
     if (newPassword === currentPassword) {
@@ -1099,6 +1160,118 @@ export default function SettingsPage() {
                                 {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                               </button>
                             </div>
+
+                            {/* Password Health Checklist */}
+                            {newPassword.length > 0 && (
+                              <div className="mt-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 space-y-2.5 max-w-md">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium">Password Health:</span>
+                                  <span
+                                    className={`font-semibold ${
+                                      newPasswordHealth.score <= 2
+                                        ? 'text-red-500'
+                                        : newPasswordHealth.score <= 4
+                                        ? 'text-amber-500'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.label}
+                                  </span>
+                                </div>
+
+                                {/* Progress Bar */}
+                                <div className="grid grid-cols-5 gap-1.5">
+                                  {[1, 2, 3, 4, 5].map((level) => (
+                                    <div
+                                      key={level}
+                                      className={`h-1.5 rounded-full transition-all duration-200 ${
+                                        level <= newPasswordHealth.score
+                                          ? newPasswordHealth.color
+                                          : 'bg-slate-200 dark:bg-slate-800'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+
+                                {/* Health Criteria */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                                  <div
+                                    className={`flex items-center gap-1.5 ${
+                                      newPasswordHealth.hasMinLength
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.hasMinLength ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                                    )}
+                                    <span>8+ characters</span>
+                                  </div>
+
+                                  <div
+                                    className={`flex items-center gap-1.5 ${
+                                      newPasswordHealth.hasUpper
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.hasUpper ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                                    )}
+                                    <span>Uppercase (A-Z)</span>
+                                  </div>
+
+                                  <div
+                                    className={`flex items-center gap-1.5 ${
+                                      newPasswordHealth.hasLower
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.hasLower ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                                    )}
+                                    <span>Lowercase (a-z)</span>
+                                  </div>
+
+                                  <div
+                                    className={`flex items-center gap-1.5 ${
+                                      newPasswordHealth.hasNumber
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.hasNumber ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                                    )}
+                                    <span>Number (0-9)</span>
+                                  </div>
+
+                                  <div
+                                    className={`flex items-center gap-1.5 sm:col-span-2 ${
+                                      newPasswordHealth.hasSpecial
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {newPasswordHealth.hasSpecial ? (
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                    ) : (
+                                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                                    )}
+                                    <span>Special symbol (!@#$%^&*)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           <div>
@@ -1123,6 +1296,23 @@ export default function SettingsPage() {
                                 {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                               </button>
                             </div>
+                            {confirmPassword.length > 0 && (
+                              <p
+                                className={`mt-1.5 text-[11px] font-medium flex items-center gap-1 ${
+                                  newPasswordsMatch ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
+                                }`}
+                              >
+                                {newPasswordsMatch ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" /> Passwords match
+                                  </>
+                                ) : (
+                                  <>
+                                    <X className="w-3.5 h-3.5" /> Passwords do not match
+                                  </>
+                                )}
+                              </p>
+                            )}
                           </div>
                         </div>
 

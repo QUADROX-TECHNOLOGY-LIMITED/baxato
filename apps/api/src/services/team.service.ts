@@ -747,8 +747,16 @@ export class TeamService {
         if (!firstName || !lastName || !password) {
           throw new ValidationError('First name, last name, and password are required to create your account.');
         }
-        if (password.length < 8) {
-          throw new ValidationError('Password must be at least 8 characters long.');
+        const hasMinLength = password.length >= 8;
+        const hasUpper = /[A-Z]/.test(password);
+        const hasLower = /[a-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+        if (!hasMinLength || !hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+          throw new ValidationError(
+            'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+          );
         }
 
         const passwordHash = await bcrypt.hash(password, 10);

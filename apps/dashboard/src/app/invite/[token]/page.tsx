@@ -1,27 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Shield,
-  ShieldCheck,
   Building2,
-  CheckCircle2,
   AlertCircle,
-  Lock,
-  User,
-  Phone,
   ArrowRight,
   RefreshCw,
   Eye,
   EyeOff,
-  Sparkles,
-  Key,
-  Wallet,
-  Headphones,
-  Mail,
   Check,
+  X,
 } from 'lucide-react';
 import { getStoredAuthToken, getStoredUser } from '@/lib/auth-session';
 
@@ -29,17 +19,13 @@ const ROLE_INFO: Record<
   string,
   {
     name: string;
-    icon: React.ElementType;
-    badgeStyle: string;
     description: string;
     capabilities: string[];
   }
 > = {
   BUSINESS_ADMIN: {
     name: 'Administrator',
-    icon: Shield,
-    badgeStyle: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
-    description: 'General Operations Manager',
+    description: 'Full workspace operational and team management access.',
     capabilities: [
       'Manage team members and invite collaborators',
       'Monitor operational wallet balance and funding',
@@ -48,20 +34,17 @@ const ROLE_INFO: Record<
   },
   DEVELOPER: {
     name: 'Developer',
-    icon: Key,
-    badgeStyle: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
-    description: 'Technical Lead & API Integrator',
+    description: 'Technical lead for API keys, webhooks, and vending integrations.',
     capabilities: [
       'Generate and rotate Live and Test API keys',
       'Configure webhooks and inspect HMAC delivery logs',
       'Access interactive API documentation and test sandbox',
+      'Integrate and trigger digital vending endpoints',
     ],
   },
   FINANCE: {
     name: 'Finance & Billing',
-    icon: Wallet,
-    badgeStyle: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
-    description: 'Accountant & Financial Officer',
+    description: 'Financial reconciliation, statements, and wallet funding.',
     capabilities: [
       'View operational wallet balance and virtual accounts',
       'Reconcile funding deposits and vending debits',
@@ -70,9 +53,7 @@ const ROLE_INFO: Record<
   },
   SUPPORT: {
     name: 'Customer Support',
-    icon: Headphones,
-    badgeStyle: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/60',
-    description: 'Helpdesk & Customer Care',
+    description: 'Customer dispute resolution and receipt generation.',
     capabilities: [
       'Search transactions by Reference, Phone, or Meter Number',
       'Retrieve electricity tokens and exam scratch codes',
@@ -81,15 +62,69 @@ const ROLE_INFO: Record<
   },
   VIEWER: {
     name: 'Viewer',
-    icon: Eye,
-    badgeStyle: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
-    description: 'Read-only Analyst',
+    description: 'Read-only access to overview dashboard and charts.',
     capabilities: [
       'View aggregate transaction volume charts',
       'Read-only access to overview metrics and trends',
     ],
   },
 };
+
+interface PasswordHealth {
+  score: number;
+  hasMinLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+  isValid: boolean;
+  label: string;
+  color: string;
+}
+
+function evaluatePasswordHealth(password: string): PasswordHealth {
+  const hasMinLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+  let score = 0;
+  if (hasMinLength) score++;
+  if (hasUpper) score++;
+  if (hasLower) score++;
+  if (hasNumber) score++;
+  if (hasSpecial) score++;
+
+  let label = 'Too weak';
+  let color = 'bg-slate-300 dark:bg-slate-700';
+
+  if (score === 1 || score === 2) {
+    label = 'Weak';
+    color = 'bg-red-500';
+  } else if (score === 3) {
+    label = 'Fair';
+    color = 'bg-amber-500';
+  } else if (score === 4) {
+    label = 'Good';
+    color = 'bg-blue-500';
+  } else if (score === 5) {
+    label = 'Strong';
+    color = 'bg-emerald-500';
+  }
+
+  return {
+    score,
+    hasMinLength,
+    hasUpper,
+    hasLower,
+    hasNumber,
+    hasSpecial,
+    isValid: score === 5,
+    label,
+    color,
+  };
+}
 
 export default function InviteAcceptancePage({
   params,
@@ -119,12 +154,18 @@ export default function InviteAcceptancePage({
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const activeAuthToken = typeof window !== 'undefined' ? getStoredAuthToken() : null;
   const activeUser = typeof window !== 'undefined' ? getStoredUser() : null;
+
+  // Password Health Calculation
+  const passwordHealth = useMemo(() => evaluatePasswordHealth(password), [password]);
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
 
   useEffect(() => {
     validateToken();
@@ -153,8 +194,23 @@ export default function InviteAcceptancePage({
 
   const handleAccept = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setSubmitError(null);
+
+    // If new user, enforce password health and match
+    if (!activeAuthToken && !validationData?.existingAccount) {
+      if (!passwordHealth.isValid) {
+        setSubmitError(
+          'Please ensure your password meets all 5 security health requirements.',
+        );
+        return;
+      }
+      if (password !== confirmPassword) {
+        setSubmitError('The entered passwords do not match. Please verify.');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
 
     try {
       const headers: Record<string, string> = {
@@ -231,7 +287,7 @@ export default function InviteAcceptancePage({
   if (errorState) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-sm">
+        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-xs">
           <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 flex items-center justify-center text-red-600 dark:text-red-400 mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
@@ -257,17 +313,18 @@ export default function InviteAcceptancePage({
   }
 
   const roleCfg = ROLE_INFO[validationData?.role || 'DEVELOPER'] || ROLE_INFO.DEVELOPER;
-  const RoleIcon = roleCfg.icon;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 font-sans transition-colors duration-150">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col justify-start sm:justify-center items-center py-10 px-4 sm:px-6 font-sans transition-colors duration-150">
+      <div className="w-full max-w-lg space-y-6 my-auto">
         {/* Brand Header */}
-        <div className="text-center space-y-1.5">
-          <p className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
-            Workspace Invitation
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+        <div className="text-center space-y-2">
+          <img
+            src="/baxato-logo.jpg"
+            alt="BAXATO"
+            className="w-11 h-11 rounded-xl mx-auto border border-slate-200 dark:border-slate-800 shadow-xs object-cover"
+          />
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Join {validationData?.businessName}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
@@ -276,26 +333,26 @@ export default function InviteAcceptancePage({
         </div>
 
         {/* Card Container */}
-        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xs space-y-6">
-          {/* Organization & Role Callout */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#080E1A] border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-8 shadow-xs space-y-6">
+          {/* Organization & Role Callout (Mobile-proof stacked/flex layout) */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#080E1A] border border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400 shrink-0">
                 <Building2 className="w-5 h-5" />
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Organization</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                  Workspace
+                </p>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                   {validationData?.businessName}
                 </p>
               </div>
             </div>
 
-            <div className="text-right shrink-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Role</p>
-              <p className="text-sm font-medium text-slate-900 dark:text-white">
-                {roleCfg.name}
-              </p>
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Assigned Role:</span>
+              <span className="font-semibold text-slate-900 dark:text-white">{roleCfg.name}</span>
             </div>
           </div>
 
@@ -391,7 +448,7 @@ export default function InviteAcceptancePage({
             ) : (
               /* CASE 3: Brand new user registration */
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                       First Name
@@ -434,6 +491,7 @@ export default function InviteAcceptancePage({
                   />
                 </div>
 
+                {/* Password Input with Visibility Toggle */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Create Password
@@ -442,7 +500,7 @@ export default function InviteAcceptancePage({
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
-                      placeholder="At least 8 characters"
+                      placeholder="Create a strong password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full pl-3.5 pr-10 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
@@ -455,24 +513,165 @@ export default function InviteAcceptancePage({
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {password.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <div
-                        className={`h-1 flex-1 rounded-full ${
-                          password.length >= 8 ? 'bg-emerald-500' : 'bg-red-500'
-                        }`}
-                      />
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {password.length >= 8 ? 'Password looks good' : 'Minimum 8 characters'}
-                      </span>
-                    </div>
+                </div>
+
+                {/* Confirm Password Input */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-3.5 pr-10 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {confirmPassword.length > 0 && (
+                    <p
+                      className={`text-[11px] font-medium flex items-center gap-1 ${
+                        passwordsMatch ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
+                      }`}
+                    >
+                      {passwordsMatch ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" /> Passwords match
+                        </>
+                      ) : (
+                        <>
+                          <X className="w-3.5 h-3.5" /> Passwords do not match
+                        </>
+                      )}
+                    </p>
                   )}
                 </div>
 
+                {/* Password Health & Security Checklist */}
+                {password.length > 0 && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Password Health:</span>
+                      <span
+                        className={`font-semibold ${
+                          passwordHealth.score <= 2
+                            ? 'text-red-500'
+                            : passwordHealth.score <= 4
+                            ? 'text-amber-500'
+                            : 'text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {passwordHealth.label}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar (5 ticks) */}
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <div
+                          key={level}
+                          className={`h-1.5 rounded-full transition-all duration-200 ${
+                            level <= passwordHealth.score
+                              ? passwordHealth.color
+                              : 'bg-slate-200 dark:bg-slate-800'
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Health Checklist Items */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                      <div
+                        className={`flex items-center gap-1.5 ${
+                          passwordHealth.hasMinLength
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {passwordHealth.hasMinLength ? (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                        )}
+                        <span>8+ characters</span>
+                      </div>
+
+                      <div
+                        className={`flex items-center gap-1.5 ${
+                          passwordHealth.hasUpper
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {passwordHealth.hasUpper ? (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                        )}
+                        <span>Uppercase letter (A-Z)</span>
+                      </div>
+
+                      <div
+                        className={`flex items-center gap-1.5 ${
+                          passwordHealth.hasLower
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {passwordHealth.hasLower ? (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                        )}
+                        <span>Lowercase letter (a-z)</span>
+                      </div>
+
+                      <div
+                        className={`flex items-center gap-1.5 ${
+                          passwordHealth.hasNumber
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {passwordHealth.hasNumber ? (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                        )}
+                        <span>Number (0-9)</span>
+                      </div>
+
+                      <div
+                        className={`flex items-center gap-1.5 sm:col-span-2 ${
+                          passwordHealth.hasSpecial
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {passwordHealth.hasSpecial ? (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-700 inline-block shrink-0" />
+                        )}
+                        <span>Special character (!@#$%^&*)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={isSubmitting || password.length < 8}
-                  className="w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={isSubmitting || !passwordHealth.isValid || !passwordsMatch}
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
