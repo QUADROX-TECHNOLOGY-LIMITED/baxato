@@ -6,14 +6,18 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get('authorization') || '';
     const body = await request.json();
 
-    const result = await proxyToBackendApi('/auth/2fa/disable', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      '/auth/2fa/disable',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

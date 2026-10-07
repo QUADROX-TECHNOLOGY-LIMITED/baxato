@@ -18,7 +18,6 @@ import {
   Shield,
   Key,
   Mail,
-  Edit2,
   QrCode,
   ShieldAlert,
 } from 'lucide-react';
@@ -65,6 +64,143 @@ interface SecurityData {
 
 type SettingsTab = 'profile' | 'security' | 'sessions' | 'audit';
 
+interface ParsedClientDevice {
+  displayName: string;
+  category: 'mobile' | 'desktop' | 'api' | 'browser';
+  os: string;
+  browser: string;
+}
+
+function parseDeviceSession(ua?: string | null): ParsedClientDevice {
+  if (!ua || !ua.trim()) {
+    return {
+      displayName: 'Web Browser',
+      category: 'browser',
+      os: 'Unknown OS',
+      browser: 'Web Browser',
+    };
+  }
+
+  const raw = ua.trim();
+  const lower = raw.toLowerCase();
+
+  // 1. API Clients & Developer Integrations
+  if (lower.includes('curl')) {
+    return { displayName: 'API Client (cURL)', category: 'api', os: 'Command Line', browser: 'cURL' };
+  }
+  if (lower.includes('postman')) {
+    return { displayName: 'API Client (Postman)', category: 'api', os: 'Postman Runtime', browser: 'Postman' };
+  }
+  if (lower.includes('insomnia')) {
+    return { displayName: 'API Client (Insomnia)', category: 'api', os: 'Insomnia REST', browser: 'Insomnia' };
+  }
+  if (lower.includes('python')) {
+    return { displayName: 'API Integration (Python)', category: 'api', os: 'Python Runtime', browser: 'Python SDK' };
+  }
+  if (lower.includes('node-fetch') || lower.includes('undici') || lower.includes('axios') || lower.includes('got/')) {
+    return { displayName: 'API Integration', category: 'api', os: 'Node.js Runtime', browser: 'HTTP Client' };
+  }
+  if (lower.includes('go-http-client')) {
+    return { displayName: 'API Integration (Go)', category: 'api', os: 'Go Runtime', browser: 'Go Client' };
+  }
+
+  // 2. Mobile Platforms (iPhones, iPads, Android)
+  if (/iPhone/i.test(raw)) {
+    const versionMatch = raw.match(/OS (\d+[_.]\d+)/i);
+    const version = versionMatch ? `iOS ${versionMatch[1].replace('_', '.')}` : 'iOS';
+    const browser = /CriOS/i.test(raw) ? 'Chrome' : /FxiOS/i.test(raw) ? 'Firefox' : 'Safari';
+    return {
+      displayName: `Apple iPhone (${version}) • ${browser}`,
+      category: 'mobile',
+      os: `Apple ${version}`,
+      browser,
+    };
+  }
+
+  if (/iPad/i.test(raw)) {
+    const browser = /CriOS/i.test(raw) ? 'Chrome' : 'Safari';
+    return {
+      displayName: `Apple iPad • ${browser}`,
+      category: 'mobile',
+      os: 'iPadOS',
+      browser,
+    };
+  }
+
+  if (/Android/i.test(raw)) {
+    let brand = 'Android Device';
+    if (/Samsung|SM-[A-Z0-9]+/i.test(raw)) brand = 'Samsung Galaxy';
+    else if (/Pixel [0-9]+/i.test(raw)) brand = 'Google Pixel';
+    else if (/Xiaomi|Redmi|POCO/i.test(raw)) brand = 'Xiaomi Device';
+    else if (/Oppo|CPH[0-9]+/i.test(raw)) brand = 'OPPO Device';
+    else if (/Vivo/i.test(raw)) brand = 'Vivo Device';
+    else if (/TECNO|Infinix/i.test(raw)) brand = 'Transsion Device';
+
+    const browser = /Firefox/i.test(raw)
+      ? 'Firefox'
+      : /Edge|EdgA/i.test(raw)
+      ? 'Edge'
+      : /Opera|OPR/i.test(raw)
+      ? 'Opera'
+      : 'Chrome';
+
+    return {
+      displayName: `${brand} • ${browser}`,
+      category: 'mobile',
+      os: 'Android',
+      browser,
+    };
+  }
+
+  // 3. Desktop Platforms (Windows, Mac, Linux)
+  if (/Windows/i.test(raw)) {
+    const os = /Windows NT 10\.0/i.test(raw) ? 'Windows 10/11' : 'Windows PC';
+    let browser = 'Browser';
+    if (/Edg/i.test(raw)) browser = 'Microsoft Edge';
+    else if (/Chrome/i.test(raw)) browser = 'Google Chrome';
+    else if (/Firefox/i.test(raw)) browser = 'Mozilla Firefox';
+    else if (/Opera|OPR/i.test(raw)) browser = 'Opera';
+
+    return {
+      displayName: `${os} • ${browser}`,
+      category: 'desktop',
+      os,
+      browser,
+    };
+  }
+
+  if (/Macintosh|Mac OS X/i.test(raw)) {
+    let browser = 'Safari';
+    if (/Chrome/i.test(raw)) browser = 'Google Chrome';
+    else if (/Firefox/i.test(raw)) browser = 'Mozilla Firefox';
+    else if (/Edg/i.test(raw)) browser = 'Microsoft Edge';
+
+    return {
+      displayName: `Apple Mac • ${browser}`,
+      category: 'desktop',
+      os: 'macOS',
+      browser,
+    };
+  }
+
+  if (/Linux/i.test(raw)) {
+    const browser = /Firefox/i.test(raw) ? 'Firefox' : 'Chrome';
+    return {
+      displayName: `Linux PC • ${browser}`,
+      category: 'desktop',
+      os: 'Linux',
+      browser,
+    };
+  }
+
+  return {
+    displayName: raw.length > 28 ? raw.slice(0, 28) + '...' : raw,
+    category: 'browser',
+    os: 'Unknown OS',
+    browser: 'Web Browser',
+  };
+}
+
 export default function SettingsPage() {
   const clerk = useClerk();
 
@@ -88,14 +224,6 @@ export default function SettingsPage() {
   const [middleName, setMiddleName] = useState('');
   const [ninMasked, setNinMasked] = useState<string | null>(null);
 
-  // Profile Edit Toggle
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [editFirstName, setEditFirstName] = useState('');
-  const [editLastName, setEditLastName] = useState('');
-  const [editMiddleName, setEditMiddleName] = useState('');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
-  const [profileErrorMsg, setProfileErrorMsg] = useState('');
   const [copiedUserId, setCopiedUserId] = useState(false);
 
   // Password Change State
@@ -145,30 +273,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const ua = navigator.userAgent;
-    let device = 'Web Browser';
-
-    if (/iPhone/i.test(ua)) {
-      device = 'Safari on iPhone';
-    } else if (/iPad/i.test(ua)) {
-      device = 'Safari on iPad';
-    } else if (/Macintosh|Mac OS X/i.test(ua)) {
-      if (/Chrome/i.test(ua)) device = 'Chrome on macOS';
-      else if (/Safari/i.test(ua)) device = 'Safari on macOS';
-      else if (/Firefox/i.test(ua)) device = 'Firefox on macOS';
-      else device = 'macOS Browser';
-    } else if (/Windows/i.test(ua)) {
-      if (/Edg/i.test(ua)) device = 'Edge on Windows';
-      else if (/Chrome/i.test(ua)) device = 'Chrome on Windows';
-      else if (/Firefox/i.test(ua)) device = 'Firefox on Windows';
-      else device = 'Windows Browser';
-    } else if (/Android/i.test(ua)) {
-      device = 'Chrome on Android';
-    } else if (/Linux/i.test(ua)) {
-      device = 'Chrome on Linux';
-    }
-
-    setClientDeviceName(device);
+    const parsed = parseDeviceSession(navigator.userAgent);
+    setClientDeviceName(parsed.displayName);
 
     fetch('https://api.ipify.org?format=json')
       .then((r) => r.json())
@@ -202,9 +308,6 @@ export default function SettingsPage() {
         setFirstName(u.firstName || '');
         setLastName(u.lastName || '');
         setMiddleName(u.middleName || '');
-        setEditFirstName(u.firstName || '');
-        setEditLastName(u.lastName || '');
-        setEditMiddleName(u.middleName || '');
         setKycStatus(u.kycStatus || 'UNVERIFIED');
         if (u.firstName) setMerchantName(u.firstName);
 
@@ -277,12 +380,10 @@ export default function SettingsPage() {
     if (storedUser) {
       if (storedUser.firstName) {
         setFirstName(storedUser.firstName);
-        setEditFirstName(storedUser.firstName);
         setMerchantName(storedUser.firstName);
       }
       if (storedUser.lastName) {
         setLastName(storedUser.lastName);
-        setEditLastName(storedUser.lastName);
       }
       if (storedUser.email) setEmail(storedUser.email);
       if (storedUser.phone) setPhoneNumber(storedUser.phone);
@@ -297,82 +398,6 @@ export default function SettingsPage() {
     loadProfile();
     loadSecurityData();
   }, []);
-
-  // Handle Save Profile
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileSuccessMsg('');
-    setProfileErrorMsg('');
-
-    if (!editFirstName.trim() || !editLastName.trim()) {
-      setProfileErrorMsg('First name and last name are required.');
-      return;
-    }
-
-    try {
-      setIsSavingProfile(true);
-      const token = getStoredAuthToken();
-      if (!token) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-
-      const res = await fetch('/api/users/me', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          firstName: editFirstName.trim(),
-          lastName: editLastName.trim(),
-          middleName: editMiddleName.trim() || null,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) return;
-
-      if (res.ok && data?.success) {
-        setFirstName(editFirstName.trim());
-        setLastName(editLastName.trim());
-        setMiddleName(editMiddleName.trim());
-        setMerchantName(editFirstName.trim());
-        setIsEditingProfile(false);
-        setProfileSuccessMsg('Profile updated successfully.');
-
-        try {
-          const stored = getStoredUser() || ({} as any);
-          localStorage.setItem(
-            'bx_user',
-            JSON.stringify({
-              ...stored,
-              firstName: editFirstName.trim(),
-              lastName: editLastName.trim(),
-            }),
-          );
-        } catch {}
-
-        loadSecurityData();
-        setTimeout(() => setProfileSuccessMsg(''), 4000);
-      } else {
-        setProfileErrorMsg(data?.error?.message || 'Failed to update profile.');
-      }
-    } catch {
-      setProfileErrorMsg('Network error. Could not save changes.');
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
-  const handleCancelEditProfile = () => {
-    setEditFirstName(firstName);
-    setEditLastName(lastName);
-    setEditMiddleName(middleName);
-    setIsEditingProfile(false);
-    setProfileErrorMsg('');
-  };
 
   // Handle Change Password (supports Clerk & Baxato Backend)
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -472,6 +497,7 @@ export default function SettingsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({}),
       });
 
       const data = await res.json().catch(() => null);
@@ -526,6 +552,7 @@ export default function SettingsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({}),
       });
 
       const data = await res.json().catch(() => null);
@@ -713,29 +740,9 @@ export default function SettingsPage() {
     }
   };
 
-  // Parse User Agent strictly for each historical log entry (no current device fallback)
+  // Parse User Agent into human-friendly device & platform representation
   const parseLogUserAgent = (ua?: string | null) => {
-    if (!ua) return 'Web Browser';
-    if (ua.includes('iPhone')) return 'Safari on iPhone';
-    if (ua.includes('iPad')) return 'Safari on iPad';
-    if (ua.includes('Macintosh') || ua.includes('Mac OS')) {
-      if (ua.includes('Chrome')) return 'Chrome on macOS';
-      if (ua.includes('Safari')) return 'Safari on macOS';
-      if (ua.includes('Firefox')) return 'Firefox on macOS';
-      return 'macOS Device';
-    }
-    if (ua.includes('Windows')) {
-      if (ua.includes('Edg')) return 'Edge on Windows';
-      if (ua.includes('Chrome')) return 'Chrome on Windows';
-      if (ua.includes('Firefox')) return 'Firefox on Windows';
-      return 'Windows PC';
-    }
-    if (ua.includes('Android')) return 'Chrome on Android';
-    if (ua.includes('Linux')) return 'Chrome on Linux';
-    if (ua.toLowerCase().includes('node') || ua.includes('undici') || ua === 'lightMyRequest') {
-      return 'Web Dashboard Session';
-    }
-    return ua.length > 24 ? ua.slice(0, 24) + '...' : ua;
+    return parseDeviceSession(ua).displayName;
   };
 
   const tabs = [
@@ -850,20 +857,7 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === 'profile' && (
             <div className="space-y-8 pt-2 pb-12 w-full min-w-0">
-              {profileSuccessMsg && (
-                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>{profileSuccessMsg}</span>
-                </div>
-              )}
-              {profileErrorMsg && (
-                <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 text-red-700 dark:text-red-400 text-xs font-medium flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{profileErrorMsg}</span>
-                </div>
-              )}
-
-              {/* 1. Personal Information (Sealed with Edit Toggle) */}
+              {/* 1. Personal Information (Official KYC / NIN Records) */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -876,135 +870,50 @@ export default function SettingsPage() {
 
                 <div className="md:col-span-8 w-full min-w-0">
                   <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-                    {!isEditingProfile ? (
-                      <div>
-                        <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 font-semibold text-sm shrink-0">
-                              {firstName ? firstName.charAt(0).toUpperCase() : 'M'}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                {firstName} {lastName} {middleName ? `(${middleName})` : ''}
-                              </p>
-                              <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">
-                                {email || 'merchant@baxato.ng'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {userId && (
-                              <button
-                                type="button"
-                                onClick={copyUserId}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0"
-                                title="Copy User ID"
-                              >
-                                <span>{userId.slice(0, 8)}...</span>
-                                {copiedUserId ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingProfile(true)}
-                              className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 shrink-0"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                              <span>Edit</span>
-                            </button>
-                          </div>
+                    <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 font-semibold text-sm shrink-0">
+                          {firstName ? firstName.charAt(0).toUpperCase() : 'M'}
                         </div>
-
-                        <div className="border-t border-slate-100 dark:border-slate-800/80 px-5 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">First name</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{firstName || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Last name</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{lastName || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Middle name</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{middleName || '—'}</span>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                            {firstName} {lastName} {middleName ? `(${middleName})` : ''}
+                          </p>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">
+                            {email || 'merchant@baxato.ng'}
+                          </p>
                         </div>
                       </div>
-                    ) : (
-                      <form onSubmit={handleSaveProfile}>
-                        <div className="p-5 sm:p-6 space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                First name
-                              </label>
-                              <input
-                                type="text"
-                                value={editFirstName}
-                                onChange={(e) => setEditFirstName(e.target.value)}
-                                required
-                                placeholder="First name"
-                                className="w-full h-9 px-3 text-base sm:text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
-                              />
-                            </div>
 
-                            <div>
-                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                                Last name
-                              </label>
-                              <input
-                                type="text"
-                                value={editLastName}
-                                onChange={(e) => setEditLastName(e.target.value)}
-                                required
-                                placeholder="Last name"
-                                className="w-full h-9 px-3 text-base sm:text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                              Middle name <span className="text-slate-400 font-normal">(Optional)</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={editMiddleName}
-                              onChange={(e) => setEditMiddleName(e.target.value)}
-                              placeholder="Middle name"
-                              className="w-full h-9 px-3 text-base sm:text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-slate-400 dark:focus:border-slate-600 transition-colors"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="px-5 sm:px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-end gap-2.5">
+                      <div className="flex items-center gap-2 shrink-0">
+                        {userId && (
                           <button
                             type="button"
-                            onClick={handleCancelEditProfile}
-                            className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                            onClick={copyUserId}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0"
+                            title="Copy User ID"
                           >
-                            Cancel
+                            <span>{userId.slice(0, 8)}...</span>
+                            {copiedUserId ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                           </button>
+                        )}
+                      </div>
+                    </div>
 
-                          <button
-                            type="submit"
-                            disabled={isSavingProfile}
-                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {isSavingProfile ? (
-                              <>
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                <span>Saving...</span>
-                              </>
-                            ) : (
-                              <span>Save changes</span>
-                            )}
-                          </button>
-                        </div>
-                      </form>
-                    )}
+                    <div className="border-t border-slate-100 dark:border-slate-800/80 px-5 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">First name</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{firstName || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Last name</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{lastName || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Middle name</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{middleName || '—'}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1524,7 +1433,7 @@ export default function SettingsPage() {
                           <div className="space-y-4 pt-1">
                             <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 space-y-3">
                               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                A 6-digit verification code will be sent to <strong className="text-slate-900 dark:text-white">{email}</strong> via ZeptoMail to verify and activate Two-Factor Authentication.
+                                A 6-digit verification code will be sent to <strong className="text-slate-900 dark:text-white">{email}</strong> to verify and activate Two-Factor Authentication.
                               </p>
                               {!emailOtpSent ? (
                                 <button
@@ -1627,7 +1536,7 @@ export default function SettingsPage() {
                     <div className="p-5 sm:p-6 flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3.5 min-w-0">
                         <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
-                          {clientDeviceName.includes('iPhone') || clientDeviceName.includes('Android') ? (
+                          {parseDeviceSession(typeof navigator !== 'undefined' ? navigator.userAgent : null).category === 'mobile' ? (
                             <Smartphone className="w-4 h-4" />
                           ) : (
                             <Laptop className="w-4 h-4" />
@@ -1655,30 +1564,35 @@ export default function SettingsPage() {
 
                     {/* Other Logged-in Devices (from activeSessions) */}
                     {securityData?.activeSessions && securityData.activeSessions.length > 1 && (
-                      securityData.activeSessions.slice(1).map((s) => (
-                        <div key={s.id} className="p-5 sm:p-6 flex items-start justify-between gap-4 bg-slate-50/30 dark:bg-slate-900/10">
-                          <div className="flex items-start gap-3.5 min-w-0">
-                            <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
-                              {s.userAgent?.includes('iPhone') || s.userAgent?.includes('Android') ? (
-                                <Smartphone className="w-4 h-4" />
-                              ) : (
-                                <Laptop className="w-4 h-4" />
-                              )}
-                            </div>
-                            <div className="space-y-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                {parseLogUserAgent(s.userAgent)}
-                              </p>
-                              <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                                IP: {s.ipAddress && !s.ipAddress.startsWith('10.') ? s.ipAddress : resolvedCurrentIp}
-                              </p>
-                              <p className="text-xs text-slate-400">
-                                Session logged: {formatDateTime(s.createdAt)}
-                              </p>
+                      securityData.activeSessions.slice(1).map((s) => {
+                        const parsed = parseDeviceSession(s.userAgent);
+                        return (
+                          <div key={s.id} className="p-5 sm:p-6 flex items-start justify-between gap-4 bg-slate-50/30 dark:bg-slate-900/10">
+                            <div className="flex items-start gap-3.5 min-w-0">
+                              <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
+                                {parsed.category === 'mobile' ? (
+                                  <Smartphone className="w-4 h-4" />
+                                ) : parsed.category === 'api' ? (
+                                  <Key className="w-4 h-4" />
+                                ) : (
+                                  <Laptop className="w-4 h-4" />
+                                )}
+                              </div>
+                              <div className="space-y-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                  {parsed.displayName}
+                                </p>
+                                <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                                  IP: {s.ipAddress && !s.ipAddress.startsWith('10.') ? s.ipAddress : resolvedCurrentIp}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  Session logged: {formatDateTime(s.createdAt)}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>

@@ -4,13 +4,18 @@ import { proxyToBackendApi } from '@/lib/api-client';
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
-    const result = await proxyToBackendApi('/auth/2fa/totp/setup', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      '/auth/2fa/totp/setup',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+        body: JSON.stringify({}),
       },
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

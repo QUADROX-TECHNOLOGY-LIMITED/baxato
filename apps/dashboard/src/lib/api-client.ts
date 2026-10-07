@@ -64,6 +64,7 @@ export interface ProxyResponse<T = any> {
 export async function proxyToBackendApi<T = any>(
   path: string,
   options: RequestInit,
+  incomingRequest?: Request,
 ): Promise<ProxyResponse<T>> {
   const { url: baseUrl, error: configError } = getBackendApiUrl();
 
@@ -85,19 +86,37 @@ export async function proxyToBackendApi<T = any>(
   const targetUrl = `${baseUrl}${normalizedPath}`;
 
   const clientHeaders: Record<string, string> = {};
-  try {
-    const h = headers();
-    const ua = h.get('user-agent');
-    const fwd = h.get('x-forwarded-for') || h.get('x-real-ip');
-    if (ua) clientHeaders['user-agent'] = ua;
-    if (fwd) clientHeaders['x-forwarded-for'] = fwd;
-  } catch {
-    // headers() not available in background or static build context
+
+  if (incomingRequest) {
+    const reqUa = incomingRequest.headers.get('user-agent');
+    const reqFwd = incomingRequest.headers.get('x-forwarded-for') || incomingRequest.headers.get('x-real-ip');
+    if (reqUa) clientHeaders['user-agent'] = reqUa;
+    if (reqFwd) clientHeaders['x-forwarded-for'] = reqFwd;
+  }
+
+  if (!clientHeaders['user-agent'] || !clientHeaders['x-forwarded-for']) {
+    try {
+      const h = headers();
+      const ua = h.get('user-agent');
+      const fwd = h.get('x-forwarded-for') || h.get('x-real-ip');
+      if (ua && !clientHeaders['user-agent']) clientHeaders['user-agent'] = ua;
+      if (fwd && !clientHeaders['x-forwarded-for']) clientHeaders['x-forwarded-for'] = fwd;
+    } catch {
+      // headers() not available in background or static build context
+    }
+  }
+
+  const method = (options.method || 'GET').toUpperCase();
+  const isMutation = ['POST', 'PUT', 'PATCH'].includes(method);
+  let resolvedBody = options.body;
+  if (isMutation && (resolvedBody === undefined || resolvedBody === null || resolvedBody === '')) {
+    resolvedBody = JSON.stringify({});
   }
 
   try {
     const res = await fetch(targetUrl, {
       ...options,
+      body: resolvedBody,
       headers: {
         'Content-Type': 'application/json',
         ...clientHeaders,

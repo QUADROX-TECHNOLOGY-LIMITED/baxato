@@ -63,6 +63,26 @@ export function buildServer(): FastifyInstance {
     timeWindow: '1 minute',
   });
 
+  // 1.5 JSON Content-Type Parser: tolerate empty JSON payloads gracefully
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      const raw = typeof body === 'string' ? body.trim() : '';
+      if (!raw) {
+        done(null, {});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        done(null, parsed);
+      } catch (err: any) {
+        err.statusCode = 400;
+        done(err, undefined);
+      }
+    },
+  );
+
   // 2. Authentication Decorator Plugin
   app.register(authPlugin);
 
