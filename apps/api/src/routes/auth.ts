@@ -489,7 +489,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Fetch primary business
     const [biz] = await db
-      .select({ id: businesses.id })
+      .select({
+        id: businesses.id,
+        name: businesses.name,
+        slug: businesses.slug,
+        country: businesses.country,
+        state: businesses.state,
+        lga: businesses.lga,
+      })
       .from(businesses)
       .where(eq(businesses.ownerId, user.id))
       .limit(1);
@@ -533,6 +540,16 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             kycStatus: user.kycStatus,
             role: user.role,
           },
+          business: biz
+            ? {
+                id: biz.id,
+                name: biz.name,
+                slug: biz.slug,
+                country: biz.country,
+                state: biz.state,
+                lga: biz.lga,
+              }
+            : null,
           token,
         },
         request.id,

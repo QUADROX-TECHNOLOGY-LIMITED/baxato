@@ -38,6 +38,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
 
@@ -99,6 +100,7 @@ export default function LoginPage() {
 
     try {
       setIsSubmitting(true);
+      setLoadingMessage('Authenticating credentials...');
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -112,12 +114,16 @@ export default function LoginPage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data?.success) {
+        setIsSubmitting(false);
+        setLoadingMessage(null);
         setErrorMessage(data?.error?.message || 'Invalid email or password.');
         return;
       }
 
       // Check if account has 2FA enabled
       if (data.data?.requiresTwoFactor) {
+        setIsSubmitting(false);
+        setLoadingMessage(null);
         setTwoFactorMethod(data.data.twoFactorMethod || 'TOTP');
         setTwoFactorEmail(data.data.email || cleanEmail);
         setTwoFactorCode('');
@@ -130,21 +136,18 @@ export default function LoginPage() {
       }
 
       // 2FA not required: proceed with login completion
+      setLoadingMessage('Authentication successful! Loading dashboard...');
       await handleCompleteLogin(data.data);
     } catch {
-      setErrorMessage('Network error connecting to authentication service. Please try again.');
-    } finally {
       setIsSubmitting(false);
+      setLoadingMessage(null);
+      setErrorMessage('Network error connecting to authentication service. Please try again.');
     }
   };
 
   // Step 2: Handle Submit Two-Factor Authentication Code
-  const handleSubmitTwoFactor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setTwoFactorNotice(null);
-
-    const cleanCode = twoFactorCode.trim();
+  const executeTwoFactorVerification = async (codeToVerify?: string) => {
+    const cleanCode = (codeToVerify !== undefined ? codeToVerify : twoFactorCode).trim();
     if (!cleanCode) {
       setErrorMessage(
         twoFactorMethod === 'TOTP'
@@ -156,6 +159,9 @@ export default function LoginPage() {
 
     try {
       setIsSubmitting(true);
+      setLoadingMessage('Verifying authentication code...');
+      setErrorMessage(null);
+      setTwoFactorNotice(null);
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -170,18 +176,41 @@ export default function LoginPage() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data?.success) {
+        setIsSubmitting(false);
+        setLoadingMessage(null);
         setErrorMessage(
           data?.error?.message || 'Invalid or expired two-factor authentication code. Please check and try again.'
         );
+        setTwoFactorCode('');
+        setTimeout(() => otpInputRef.current?.focus(), 150);
         return;
       }
 
-      // 2FA Verified! Complete login session
+      // 2FA Verified! Keep loading overlay visible while transitioning to dashboard
+      setLoadingMessage('Authentication successful! Loading dashboard...');
       await handleCompleteLogin(data.data);
     } catch {
-      setErrorMessage('Network error verifying authentication code. Please try again.');
-    } finally {
       setIsSubmitting(false);
+      setLoadingMessage(null);
+      setErrorMessage('Network error verifying authentication code. Please try again.');
+    }
+  };
+
+  const handleSubmitTwoFactor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeTwoFactorVerification();
+  };
+
+  const handleOtpChange = (val: string) => {
+    const clean = val.replace(/\s+/g, '');
+    setTwoFactorCode(clean);
+    setErrorMessage(null);
+
+    // Automatically submit once full code is typed/pasted (6 digits for Email/TOTP, 8 for backup code)
+    if (clean.length === 6 && /^\d{6}$/.test(clean)) {
+      executeTwoFactorVerification(clean);
+    } else if (twoFactorMethod === 'TOTP' && clean.length === 8) {
+      executeTwoFactorVerification(clean);
     }
   };
 
@@ -221,6 +250,8 @@ export default function LoginPage() {
     if (loginData?.token) {
       try {
         localStorage.setItem('bx_auth_token', loginData.token);
+        // Persist standard session cookie
+        document.cookie = `bx_auth_token=${encodeURIComponent(loginData.token)}; path=/; max-age=604800; SameSite=Lax`;
         if (loginData.user) {
           localStorage.setItem('bx_user', JSON.stringify(loginData.user));
         }
@@ -230,22 +261,39 @@ export default function LoginPage() {
       } catch {}
     }
 
-    // Attempt Clerk session sync if configured
+    // Optional non-blocking Clerk session sync if configured
     try {
       if (clerk.loaded && clerk.client) {
-        const signInResult = await clerk.client.signIn.create({
-          identifier: email.toLowerCase().trim(),
-          password,
-        });
-        if (signInResult.status === 'complete' && signInResult.createdSessionId) {
-          await clerk.setActive({ session: signInResult.createdSessionId });
-        }
+        const syncPromise = clerk.client.signIn
+          .create({
+            identifier: email.toLowerCase().trim(),
+            password,
+          })
+          .then(async (signInResult) => {
+            if (signInResult.status === 'complete' && signInResult.createdSessionId) {
+              await clerk.setActive({ session: signInResult.createdSessionId });
+            }
+          })
+          .catch((err) => {
+            console.warn('Clerk background sync error:', err);
+          });
+
+        // Limit Clerk sync wait to max 500ms so dashboard redirection is immediate
+        await Promise.race([
+          syncPromise,
+          new Promise((resolve) => setTimeout(resolve, 500)),
+        ]);
       }
     } catch (clerkErr) {
       console.warn('Clerk session sync skipped (backend authenticated):', clerkErr);
     }
 
-    router.push('/dashboard');
+    // Hard navigation to ensure fresh session state across entire app and prevent lingering on login
+    if (typeof window !== 'undefined') {
+      window.location.assign('/dashboard');
+    } else {
+      router.push('/dashboard');
+    }
   };
 
   const handleBackToCredentials = () => {
@@ -253,6 +301,8 @@ export default function LoginPage() {
     setTwoFactorCode('');
     setErrorMessage(null);
     setTwoFactorNotice(null);
+    setLoadingMessage(null);
+    setIsSubmitting(false);
   };
 
   return (
@@ -289,7 +339,10 @@ export default function LoginPage() {
               </div>
 
               <p className="mt-4 text-xs font-semibold text-slate-800 dark:text-white tracking-wide">
-                {step === 'credentials' ? 'Authenticating credentials...' : 'Verifying security credentials...'}
+                {loadingMessage ||
+                  (step === 'credentials'
+                    ? 'Authenticating credentials...'
+                    : 'Verifying security credentials...')}
               </p>
             </div>
           </motion.div>
@@ -623,8 +676,9 @@ export default function LoginPage() {
                         autoComplete="one-time-code"
                         placeholder="••••••"
                         value={twoFactorCode}
-                        onChange={(e) => setTwoFactorCode(e.target.value.replace(/\s+/g, ''))}
-                        className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] text-center font-mono text-xl sm:text-2xl tracking-[0.35em] font-bold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] transition-colors"
+                        onChange={(e) => handleOtpChange(e.target.value)}
+                        disabled={isSubmitting}
+                        className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-[#1E2D44] bg-white dark:bg-[#0D1726] text-center font-mono text-xl sm:text-2xl tracking-[0.35em] font-bold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#1677FF] transition-colors disabled:opacity-60"
                       />
                     </div>
 
