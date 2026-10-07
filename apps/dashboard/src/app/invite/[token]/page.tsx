@@ -20,6 +20,8 @@ import {
   Key,
   Wallet,
   Headphones,
+  Mail,
+  Check,
 } from 'lucide-react';
 import { getStoredAuthToken, getStoredUser } from '@/lib/auth-session';
 
@@ -36,7 +38,7 @@ const ROLE_INFO: Record<
   BUSINESS_ADMIN: {
     name: 'Administrator',
     icon: Shield,
-    badgeStyle: 'bg-sky-950/60 text-sky-300 border-sky-800',
+    badgeStyle: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
     description: 'General Operations Manager',
     capabilities: [
       'Manage team members and invite collaborators',
@@ -47,18 +49,18 @@ const ROLE_INFO: Record<
   DEVELOPER: {
     name: 'Developer',
     icon: Key,
-    badgeStyle: 'bg-amber-950/60 text-amber-300 border-amber-800',
+    badgeStyle: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
     description: 'Technical Lead & API Integrator',
     capabilities: [
-      'Generate & rotate Live and Test API keys',
+      'Generate and rotate Live and Test API keys',
       'Configure webhooks and inspect HMAC delivery logs',
-      'Access interactive API documentation (Scalar)',
+      'Access interactive API documentation and test sandbox',
     ],
   },
   FINANCE: {
     name: 'Finance & Billing',
     icon: Wallet,
-    badgeStyle: 'bg-emerald-950/60 text-emerald-300 border-emerald-800',
+    badgeStyle: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
     description: 'Accountant & Financial Officer',
     capabilities: [
       'View operational wallet balance and virtual accounts',
@@ -69,7 +71,7 @@ const ROLE_INFO: Record<
   SUPPORT: {
     name: 'Customer Support',
     icon: Headphones,
-    badgeStyle: 'bg-teal-950/60 text-teal-300 border-teal-800',
+    badgeStyle: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/60',
     description: 'Helpdesk & Customer Care',
     capabilities: [
       'Search transactions by Reference, Phone, or Meter Number',
@@ -80,7 +82,7 @@ const ROLE_INFO: Record<
   VIEWER: {
     name: 'Viewer',
     icon: Eye,
-    badgeStyle: 'bg-slate-800 text-slate-300 border-slate-700',
+    badgeStyle: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
     description: 'Read-only Analyst',
     capabilities: [
       'View aggregate transaction volume charts',
@@ -133,11 +135,11 @@ export default function InviteAcceptancePage({
     setErrorState(null);
     try {
       const res = await fetch(`/api/invites/validate?token=${encodeURIComponent(rawToken)}`);
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
 
-      if (!res.ok || !json.success) {
+      if (!res.ok || !json?.success) {
         setErrorState(
-          json.error?.message || 'Invalid or expired invitation link. Please request a new one.',
+          json?.error?.message || 'Invalid or expired invitation link. Please request a new one.',
         );
       } else {
         setValidationData(json.data);
@@ -181,10 +183,10 @@ export default function InviteAcceptancePage({
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
 
-      if (!res.ok || !json.success) {
-        setSubmitError(json.error?.message || 'Failed to accept invitation. Please try again.');
+      if (!res.ok || !json?.success) {
+        setSubmitError(json?.error?.message || 'Failed to accept invitation. Please try again.');
         setIsSubmitting(false);
         return;
       }
@@ -206,7 +208,6 @@ export default function InviteAcceptancePage({
         }
       }
 
-      // Smooth transition to dashboard
       router.push('/dashboard');
     } catch {
       setSubmitError('Network error while processing invitation. Please try again.');
@@ -216,13 +217,11 @@ export default function InviteAcceptancePage({
 
   if (isValidating) {
     return (
-      <div className="min-h-screen bg-[#060D18] flex items-center justify-center p-4">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 mx-auto">
-            <RefreshCw className="w-8 h-8 animate-spin" />
-          </div>
-          <p className="text-sm font-semibold text-slate-300">
-            Validating BAXATO invitation...
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <RefreshCw className="w-6 h-6 animate-spin text-[#126BEB] mx-auto" />
+          <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">
+            Validating invitation...
           </p>
         </div>
       </div>
@@ -231,21 +230,25 @@ export default function InviteAcceptancePage({
 
   if (errorState) {
     return (
-      <div className="min-h-screen bg-[#060D18] flex items-center justify-center p-4">
-        <div className="bg-[#0A1224] border border-slate-800 rounded-3xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-red-950/40 border border-red-800/80 flex items-center justify-center text-red-400 mx-auto">
-            <AlertCircle className="w-8 h-8" />
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 flex items-center justify-center text-red-600 dark:text-red-400 mx-auto">
+            <AlertCircle className="w-6 h-6" />
           </div>
-          <div className="space-y-2">
-            <h1 className="text-xl font-bold text-white">Invitation Unavailable</h1>
-            <p className="text-sm text-slate-400 leading-relaxed">{errorState}</p>
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Invitation unavailable
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              {errorState}
+            </p>
           </div>
           <div className="pt-2">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center w-full px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm transition-colors"
+              className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-medium text-xs sm:text-sm hover:opacity-90 transition-opacity"
             >
-              Go to Sign In
+              Sign in to BAXATO
             </Link>
           </div>
         </div>
@@ -257,74 +260,69 @@ export default function InviteAcceptancePage({
   const RoleIcon = roleCfg.icon;
 
   return (
-    <div className="min-h-screen bg-[#060D18] text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 font-sans relative overflow-hidden">
-      {/* Background Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-sky-500/10 rounded-full blur-[140px] pointer-events-none" />
-
-      <div className="w-full max-w-lg z-10 space-y-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 font-sans transition-colors duration-150">
+      <div className="w-full max-w-lg space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 text-xs font-semibold text-slate-300">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            BAXATO Merchant Platform
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+            <Sparkles className="w-3.5 h-3.5 text-[#126BEB]" />
+            <span>BAXATO Workspace Invitation</span>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">
-            Workspace Invitation
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Join {validationData?.businessName}
           </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            You've been invited by <strong className="text-slate-800 dark:text-slate-200">{validationData?.inviterName}</strong> to collaborate.
+          </p>
         </div>
 
         {/* Card Container */}
-        <div className="bg-[#0A1224]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-          {/* Inviting Business Info */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-950/40 via-blue-950/20 to-transparent border border-sky-900/40 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
-              <Building2 className="w-6 h-6" />
+        <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xs space-y-6">
+          {/* Organization & Role Callout */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#080E1A] border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-center text-[#126BEB] dark:text-[#38BDF8] shrink-0">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Organization</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                  {validationData?.businessName}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-sky-400 font-semibold uppercase tracking-wider">
-                Invitation to Join
-              </p>
-              <h2 className="text-lg font-bold text-white truncate">
-                {validationData?.businessName}
-              </h2>
-              <p className="text-xs text-slate-400">
-                Invited by <strong className="text-slate-300">{validationData?.inviterName}</strong>
-              </p>
-            </div>
-          </div>
 
-          {/* Assigned Role Pill & Capabilities */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Your Role
-              </span>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Your Role</p>
               <span
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${roleCfg.badgeStyle}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium border ${roleCfg.badgeStyle}`}
               >
-                <RoleIcon className="w-3.5 h-3.5" />
+                <RoleIcon className="w-3 h-3" />
                 {roleCfg.name}
               </span>
             </div>
+          </div>
 
-            <div className="p-4 rounded-2xl bg-[#070D1A] border border-slate-800/80 space-y-2.5">
-              <p className="text-xs font-semibold text-slate-300">Capabilities Granted:</p>
-              <ul className="space-y-1.5">
-                {roleCfg.capabilities.map((cap, i) => (
-                  <li key={i} className="text-xs text-slate-400 flex items-start gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>{cap}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {/* Role Capabilities Summary */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Access permissions granted:
+            </p>
+            <ul className="space-y-1.5">
+              {roleCfg.capabilities.map((cap, i) => (
+                <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{cap}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Form / Acceptance Action */}
-          <form onSubmit={handleAccept} className="space-y-4 pt-2">
+          <form onSubmit={handleAccept} className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
             {submitError && (
-              <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-800/80 text-red-200 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" />
                 <span>{submitError}</span>
               </div>
             )}
@@ -332,19 +330,20 @@ export default function InviteAcceptancePage({
             {/* CASE 1: Logged in caller */}
             {activeAuthToken ? (
               <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300">
-                  Signed in as <strong className="text-white">{activeUser?.email || 'Current Account'}</strong>.
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
+                  Signed in as <strong className="text-slate-900 dark:text-white">{activeUser?.email || 'Current Account'}</strong>.
                 </div>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      Accept & Enter Dashboard <ArrowRight className="w-4 h-4" />
+                      <span>Accept & Enter Workspace</span>
+                      <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
@@ -352,12 +351,12 @@ export default function InviteAcceptancePage({
             ) : validationData?.existingAccount ? (
               /* CASE 2: User exists but not logged in */
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Account Password
                   </label>
-                  <p className="text-xs text-slate-400 mb-2">
-                    An existing account was found for <strong>{validationData.email}</strong>. Enter your password to accept:
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                    An existing account was found for <strong className="text-slate-800 dark:text-slate-200">{validationData.email}</strong>. Enter your password to accept:
                   </p>
                   <div className="relative">
                     <input
@@ -366,12 +365,12 @@ export default function InviteAcceptancePage({
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#070D1A] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 pr-10"
+                      className="w-full pl-3.5 pr-10 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -381,13 +380,14 @@ export default function InviteAcceptancePage({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      Verify Password & Join <ArrowRight className="w-4 h-4" />
+                      <span>Verify Password & Join</span>
+                      <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
@@ -396,36 +396,36 @@ export default function InviteAcceptancePage({
               /* CASE 3: Brand new user registration */
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                       First Name
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Chidi"
+                      placeholder="Jane"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      className="w-full bg-[#070D1A] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                       Last Name
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Okafor"
+                      placeholder="Doe"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
-                      className="w-full bg-[#070D1A] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Phone Number
                   </label>
                   <input
@@ -434,12 +434,12 @@ export default function InviteAcceptancePage({
                     placeholder="08012345678"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-[#070D1A] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Create Password
                   </label>
                   <div className="relative">
@@ -449,25 +449,25 @@ export default function InviteAcceptancePage({
                       placeholder="At least 8 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#070D1A] border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 pr-10"
+                      className="w-full pl-3.5 pr-10 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   {password.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-2">
+                    <div className="flex items-center gap-1.5 mt-1.5">
                       <div
                         className={`h-1 flex-1 rounded-full ${
                           password.length >= 8 ? 'bg-emerald-500' : 'bg-red-500'
                         }`}
                       />
-                      <span className="text-[10px] text-slate-400">
-                        {password.length >= 8 ? 'Strong' : 'Min 8 chars'}
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {password.length >= 8 ? 'Password looks good' : 'Minimum 8 characters'}
                       </span>
                     </div>
                   )}
@@ -476,13 +476,14 @@ export default function InviteAcceptancePage({
                 <button
                   type="submit"
                   disabled={isSubmitting || password.length < 8}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-xs sm:text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      Create Account & Join <ArrowRight className="w-4 h-4" />
+                      <span>Create Account & Join</span>
+                      <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
@@ -492,8 +493,8 @@ export default function InviteAcceptancePage({
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-slate-500">
-          &copy; 2026 XATO TECHNOLOGIES LIMITED. Enterprise VTU & Telecom Infrastructure.
+        <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+          &copy; 2026 XATO TECHNOLOGIES LIMITED. All rights reserved.
         </p>
       </div>
     </div>
