@@ -4,10 +4,18 @@ import { proxyToBackendApi } from '@/lib/api-client';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
+    const userAgent = request.headers.get('user-agent') || '';
+    const forwardedFor =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      '';
+
     const result = await proxyToBackendApi('/users/me/security', {
       method: 'GET',
       headers: {
         ...(authHeader ? { Authorization: authHeader } : {}),
+        ...(userAgent ? { 'User-Agent': userAgent } : {}),
+        ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}),
       },
     });
 

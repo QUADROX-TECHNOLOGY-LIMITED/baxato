@@ -28,6 +28,7 @@ import { transactionRoutes } from './routes/transactions.js';
 
 export function buildServer(): FastifyInstance {
   const app = Fastify({
+    trustProxy: true,
     logger:
       env.NODE_ENV === 'test'
         ? false

@@ -196,11 +196,10 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
     const lastLogin = await auditService.getLastLoginForUser(userId);
     const auditLogs = await auditService.getLogsForUser(userId, 20);
 
-    const clientIp =
-      request.ip ||
-      (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      '127.0.0.1';
-    const userAgent = (request.headers['user-agent'] as string) || 'Unknown Browser';
+    const forwarded = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
+    const realIp = (request.headers['x-real-ip'] as string)?.trim();
+    const clientIp = forwarded || realIp || request.ip || '127.0.0.1';
+    const userAgent = (request.headers['user-agent'] as string) || 'Web Browser';
 
     return reply.status(200).send(
       createSuccessResponse(
