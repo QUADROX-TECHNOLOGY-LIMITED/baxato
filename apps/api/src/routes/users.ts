@@ -195,6 +195,7 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
 
     const lastLogin = await auditService.getLastLoginForUser(userId);
     const auditLogs = await auditService.getLogsForUser(userId, 20);
+    const activeSessions = await auditService.getRecentLoginSessions(userId, 6);
 
     const forwarded = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
     const realIp = (request.headers['x-real-ip'] as string)?.trim();
@@ -210,6 +211,7 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
             userAgent,
             lastActiveAt: new Date().toISOString(),
           },
+          activeSessions,
           auditLogs,
         },
         request.id,

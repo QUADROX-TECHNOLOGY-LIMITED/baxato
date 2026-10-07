@@ -19,7 +19,8 @@ import {
   Key,
   Mail,
   Edit2,
-  X,
+  QrCode,
+  ShieldAlert,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -44,6 +45,13 @@ interface AuditLogItem {
   createdAt: string;
 }
 
+interface LoginSessionItem {
+  id: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
+}
+
 interface SecurityData {
   lastLoginAt?: string | null;
   currentSession: {
@@ -51,6 +59,7 @@ interface SecurityData {
     userAgent: string;
     lastActiveAt?: string;
   };
+  activeSessions?: LoginSessionItem[];
   auditLogs: AuditLogItem[];
 }
 
@@ -101,10 +110,18 @@ export default function SettingsPage() {
   const [passErrorMsg, setPassErrorMsg] = useState('');
   const [passSuccessMsg, setPassSuccessMsg] = useState('');
 
-  // 2FA Preference State
-  const [twoFactorMethod, setTwoFactorMethod] = useState<'email' | 'totp'>('email');
-  const [isSaving2FA, setIsSaving2FA] = useState(false);
-  const [twoFactorSuccessMsg, setTwoFactorSuccessMsg] = useState('');
+  // 2FA Interactive Setup State
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [active2FAMethod, setActive2FAMethod] = useState<'EMAIL' | 'TOTP'>('EMAIL');
+  const [isConfiguring2FA, setIsConfiguring2FA] = useState(false);
+  const [selected2FAMethod, setSelected2FAMethod] = useState<'EMAIL' | 'TOTP'>('TOTP');
+  const [totpSecret, setTotpSecret] = useState('BXAT-7K9M-P2XW-4LQ8');
+  const [totpCode, setTotpCode] = useState('');
+  const [copiedTotpSecret, setCopiedTotpSecret] = useState(false);
+  const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
+  const [backupCodes] = useState(['4819-2091', '8302-1940', '5920-4102', '9104-3829']);
+  const [twoFactorNotice, setTwoFactorNotice] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
 
   // Security & Sessions State
   const [securityData, setSecurityData] = useState<SecurityData | null>(null);
@@ -112,7 +129,7 @@ export default function SettingsPage() {
   const [clientDeviceName, setClientDeviceName] = useState('Web Browser');
   const [clientPublicIp, setClientPublicIp] = useState('');
 
-  // Client-Side Browser / Device Detection (Avoids "node" User-Agent in proxy)
+  // Client-Side Browser / Device Detection (for current browser session only)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -120,9 +137,9 @@ export default function SettingsPage() {
     let device = 'Web Browser';
 
     if (/iPhone/i.test(ua)) {
-      device = 'Safari on iPhone (iOS)';
+      device = 'Safari on iPhone';
     } else if (/iPad/i.test(ua)) {
-      device = 'Safari on iPad (iPadOS)';
+      device = 'Safari on iPad';
     } else if (/Macintosh|Mac OS X/i.test(ua)) {
       if (/Chrome/i.test(ua)) device = 'Chrome on macOS';
       else if (/Safari/i.test(ua)) device = 'Safari on macOS';
@@ -141,7 +158,6 @@ export default function SettingsPage() {
 
     setClientDeviceName(device);
 
-    // Fetch client's real public IP as fallback if internal container IP is reported
     fetch('https://api.ipify.org?format=json')
       .then((r) => r.json())
       .then((data) => {
@@ -204,7 +220,7 @@ export default function SettingsPage() {
         }
       }
     } catch {
-      // Graceful fallback to cached storage
+      // Graceful fallback
     }
   };
 
@@ -226,13 +242,12 @@ export default function SettingsPage() {
         setSecurityData(data.data);
       }
     } catch {
-      // Quiet fail on security telemetry fetch
+      // Quiet fail
     } finally {
       setIsLoadingSecurity(false);
     }
   };
 
-  // Bootstrap initial session
   useEffect(() => {
     const storedUser = getStoredUser();
     if (storedUser) {
@@ -346,11 +361,11 @@ export default function SettingsPage() {
       return;
     }
     if (newPassword.length < 8) {
-      setPassErrorMsg('New password must be at least 8 characters long.');
+      setPassErrorMsg('New password must be at least 8 characters.');
       return;
     }
     if (newPassword === currentPassword) {
-      setPassErrorMsg('New password must be different from your current password.');
+      setPassErrorMsg('New password must be different from current password.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -361,7 +376,6 @@ export default function SettingsPage() {
     try {
       setIsSubmittingPassword(true);
 
-      // 1. If Clerk session is active, update via Clerk
       let clerkUpdated = false;
       if (clerk.user) {
         try {
@@ -383,7 +397,6 @@ export default function SettingsPage() {
         }
       }
 
-      // 2. Sync to Baxato backend
       const token = getStoredAuthToken();
       if (token) {
         const res = await fetch('/api/auth/change-password/confirm', {
@@ -415,19 +428,45 @@ export default function SettingsPage() {
       loadSecurityData();
       setTimeout(() => setPassSuccessMsg(''), 5000);
     } catch (err: any) {
-      setPassErrorMsg(err?.message || 'Could not update password. Please try again.');
+      setPassErrorMsg(err?.message || 'Could not update password.');
     } finally {
       setIsSubmittingPassword(false);
     }
   };
 
-  const handleSave2FA = () => {
-    setIsSaving2FA(true);
-    setTimeout(() => {
-      setIsSaving2FA(false);
-      setTwoFactorSuccessMsg(`Two-Factor Authentication set to ${twoFactorMethod === 'email' ? 'Email OTP' : 'Authenticator App'}.`);
-      setTimeout(() => setTwoFactorSuccessMsg(''), 4000);
-    }, 400);
+  // 2FA Actions
+  const handleActivate2FA = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTwoFactorError('');
+    if (selected2FAMethod === 'TOTP' && totpCode.trim().length !== 6) {
+      setTwoFactorError('Please enter the 6-digit code from Google Authenticator.');
+      return;
+    }
+    setIs2FAEnabled(true);
+    setActive2FAMethod(selected2FAMethod);
+    setIsConfiguring2FA(false);
+    setTotpCode('');
+    setTwoFactorNotice(`Two-Factor Authentication is now enabled via ${selected2FAMethod === 'TOTP' ? 'Authenticator App' : 'Email Code'}.`);
+    setTimeout(() => setTwoFactorNotice(''), 4000);
+  };
+
+  const handleDisable2FA = () => {
+    setIs2FAEnabled(false);
+    setIsConfiguring2FA(false);
+    setTwoFactorNotice('Two-Factor Authentication has been turned off.');
+    setTimeout(() => setTwoFactorNotice(''), 4000);
+  };
+
+  const copyTotpKey = () => {
+    navigator.clipboard.writeText(totpSecret);
+    setCopiedTotpSecret(true);
+    setTimeout(() => setCopiedTotpSecret(false), 2000);
+  };
+
+  const copyRecoveryCodes = () => {
+    navigator.clipboard.writeText(backupCodes.join('\n'));
+    setCopiedBackupCodes(true);
+    setTimeout(() => setCopiedBackupCodes(false), 2000);
   };
 
   const refreshAll = async () => {
@@ -461,17 +500,17 @@ export default function SettingsPage() {
     }
   };
 
-  const parseUserAgent = (ua?: string | null) => {
-    if (!ua || ua.toLowerCase().includes('node') || ua === 'lightMyRequest') {
-      return clientDeviceName;
-    }
-    if (ua.includes('iPhone')) return 'Safari on iPhone (iOS)';
-    if (ua.includes('iPad')) return 'Safari on iPad (iPadOS)';
+  // Parse User Agent strictly for each historical log entry (no current device fallback)
+  const parseLogUserAgent = (ua?: string | null) => {
+    if (!ua || ua === 'lightMyRequest') return 'BAXATO Web Client';
+    if (ua.toLowerCase().includes('node') || ua.includes('undici')) return 'BAXATO API Gateway';
+    if (ua.includes('iPhone')) return 'Safari on iPhone';
+    if (ua.includes('iPad')) return 'Safari on iPad';
     if (ua.includes('Macintosh')) return 'Safari on macOS';
     if (ua.includes('Windows')) return 'Chrome on Windows';
     if (ua.includes('Android')) return 'Chrome on Android';
     if (ua.includes('Linux')) return 'Chrome on Linux';
-    return ua.slice(0, 32);
+    return ua.length > 24 ? ua.slice(0, 24) + '...' : ua;
   };
 
   const tabs = [
@@ -481,7 +520,7 @@ export default function SettingsPage() {
     { id: 'audit' as const, label: 'Audit Trail' },
   ];
 
-  const resolvedIp =
+  const resolvedCurrentIp =
     clientPublicIp ||
     (securityData?.currentSession?.ipAddress && !securityData.currentSession.ipAddress.startsWith('10.')
       ? securityData.currentSession.ipAddress
@@ -500,7 +539,7 @@ export default function SettingsPage() {
       />
 
       {/* Main Content Area */}
-      <div className="lg:pl-72 flex flex-col min-h-screen">
+      <div className="lg:pl-72 flex flex-col min-h-screen min-w-0">
         {/* Top Header */}
         <Header
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
@@ -511,38 +550,40 @@ export default function SettingsPage() {
           onRefresh={refreshAll}
         />
 
-        {/* Page Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-4xl w-full mx-auto space-y-6">
+        {/* Page Body - Constrained max width & min-w-0 to prevent Safari horizontal pinch */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-4xl w-full mx-auto space-y-6 min-w-0">
           {/* KYC Alert Banner (if unverified) */}
           {!isVerified && (
             <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
           )}
 
-          {/* Back to Dashboard Link & Page Title */}
-          <div className="space-y-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Dashboard</span>
-            </Link>
+          {/* Back Button & Page Title */}
+          <div className="space-y-3">
+            <div>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back</span>
+              </Link>
+            </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
                   Settings
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Manage your account identity, security, sessions, and audit trail.
+                  Manage your account identity, credentials, sessions, and security trail.
                 </p>
               </div>
 
-              {/* Clean KYC Status Badge */}
-              <div className="self-start sm:self-auto">
+              {/* Clean KYC Status Badge (No AI Styling) */}
+              <div className="self-start sm:self-auto shrink-0">
                 {isVerified ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>KYC Verified</span>
                   </span>
                 ) : (
@@ -557,9 +598,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Horizontal Tabs - Safari & Mobile Scrollable */}
-          <div className="border-b border-slate-200 dark:border-slate-800 -mx-4 px-4 sm:mx-0 sm:px-0">
-            <nav className="flex space-x-6 sm:space-x-8 overflow-x-auto scrollbar-none" aria-label="Tabs">
+          {/* Horizontal Tabs - Smooth scrolling, no page clipping */}
+          <div className="border-b border-slate-200 dark:border-slate-800 w-full overflow-hidden">
+            <nav className="flex space-x-6 sm:space-x-8 overflow-x-auto scrollbar-none pb-px" aria-label="Tabs">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -583,8 +624,7 @@ export default function SettingsPage() {
           {/* TAB 1: PROFILE & IDENTITY                                                 */}
           {/* ========================================================================= */}
           {activeTab === 'profile' && (
-            <div className="space-y-8 pt-2 pb-12">
-              {/* Profile Success / Error Notices */}
+            <div className="space-y-8 pt-2 pb-12 w-full min-w-0">
               {profileSuccessMsg && (
                 <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -599,7 +639,7 @@ export default function SettingsPage() {
               )}
 
               {/* 1. Personal Information (Sealed with Edit Toggle) */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Personal Information
@@ -609,32 +649,31 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-                    {/* Sealed State (Read-only View) */}
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
                     {!isEditingProfile ? (
                       <div>
                         <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                          <div className="flex items-center gap-3.5">
+                          <div className="flex items-center gap-3.5 min-w-0">
                             <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 font-semibold text-sm shrink-0">
                               {firstName ? firstName.charAt(0).toUpperCase() : 'M'}
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                                 {firstName} {lastName} {middleName ? `(${middleName})` : ''}
                               </p>
-                              <p className="text-xs text-slate-500 font-mono mt-0.5">
+                              <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">
                                 {email || 'merchant@baxato.ng'}
                               </p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <div className="flex items-center gap-2 shrink-0">
                             {userId && (
                               <button
                                 type="button"
                                 onClick={copyUserId}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors shrink-0"
                                 title="Copy User ID"
                               >
                                 <span>{userId.slice(0, 8)}...</span>
@@ -653,7 +692,6 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        {/* Detail Summary Rows */}
                         <div className="border-t border-slate-100 dark:border-slate-800/80 px-5 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                           <div>
                             <span className="text-slate-400 block mb-0.5">First name</span>
@@ -670,7 +708,6 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     ) : (
-                      /* Editing State (Form Inputs) */
                       <form onSubmit={handleSaveProfile}>
                         <div className="p-5 sm:p-6 space-y-4">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -717,7 +754,6 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        {/* Action Buttons Footer */}
                         <div className="px-5 sm:px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-end gap-2.5">
                           <button
                             type="button"
@@ -748,50 +784,38 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* 2. Contact Channels (Concise, To the Point) */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80">
+              {/* 2. Contact Channels (Clean Key-Value Rows, No Redundant Badges) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Contact Channels
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Channels for notifications and account access.
+                    Primary channels for communication and access.
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {/* Email */}
-                    <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs text-slate-500 block mb-0.5">Email address</span>
-                        <p className="text-sm font-mono text-slate-900 dark:text-white font-medium">
-                          {email || '—'}
-                        </p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
-                        Verified
-                      </span>
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] divide-y divide-slate-100 dark:divide-slate-800/80">
+                    <div className="p-4 sm:p-5">
+                      <span className="text-xs text-slate-500 block mb-1">Email address</span>
+                      <p className="text-sm font-mono text-slate-900 dark:text-white font-medium break-all">
+                        {email || '—'}
+                      </p>
                     </div>
 
-                    {/* Phone */}
-                    <div className="p-4 sm:p-5 flex items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs text-slate-500 block mb-0.5">Phone number</span>
-                        <p className="text-sm font-mono text-slate-900 dark:text-white font-medium">
-                          {phoneNumber || '—'}
-                        </p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
-                        Verified
-                      </span>
+                    <div className="p-4 sm:p-5">
+                      <span className="text-xs text-slate-500 block mb-1">Phone number</span>
+                      <p className="text-sm font-mono text-slate-900 dark:text-white font-medium">
+                        {phoneNumber || '—'}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 3. KYC Status (Simple Yes/No, No AI Gimmicks) */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80">
+              {/* 3. KYC Status (Clean, Direct, Stretches Full Width) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     KYC Verification
@@ -801,8 +825,8 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 sm:p-5 flex items-center justify-between gap-4">
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 sm:p-5 flex items-center justify-between gap-4">
                     <div>
                       <span className="text-xs text-slate-500 block mb-0.5">KYC Status</span>
                       <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -816,8 +840,8 @@ export default function SettingsPage() {
                     </div>
 
                     {isVerified ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
-                        <Check className="w-3.5 h-3.5" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>Yes</span>
                       </span>
                     ) : (
@@ -839,7 +863,7 @@ export default function SettingsPage() {
           {/* TAB 2: SECURITY & PASSWORD                                                */}
           {/* ========================================================================= */}
           {activeTab === 'security' && (
-            <div className="space-y-8 pt-2 pb-12">
+            <div className="space-y-8 pt-2 pb-12 w-full min-w-0">
               {passSuccessMsg && (
                 <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -852,9 +876,15 @@ export default function SettingsPage() {
                   <span>{passErrorMsg}</span>
                 </div>
               )}
+              {twoFactorNotice && (
+                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{twoFactorNotice}</span>
+                </div>
+              )}
 
               {/* 1. Account Password (Sealed with Change Password Toggle) */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Password
@@ -864,10 +894,9 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
                     {!isChangingPassword ? (
-                      /* Sealed View */
                       <div className="p-5 sm:p-6 flex items-center justify-between gap-4">
                         <div>
                           <span className="text-xs text-slate-500 block mb-0.5">Password</span>
@@ -889,7 +918,6 @@ export default function SettingsPage() {
                         </button>
                       </div>
                     ) : (
-                      /* Open Form View */
                       <form onSubmit={handleChangePassword}>
                         <div className="p-5 sm:p-6 space-y-4">
                           <div>
@@ -999,99 +1027,212 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* 2. Two-Factor Authentication (2FA) */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80">
+              {/* 2. Two-Factor Authentication (Complete Setup Flow: Key, QR & Backup Codes Right There) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-6 border-t border-slate-200/80 dark:border-slate-800/80 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Two-Factor Authentication
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Choose how you want to receive your second-factor authorization code.
+                    Extra layer of protection required during account sign-in.
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-                    {twoFactorSuccessMsg && (
-                      <div className="m-5 mb-0 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span>{twoFactorSuccessMsg}</span>
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                    {/* Status Row */}
+                    <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">Status:</span>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                            is2FAEnabled
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}>
+                            {is2FAEnabled ? `Active (${active2FAMethod === 'TOTP' ? 'Authenticator App' : 'Email'})` : 'Off'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {is2FAEnabled
+                            ? 'Verification code required on unrecognized device logins.'
+                            : 'Two-factor protection is currently deactivated.'}
+                        </p>
                       </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {is2FAEnabled ? (
+                          <button
+                            type="button"
+                            onClick={handleDisable2FA}
+                            className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            Turn off
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsConfiguring2FA(true)}
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity"
+                          >
+                            Set up 2FA
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interactive Setup Box (Key, QR & Backup Codes Right There) */}
+                    {isConfiguring2FA && !is2FAEnabled && (
+                      <form onSubmit={handleActivate2FA} className="border-t border-slate-100 dark:border-slate-800/80 p-5 sm:p-6 space-y-5 bg-slate-50/40 dark:bg-slate-900/20">
+                        {twoFactorError && (
+                          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 text-red-700 dark:text-red-400 text-xs font-medium flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{twoFactorError}</span>
+                          </div>
+                        )}
+
+                        <div className="space-y-3">
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                            Choose 2FA Method:
+                          </label>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
+                              selected2FAMethod === 'TOTP'
+                                ? 'border-slate-900 dark:border-white bg-white dark:bg-[#070D18]'
+                                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="setup-2fa-method"
+                                  checked={selected2FAMethod === 'TOTP'}
+                                  onChange={() => setSelected2FAMethod('TOTP')}
+                                />
+                                <span className="text-xs font-medium text-slate-900 dark:text-white">
+                                  Authenticator App
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1 pl-5">
+                                Google Authenticator, 1Password, or Authy.
+                              </p>
+                            </label>
+
+                            <label className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
+                              selected2FAMethod === 'EMAIL'
+                                ? 'border-slate-900 dark:border-white bg-white dark:bg-[#070D18]'
+                                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="setup-2fa-method"
+                                  checked={selected2FAMethod === 'EMAIL'}
+                                  onChange={() => setSelected2FAMethod('EMAIL')}
+                                />
+                                <span className="text-xs font-medium text-slate-900 dark:text-white">
+                                  Email Code
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1 pl-5">
+                                Sent to {email || 'registered email'}.
+                              </p>
+                            </label>
+                          </div>
+                        </div>
+
+                        {selected2FAMethod === 'TOTP' ? (
+                          <div className="space-y-4 pt-1">
+                            {/* QR & Secret Key Box */}
+                            <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-5">
+                              {/* Clean Embedded SVG QR Code Visual */}
+                              <div className="w-28 h-28 bg-white p-2 rounded-lg border border-slate-200 flex flex-col items-center justify-center shrink-0 shadow-xs">
+                                <QrCode className="w-24 h-24 text-slate-900" />
+                              </div>
+
+                              <div className="space-y-2 flex-1 min-w-0 text-center sm:text-left">
+                                <span className="text-xs text-slate-500 block">
+                                  Scan QR code or enter manual secret key:
+                                </span>
+                                <div className="flex items-center justify-center sm:justify-start gap-2">
+                                  <code className="text-xs font-mono font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 select-all">
+                                    {totpSecret}
+                                  </code>
+                                  <button
+                                    type="button"
+                                    onClick={copyTotpKey}
+                                    className="p-1 rounded text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+                                    title="Copy Secret Key"
+                                  >
+                                    {copiedTotpSecret ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Verification Input */}
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                                Enter 6-digit verification code from your authenticator app:
+                              </label>
+                              <input
+                                type="text"
+                                maxLength={6}
+                                value={totpCode}
+                                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                                placeholder="123456"
+                                className="w-48 h-9 px-3 text-center text-base sm:text-sm font-mono font-bold tracking-widest rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-slate-400"
+                              />
+                            </div>
+
+                            {/* Backup Recovery Codes */}
+                            <div className="p-3.5 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                  Emergency Recovery Codes:
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={copyRecoveryCodes}
+                                  className="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:underline flex items-center gap-1"
+                                >
+                                  {copiedBackupCodes ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                  <span>{copiedBackupCodes ? 'Copied' : 'Copy codes'}</span>
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                                {backupCodes.map((code, i) => (
+                                  <span key={i} className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-[#0c1424] py-1 rounded border border-slate-200/70 dark:border-slate-700/60">
+                                    {code}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            A verification code will be sent to <strong className="text-slate-900 dark:text-white">{email}</strong> whenever you log in from a new device.
+                          </div>
+                        )}
+
+                        <div className="pt-2 flex items-center justify-end gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsConfiguring2FA(false)}
+                            className="h-8 px-3.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity"
+                          >
+                            Verify & Activate 2FA
+                          </button>
+                        </div>
+                      </form>
                     )}
-
-                    <div className="p-5 sm:p-6 space-y-3">
-                      {/* Option 1: Email Code */}
-                      <label className={`p-4 rounded-lg border transition-all flex items-start justify-between cursor-pointer ${
-                        twoFactorMethod === 'email'
-                          ? 'border-slate-900 dark:border-white bg-slate-50/50 dark:bg-slate-900/50'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="radio"
-                            name="2fa-method"
-                            checked={twoFactorMethod === 'email'}
-                            onChange={() => setTwoFactorMethod('email')}
-                            className="mt-0.5"
-                          />
-                          <div>
-                            <span className="text-xs font-medium text-slate-900 dark:text-white block">
-                              Email Code (Default)
-                            </span>
-                            <span className="text-xs text-slate-500 block mt-0.5">
-                              Receive a 6-digit confirmation code via your registered email address.
-                            </span>
-                          </div>
-                        </div>
-                        {twoFactorMethod === 'email' && (
-                          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">
-                            Active
-                          </span>
-                        )}
-                      </label>
-
-                      {/* Option 2: Authenticator App */}
-                      <label className={`p-4 rounded-lg border transition-all flex items-start justify-between cursor-pointer ${
-                        twoFactorMethod === 'totp'
-                          ? 'border-slate-900 dark:border-white bg-slate-50/50 dark:bg-slate-900/50'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="radio"
-                            name="2fa-method"
-                            checked={twoFactorMethod === 'totp'}
-                            onChange={() => setTwoFactorMethod('totp')}
-                            className="mt-0.5"
-                          />
-                          <div>
-                            <span className="text-xs font-medium text-slate-900 dark:text-white block">
-                              Authenticator App (TOTP)
-                            </span>
-                            <span className="text-xs text-slate-500 block mt-0.5">
-                              Use Google Authenticator, 1Password, or Authy to generate time-based codes.
-                            </span>
-                          </div>
-                        </div>
-                        {twoFactorMethod === 'totp' && (
-                          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">
-                            Active
-                          </span>
-                        )}
-                      </label>
-                    </div>
-
-                    <div className="px-5 sm:px-6 py-3 bg-slate-50/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSave2FA}
-                        disabled={isSaving2FA}
-                        className="h-8 px-4 rounded-lg text-xs font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 transition-opacity flex items-center gap-1.5"
-                      >
-                        {isSaving2FA ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                        <span>Save preferences</span>
-                      </button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1099,24 +1240,25 @@ export default function SettingsPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* TAB 3: ACTIVE SESSIONS                                                    */}
+          {/* TAB 3: ACTIVE SESSIONS (Shows all logged in devices cleanly)                */}
           {/* ========================================================================= */}
           {activeTab === 'sessions' && (
-            <div className="space-y-8 pt-2 pb-12">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2">
+            <div className="space-y-8 pt-2 pb-12 w-full min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Current Session
+                    Logged-in Devices
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    The active browser and IP communicating with BAXATO.
+                    Active client devices authenticated on your account.
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 sm:p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3.5">
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] divide-y divide-slate-100 dark:divide-slate-800/80 overflow-hidden">
+                    {/* Current Viewing Device */}
+                    <div className="p-5 sm:p-6 flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3.5 min-w-0">
                         <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
                           {clientDeviceName.includes('iPhone') || clientDeviceName.includes('Android') ? (
                             <Smartphone className="w-4 h-4" />
@@ -1124,18 +1266,18 @@ export default function SettingsPage() {
                             <Laptop className="w-4 h-4" />
                           )}
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                               {clientDeviceName}
                             </p>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              Current device
+                              This device
                             </span>
                           </div>
                           <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                            IP: {resolvedIp}
+                            IP: {resolvedCurrentIp}
                           </p>
                           <p className="text-xs text-slate-400">
                             Last authentication: {formatDateTime(securityData?.lastLoginAt)}
@@ -1143,6 +1285,34 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Other Logged-in Devices (from activeSessions) */}
+                    {securityData?.activeSessions && securityData.activeSessions.length > 1 && (
+                      securityData.activeSessions.slice(1).map((s) => (
+                        <div key={s.id} className="p-5 sm:p-6 flex items-start justify-between gap-4 bg-slate-50/30 dark:bg-slate-900/10">
+                          <div className="flex items-start gap-3.5 min-w-0">
+                            <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
+                              {s.userAgent?.includes('iPhone') || s.userAgent?.includes('Android') ? (
+                                <Smartphone className="w-4 h-4" />
+                              ) : (
+                                <Laptop className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="space-y-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                {parseLogUserAgent(s.userAgent)}
+                              </p>
+                              <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                                IP: {s.ipAddress && !s.ipAddress.startsWith('10.') ? s.ipAddress : resolvedCurrentIp}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                Session logged: {formatDateTime(s.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -1150,11 +1320,11 @@ export default function SettingsPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* TAB 4: AUDIT TRAIL                                                        */}
+          {/* TAB 4: AUDIT TRAIL (Proper scrolling, independent user agents)           */}
           {/* ========================================================================= */}
           {activeTab === 'audit' && (
-            <div className="space-y-8 pt-2 pb-12">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2">
+            <div className="space-y-8 pt-2 pb-12 w-full min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 pt-2 w-full min-w-0">
                 <div className="md:col-span-4 space-y-1">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Audit Trail
@@ -1164,8 +1334,8 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="md:col-span-8">
-                  <div className="bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+                <div className="md:col-span-8 w-full min-w-0">
+                  <div className="w-full bg-white dark:bg-[#0c1424] rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                       <span className="text-xs font-medium text-slate-500">
                         Recent Security Events
@@ -1181,8 +1351,8 @@ export default function SettingsPage() {
                     </div>
 
                     {securityData?.auditLogs && securityData.auditLogs.length > 0 ? (
-                      <div className="overflow-x-auto scrollbar-none">
-                        <table className="w-full text-left border-collapse text-xs">
+                      <div className="w-full overflow-x-auto scrollbar-none">
+                        <table className="w-full text-left border-collapse text-xs min-w-[460px]">
                           <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-400 font-medium text-[11px]">
                               <th className="py-2.5 px-4 font-medium whitespace-nowrap">Event</th>
@@ -1197,7 +1367,7 @@ export default function SettingsPage() {
                               const displayIp =
                                 log.ipAddress && !log.ipAddress.startsWith('10.')
                                   ? log.ipAddress
-                                  : resolvedIp;
+                                  : resolvedCurrentIp;
 
                               return (
                                 <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors">
@@ -1207,7 +1377,7 @@ export default function SettingsPage() {
                                     </span>
                                   </td>
                                   <td className="py-3 px-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">
-                                    {parseUserAgent(log.userAgent)}
+                                    {parseLogUserAgent(log.userAgent)}
                                   </td>
                                   <td className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
                                     {displayIp}

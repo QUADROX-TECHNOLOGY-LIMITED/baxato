@@ -97,6 +97,29 @@ export class AuditService {
       return null;
     }
   }
+
+  /**
+   * Retrieves recent distinct login sessions for a user across devices.
+   */
+  public async getRecentLoginSessions(userId: string, limit = 5) {
+    try {
+      if (!db || typeof db.select !== 'function') return [];
+      return await db
+        .select({
+          id: auditLogs.id,
+          ipAddress: auditLogs.ipAddress,
+          userAgent: auditLogs.userAgent,
+          createdAt: auditLogs.createdAt,
+        })
+        .from(auditLogs)
+        .where(and(eq(auditLogs.userId, userId), eq(auditLogs.action, 'USER_LOGIN')))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit);
+    } catch (err) {
+      console.error('[AuditService] Failed to fetch login sessions:', err);
+      return [];
+    }
+  }
 }
 
 export const auditService = new AuditService();
