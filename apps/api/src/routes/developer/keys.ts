@@ -139,4 +139,28 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send(createSuccessResponse(result, request.id));
     },
   );
+
+  /**
+   * DELETE /developer/keys/:id
+   * Permanently deletes a revoked or expired API key.
+   */
+  fastify.delete<{ Params: { id: string } }>(
+    '/:id',
+    {
+      schema: {
+        tags: ['Developer Keys'],
+        summary: 'Delete API Key',
+        description: 'Permanently removes a revoked or expired API key record.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+      },
+      preHandler: [requireTenantPermission(Permission.TENANT_APIKEYS_MANAGE)],
+    },
+    async (request, reply) => {
+      const businessId = request.businessId!;
+      const keyId = request.params.id;
+
+      await apiKeyService.deleteApiKey(keyId, businessId);
+      return reply.send(createSuccessResponse({ deleted: true }, request.id));
+    },
+  );
 };

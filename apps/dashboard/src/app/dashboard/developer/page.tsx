@@ -4,8 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Key,
-  Shield,
-  ShieldCheck,
   ShieldAlert,
   Copy,
   Check,
@@ -13,22 +11,14 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
-  ExternalLink,
-  Code2,
-  Terminal,
   CheckCircle2,
   XCircle,
-  Clock,
-  Eye,
-  EyeOff,
   X,
   Download,
-  BookOpen,
+  ArrowLeft,
   Webhook,
-  ArrowRight,
-  Info,
-  Cpu,
-  Layers,
+  Send,
+  Lock,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -51,7 +41,6 @@ export interface ApiKeyItem {
   environment: ApiKeyEnvironment;
   status: ApiKeyStatus;
   lastUsedAt?: string | null;
-  expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +48,22 @@ export interface ApiKeyItem {
 export interface GeneratedKeyPayload {
   apiKey: ApiKeyItem;
   secretKey: string;
+}
+
+export interface WebhookConfig {
+  webhookUrl: string | null;
+  webhookSecretPrefix: string | null;
+  hasSecret: boolean;
+}
+
+export interface WebhookDeliveryItem {
+  id: string;
+  eventType: string;
+  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+  responseStatus?: number | null;
+  attempts: number;
+  lastAttemptAt?: string | null;
+  createdAt: string;
 }
 
 export default function DeveloperKeysPage() {
@@ -71,11 +76,20 @@ export default function DeveloperKeysPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Developer Keys State
+  // Keys State
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
-  const [activeTabEnv, setActiveTabEnv] = useState<ApiKeyEnvironment>('TEST');
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+
+  // Webhook State
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [initialWebhookUrl, setInitialWebhookUrl] = useState('');
+  const [webhookSecretPrefix, setWebhookSecretPrefix] = useState<string | null>(null);
+  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deliveries, setDeliveries] = useState<WebhookDeliveryItem[]>([]);
+  const [retryingDeliveryId, setRetryingDeliveryId] = useState<string | null>(null);
 
   // Modal States
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -98,9 +112,12 @@ export default function DeveloperKeysPage() {
   const [isSubmittingRevoke, setIsSubmittingRevoke] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  // Code generator language tab
-  const [codeLang, setCodeLang] = useState<'curl' | 'node' | 'python' | 'php'>('curl');
+  // Delete Key Modal
+  const [deletingKey, setDeletingKey] = useState<ApiKeyItem | null>(null);
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const isVerified = kycStatus === 'VERIFIED';
   const canManageKeys = useMemo(() => {
     return (
       userRole === 'BUSINESS_OWNER' ||
@@ -131,39 +148,72 @@ export default function DeveloperKeysPage() {
     } catch {}
 
     loadKeys();
+    loadWebhookConfig();
+    loadWebhookDeliveries();
   }, []);
+
+  const getAuthHeaders = () => {
+    const authToken = getStoredAuthToken();
+    const storedBiz = getStoredBusiness();
+    return {
+      Authorization: `Bearer ${authToken}`,
+      ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
+    };
+  };
 
   const loadKeys = async () => {
     setIsLoadingKeys(true);
     try {
-      const authToken = getStoredAuthToken();
-      if (!authToken) return;
-
       const res = await fetch('/api/developer/keys', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
+        headers: getAuthHeaders(),
       });
-
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && Array.isArray(data.data)) {
         setKeys(data.data);
       } else {
         setKeys([]);
       }
-    } catch (err) {
+    } catch {
       setKeys([]);
     } finally {
       setIsLoadingKeys(false);
     }
   };
 
+  const loadWebhookConfig = async () => {
+    try {
+      const res = await fetch('/api/developer/webhooks', {
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data.data) {
+        setWebhookUrl(data.data.webhookUrl || '');
+        setInitialWebhookUrl(data.data.webhookUrl || '');
+        setWebhookSecretPrefix(data.data.webhookSecretPrefix || null);
+      }
+    } catch {}
+  };
+
+  const loadWebhookDeliveries = async () => {
+    try {
+      const res = await fetch('/api/developer/webhooks/deliveries?limit=5', {
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && Array.isArray(data.data?.deliveries)) {
+        setDeliveries(data.data.deliveries);
+      }
+    } catch {}
+  };
+
   const handleRefresh = () => {
     setIsRefreshing(true);
     loadKeys();
+    loadWebhookConfig();
+    loadWebhookDeliveries();
     setTimeout(() => {
       setIsRefreshing(false);
-      showToast('API keys reloaded');
+      showToast('Developer configuration refreshed');
     }, 600);
   };
 
@@ -179,15 +229,12 @@ export default function DeveloperKeysPage() {
     setTimeout(() => setCopiedKeyId(null), 2000);
   };
 
-  // Filtered keys by selected environment tab
-  const filteredKeys = useMemo(() => {
-    return keys.filter((k) => k.environment === activeTabEnv);
-  }, [keys, activeTabEnv]);
+  // Group keys into Sandbox (TEST) and Production (LIVE)
+  const testKeys = useMemo(() => keys.filter((k) => k.environment === 'TEST'), [keys]);
+  const liveKeys = useMemo(() => keys.filter((k) => k.environment === 'LIVE'), [keys]);
 
-  // Primary active key in the current environment
-  const primaryActiveKey = useMemo(() => {
-    return filteredKeys.find((k) => k.status === 'ACTIVE') || null;
-  }, [filteredKeys]);
+  const activeTestKey = useMemo(() => testKeys.find((k) => k.status === 'ACTIVE') || null, [testKeys]);
+  const activeLiveKey = useMemo(() => liveKeys.find((k) => k.status === 'ACTIVE') || null, [liveKeys]);
 
   // Handle Generate Key
   const handleGenerateKeySubmit = async (e: React.FormEvent) => {
@@ -197,16 +244,20 @@ export default function DeveloperKeysPage() {
       return;
     }
 
+    if (newKeyEnv === 'LIVE' && !isVerified) {
+      setGenerateError('Identity verification required before creating live production keys.');
+      return;
+    }
+
     setIsSubmittingNewKey(true);
     setGenerateError(null);
 
     try {
-      const authToken = getStoredAuthToken();
       const res = await fetch('/api/developer/keys', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           name: newKeyName.trim(),
@@ -221,7 +272,6 @@ export default function DeveloperKeysPage() {
         setRevealedSecretData(data.data);
         setHasCopiedSecret(false);
         loadKeys();
-        setActiveTabEnv(newKeyEnv);
       } else {
         setGenerateError(data?.error?.message || 'Failed to generate API key.');
       }
@@ -239,12 +289,11 @@ export default function DeveloperKeysPage() {
     setRotateError(null);
 
     try {
-      const authToken = getStoredAuthToken();
       const res = await fetch(`/api/developer/keys/${rotatingKey.id}/rotate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
+          ...getAuthHeaders(),
         },
       });
 
@@ -271,12 +320,11 @@ export default function DeveloperKeysPage() {
     setRevokeError(null);
 
     try {
-      const authToken = getStoredAuthToken();
       const res = await fetch(`/api/developer/keys/${revokingKey.id}/revoke`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
+          ...getAuthHeaders(),
         },
       });
 
@@ -295,6 +343,170 @@ export default function DeveloperKeysPage() {
     }
   };
 
+  // Handle Delete Key
+  const handleDeleteKeySubmit = async () => {
+    if (!deletingKey) return;
+    setIsSubmittingDelete(true);
+    setDeleteError(null);
+
+    try {
+      const res = await fetch(`/api/developer/keys/${deletingKey.id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setDeletingKey(null);
+        showToast('API key deleted');
+        loadKeys();
+      } else {
+        setDeleteError(data?.error?.message || 'Failed to delete key.');
+      }
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Network error during deletion.');
+    } finally {
+      setIsSubmittingDelete(false);
+    }
+  };
+
+  // Ping Webhook before saving
+  const handleSaveWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webhookUrl.trim()) {
+      setWebhookMessage({ type: 'error', text: 'Please enter a valid webhook URL.' });
+      return;
+    }
+
+    if (!webhookUrl.startsWith('https://') && !webhookUrl.startsWith('http://localhost')) {
+      setWebhookMessage({ type: 'error', text: 'Webhook URL must use secure HTTPS protocol.' });
+      return;
+    }
+
+    setIsSavingWebhook(true);
+    setWebhookMessage(null);
+
+    try {
+      // Step 1: Temporarily update or test ping the endpoint
+      // We ping the endpoint first to ensure it responds with 200 OK
+      const pingRes = await fetch('/api/developer/webhooks/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ eventType: 'ping', testUrl: webhookUrl.trim() }),
+      });
+
+      const pingData = await pingRes.json().catch(() => null);
+
+      if (!pingRes.ok || !pingData?.success || !pingData?.data?.success) {
+        const errorDetail =
+          pingData?.data?.error ||
+          pingData?.error?.message ||
+          `Endpoint returned status ${pingData?.data?.statusCode || 'unreachable'}`;
+        setWebhookMessage({
+          type: 'error',
+          text: `Webhook validation failed: Unable to verify endpoint (Expected HTTP 200). Details: ${errorDetail}`,
+        });
+        setIsSavingWebhook(false);
+        return;
+      }
+
+      // Step 2: Ping succeeded! Persist the webhook configuration
+      const saveRes = await fetch('/api/developer/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
+      });
+
+      const saveData = await saveRes.json().catch(() => null);
+      if (saveRes.ok && saveData?.success) {
+        setInitialWebhookUrl(webhookUrl.trim());
+        setWebhookMessage({
+          type: 'success',
+          text: `Endpoint verified and saved successfully (${pingData.data.latencyMs}ms response time).`,
+        });
+        loadWebhookConfig();
+        loadWebhookDeliveries();
+      } else {
+        setWebhookMessage({
+          type: 'error',
+          text: saveData?.error?.message || 'Failed to persist webhook configuration.',
+        });
+      }
+    } catch (err: any) {
+      setWebhookMessage({
+        type: 'error',
+        text: err?.message || 'Network error while validating webhook endpoint.',
+      });
+    } finally {
+      setIsSavingWebhook(false);
+    }
+  };
+
+  // Test Webhook
+  const handleTestWebhookPing = async () => {
+    setIsTestingWebhook(true);
+    setWebhookMessage(null);
+    try {
+      const res = await fetch('/api/developer/webhooks/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ eventType: 'ping' }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data.data?.success) {
+        setWebhookMessage({
+          type: 'success',
+          text: `Ping delivered successfully (HTTP ${data.data.statusCode}, ${data.data.latencyMs}ms latency).`,
+        });
+        loadWebhookDeliveries();
+      } else {
+        setWebhookMessage({
+          type: 'error',
+          text: `Ping failed: ${data?.data?.error || data?.error?.message || 'No response from destination server.'}`,
+        });
+      }
+    } catch (err: any) {
+      setWebhookMessage({
+        type: 'error',
+        text: err?.message || 'Failed to dispatch test ping.',
+      });
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
+  // Retry Webhook Delivery
+  const handleRetryDelivery = async (deliveryId: string) => {
+    setRetryingDeliveryId(deliveryId);
+    try {
+      const res = await fetch(`/api/developer/webhooks/deliveries/${deliveryId}/retry`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        showToast('Webhook delivery re-dispatched');
+        loadWebhookDeliveries();
+      } else {
+        showToast(data?.error?.message || 'Failed to retry delivery');
+      }
+    } catch {
+      showToast('Network error retrying delivery');
+    } finally {
+      setRetryingDeliveryId(null);
+    }
+  };
+
   // Download .env file
   const handleDownloadEnv = () => {
     if (!revealedSecretData) return;
@@ -302,7 +514,7 @@ export default function DeveloperKeysPage() {
       revealedSecretData.apiKey.environment === 'LIVE'
         ? 'BAXATO_LIVE_SECRET_KEY'
         : 'BAXATO_TEST_SECRET_KEY';
-    const content = `# BAXATO API Authentication (${revealedSecretData.apiKey.environment} Environment)\n# Generated: ${new Date().toISOString()}\n${envKey}=${revealedSecretData.secretKey}\n`;
+    const content = `# BAXATO API Authentication (${revealedSecretData.apiKey.environment})\n${envKey}=${revealedSecretData.secretKey}\n`;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -313,90 +525,6 @@ export default function DeveloperKeysPage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('.env file downloaded');
-  };
-
-  // Active Key representation
-  const activeKeySample = primaryActiveKey
-    ? primaryActiveKey.keyPrefix
-    : activeTabEnv === 'LIVE'
-    ? 'bx_live_••••••••••••••••••••••••••••••••••••••••'
-    : 'bx_test_••••••••••••••••••••••••••••••••••••••••';
-
-  // Code snippets generator
-  const getCodeSnippet = () => {
-    const keyPlaceholder = primaryActiveKey ? primaryActiveKey.keyPrefix : activeKeySample;
-    switch (codeLang) {
-      case 'curl':
-        return `# 1. Dispense Airtime via BAXATO REST API (${activeTabEnv} Mode)
-curl -X POST https://api.baxato.com/v1/services/airtime/purchase \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${keyPlaceholder}" \\
-  -d '{
-    "network": "MTN",
-    "phoneNumber": "08031234567",
-    "amount": 1000,
-    "clientReference": "REF_${Date.now()}"
-  }'`;
-      case 'node':
-        return `import axios from 'axios';
-
-// BAXATO High-Performance Vending Client (${activeTabEnv} Mode)
-const response = await axios.post(
-  'https://api.baxato.com/v1/services/airtime/purchase',
-  {
-    network: 'MTN',
-    phoneNumber: '08031234567',
-    amount: 1000,
-    clientReference: 'REF_${Date.now()}'
-  },
-  {
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': '${keyPlaceholder}'
-    }
-  }
-);
-
-console.log('Vend Result:', response.data);`;
-      case 'python':
-        return `import requests
-
-# BAXATO Python SDK Example (${activeTabEnv} Mode)
-url = "https://api.baxato.com/v1/services/airtime/purchase"
-headers = {
-    "Content-Type": "application/json",
-    "x-api-key": "${keyPlaceholder}"
-}
-payload = {
-    "network": "MTN",
-    "phoneNumber": "08031234567",
-    "amount": 1000,
-    "clientReference": "REF_${Date.now()}"
-}
-
-res = requests.post(url, json=payload, headers=headers)
-print(res.json())`;
-      case 'php':
-        return `<?php
-// BAXATO PHP Integration (${activeTabEnv} Mode)
-$ch = curl_init('https://api.baxato.com/v1/services/airtime/purchase');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Content-Type: application/json',
-    'x-api-key: ${keyPlaceholder}'
-]);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-    'network' => 'MTN',
-    'phoneNumber' => '08031234567',
-    'amount' => 1000,
-    'clientReference' => 'REF_${Date.now()}'
-]));
-
-$response = curl_exec($ch);
-curl_close($ch);
-echo $response;`;
-    }
   };
 
   return (
@@ -432,7 +560,7 @@ echo $response;`;
           onRefresh={handleRefresh}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 sm:space-y-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-6">
           {/* Identity Verification Warning Banner (if applicable) */}
           <KycBanner
             kycStatus={kycStatus}
@@ -440,206 +568,107 @@ echo $response;`;
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 
-          {/* Page Title & Top Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center border border-[#126BEB]/20 shadow-xs">
-                  <Key className="w-5 h-5" />
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                  Developer API Keys
-                </h1>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Manage cryptographic authentication credentials for your backend integrations and automated vending services.
-              </p>
-            </div>
+          {/* Navigation & Header */}
+          <div className="space-y-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Dashboard</span>
+            </Link>
 
-            {/* Quick Links & Actions */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                  API Keys & Webhooks
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  Manage your sandbox and live credentials, configure webhook destinations, and inspect delivery events.
+                </p>
+              </div>
+
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
-                title="Refresh keys"
+                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors self-start sm:self-auto"
+                title="Refresh settings"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
-
-              <Link
-                href="/dashboard/webhooks"
-                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
-              >
-                <Webhook className="w-3.5 h-3.5 text-purple-500" />
-                <span className="hidden sm:inline">Webhooks</span>
-              </Link>
-
-              {canManageKeys && (
-                <button
-                  onClick={() => {
-                    setNewKeyEnv(activeTabEnv);
-                    setNewKeyName('');
-                    setGenerateError(null);
-                    setIsGenerateModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Generate Key</span>
-                </button>
-              )}
             </div>
           </div>
 
-          {/* RBAC Role Notice if unauthorized */}
+          {/* Restricted Role Alert */}
           {!canManageKeys && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
               <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold">Restricted Workspace Permissions</p>
+                <p className="font-bold">Restricted Permissions</p>
                 <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                  Your assigned role (<strong>{userRole}</strong>) allows read-only visibility for security compliance. Only Business Owners, Administrators, and Developers can generate, rotate, or revoke API keys.
+                  Your current role (<strong>{userRole}</strong>) has read-only access. Only Business Owners, Administrators, and Developers can modify credentials or webhooks.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Dual Environment Toggle Tabs */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <div className="inline-flex p-1 bg-slate-200/70 dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold">
-              <button
-                onClick={() => setActiveTabEnv('TEST')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                  activeTabEnv === 'TEST'
-                    ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <span>Sandbox / Test Mode</span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40 font-mono">
-                  bx_test_
-                </span>
-              </button>
-
-              <button
-                onClick={() => setActiveTabEnv('LIVE')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
-                  activeTabEnv === 'LIVE'
-                    ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Production / Live Mode</span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40 font-mono">
-                  bx_live_
-                </span>
-              </button>
-            </div>
-
-            {/* Environment Help Text */}
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span>
-                {activeTabEnv === 'TEST'
-                  ? 'Sandbox keys simulate telecom fulfillment with zero real wallet debit.'
-                  : 'Live keys perform real dispatches and immediately debit your operational balance.'}
-              </span>
-            </div>
-          </div>
-
-          {/* Section 1: Primary Active Key Card */}
-          <div
-            className={`p-5 sm:p-6 rounded-2xl border transition-all ${
-              activeTabEnv === 'LIVE'
-                ? 'bg-gradient-to-br from-[#071324] via-[#09182E] to-[#0D2447] border-blue-500/30 text-white shadow-md'
-                : 'bg-gradient-to-br from-[#1A1429] via-[#141021] to-[#0E0C17] border-purple-500/30 text-white shadow-md'
-            }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
+          {/* SECTION 1: SANDBOX / TEST KEY (AT TOP) */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div
-                  className={`p-2 rounded-xl ${
-                    activeTabEnv === 'LIVE'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
-                  }`}
-                >
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
                   <Key className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">
-                      {primaryActiveKey ? primaryActiveKey.name : `${activeTabEnv} API Key`}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        activeTabEnv === 'LIVE'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      }`}
-                    >
-                      {activeTabEnv} ENVIRONMENT
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-300">
-                    {primaryActiveKey
-                      ? `Active since ${new Date(primaryActiveKey.createdAt).toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' })}`
-                      : `No active ${activeTabEnv} key generated yet`}
-                  </span>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    Sandbox API Key (Test Mode)
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Use this key to authenticate development requests without charging real money.
+                  </p>
                 </div>
               </div>
 
-              {primaryActiveKey && canManageKeys && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setRotatingKey(primaryActiveKey);
-                      setRotateError(null);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 transition-colors flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Rotate Key</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRevokingKey(primaryActiveKey);
-                      setRevokeError(null);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors flex items-center gap-1.5"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Revoke</span>
-                  </button>
-                </div>
+              {canManageKeys && (
+                <button
+                  onClick={() => {
+                    setNewKeyEnv('TEST');
+                    setNewKeyName('Sandbox Key');
+                    setGenerateError(null);
+                    setIsGenerateModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Sandbox Key</span>
+                </button>
               )}
             </div>
 
-            {/* Key Preview Box */}
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-black/40 border border-white/10 backdrop-blur-sm">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="text-xs font-mono font-bold text-slate-200 tracking-wider truncate">
-                  {primaryActiveKey ? primaryActiveKey.keyPrefix : activeKeySample}
-                </span>
-                <span className="text-[10px] text-slate-400 hidden sm:inline">
-                  (SHA-256 Hashed at Rest)
-                </span>
-              </div>
+            {/* Active Sandbox Key Card */}
+            {activeTestKey ? (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                    {activeTestKey.name}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                      {activeTestKey.keyPrefix}••••••••••••••••••••••••••••••••
+                    </span>
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {primaryActiveKey ? (
+                <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => copyToClipboard(primaryActiveKey.keyPrefix, primaryActiveKey.id)}
-                    className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    onClick={() => copyToClipboard(activeTestKey.keyPrefix, activeTestKey.id)}
+                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
                   >
-                    {copiedKeyId === primaryActiveKey.id ? (
+                    {copiedKeyId === activeTestKey.id ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Copied</span>
                       </>
                     ) : (
                       <>
@@ -648,298 +677,442 @@ echo $response;`;
                       </>
                     )}
                   </button>
-                ) : (
-                  canManageKeys && (
-                    <button
-                      onClick={() => {
-                        setNewKeyEnv(activeTabEnv);
-                        setNewKeyName('');
-                        setGenerateError(null);
-                        setIsGenerateModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Generate {activeTabEnv} Key</span>
-                    </button>
-                  )
-                )}
+
+                  {canManageKeys && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setRotatingKey(activeTestKey);
+                          setRotateError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
+                        <span>Roll Key</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRevokingKey(activeTestKey);
+                          setRevokeError(null);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                        title="Revoke key"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {/* Key Protection Notice */}
-            <div className="mt-3.5 text-[11px] text-slate-300 flex items-center gap-1.5 opacity-90">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>
-                Plaintext secrets are displayed strictly once upon creation. If your key is lost or leaked, click <strong>Rotate Key</strong> immediately to issue a replacement without downtime.
-              </span>
-            </div>
-          </div>
-
-          {/* Section 2: Complete API Keys Management Table */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Key className="w-4 h-4 text-[#126BEB]" />
-                  <span>{activeTabEnv === 'TEST' ? 'Sandbox' : 'Production'} API Keys Registry</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Audit log of all issued keys, last usage timestamps, and lifecycle revocation controls.
+            ) : (
+              <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  No active Sandbox key found.
                 </p>
-              </div>
-
-              <span className="text-xs font-bold text-slate-400">
-                {filteredKeys.length} {filteredKeys.length === 1 ? 'Key' : 'Keys'} Registered
-              </span>
-            </div>
-
-            {isLoadingKeys ? (
-              <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                <RefreshCw className="w-6 h-6 animate-spin text-[#126BEB]" />
-                <span className="text-xs text-slate-400">Loading cryptographic keys...</span>
-              </div>
-            ) : filteredKeys.length === 0 ? (
-              <div className="py-12 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-                  <Key className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    No {activeTabEnv} API Keys Created
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    Generate an API key for your {activeTabEnv === 'TEST' ? 'staging sandbox' : 'production server'} to begin programmatic vending.
-                  </p>
-                </div>
                 {canManageKeys && (
                   <button
                     onClick={() => {
-                      setNewKeyEnv(activeTabEnv);
-                      setNewKeyName('');
+                      setNewKeyEnv('TEST');
+                      setNewKeyName('Sandbox Key');
                       setGenerateError(null);
                       setIsGenerateModalOpen(true);
                     }}
-                    className="px-4 py-2 rounded-xl bg-[#126BEB] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs hover:bg-[#0B5CC7] transition-colors"
+                    className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create {activeTabEnv} Key</span>
+                    Generate Sandbox Key
                   </button>
                 )}
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                      <th className="py-2.5 px-3">Key Name</th>
-                      <th className="py-2.5 px-3">Prefix / Hash</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Last Used</th>
-                      <th className="py-2.5 px-3">Created</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {filteredKeys.map((keyItem) => (
-                      <tr
-                        key={keyItem.id}
-                        className="hover:bg-slate-50/60 dark:hover:bg-[#0C1527]/60 transition-colors"
+            )}
+
+            {/* List of Revoked / Inactive Sandbox Keys */}
+            {testKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
+              <div className="pt-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                  Revoked Sandbox Keys
+                </span>
+                <div className="space-y-1.5">
+                  {testKeys
+                    .filter((k) => k.status !== 'ACTIVE')
+                    .map((k) => (
+                      <div
+                        key={k.id}
+                        className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
                       >
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 dark:text-white">
-                            {keyItem.name}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            ID: {keyItem.id}
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              {keyItem.keyPrefix}
-                            </span>
+                        <span className="font-mono line-through">{k.keyPrefix}...</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
+                          {canManageKeys && (
                             <button
-                              onClick={() => copyToClipboard(keyItem.keyPrefix, keyItem.id)}
-                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white"
-                              title="Copy prefix"
+                              onClick={() => {
+                                setDeletingKey(k);
+                                setDeleteError(null);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1"
+                              title="Delete revoked key permanently"
                             >
-                              {copiedKeyId === keyItem.id ? (
-                                <Check className="w-3 h-3 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-3">
-                          {keyItem.status === 'ACTIVE' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Active
-                            </span>
-                          ) : keyItem.status === 'REVOKED' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900">
-                              <XCircle className="w-3 h-3" />
-                              Revoked
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                              Expired
-                            </span>
                           )}
-                        </td>
-
-                        <td className="py-3 px-3 text-slate-500 dark:text-slate-400">
-                          {keyItem.lastUsedAt ? (
-                            new Date(keyItem.lastUsedAt).toLocaleString('en-NG', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          ) : (
-                            <span className="text-slate-400 italic">Never used</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-3 text-slate-500 dark:text-slate-400">
-                          {new Date(keyItem.createdAt).toLocaleDateString('en-NG', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </td>
-
-                        <td className="py-3 px-3 text-right">
-                          {canManageKeys && keyItem.status === 'ACTIVE' && (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setRotatingKey(keyItem);
-                                  setRotateError(null);
-                                }}
-                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1"
-                              >
-                                <RefreshCw className="w-3 h-3 text-[#126BEB]" />
-                                <span>Rotate</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setRevokingKey(keyItem);
-                                  setRevokeError(null);
-                                }}
-                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Revoke</span>
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Section 3: Interactive Integration Quickstart & Code Generator */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-[#126BEB]" />
-                  <span>Integration Quickstart & Code Generator</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Ready-to-run request examples configured for the active {activeTabEnv} environment.
-                </p>
+          {/* SECTION 2: PRODUCTION / LIVE KEY (AT BOTTOM) */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    Production API Key (Live Mode)
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Used on your production server to vend live airtime, data, power, and exam PINs.
+                  </p>
+                </div>
               </div>
 
-              {/* Language Selector */}
-              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#060D18] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-                {(['curl', 'node', 'python', 'php'] as const).map((lang) => (
-                  <button
-                    key={lang}
-                    onClick={() => setCodeLang(lang)}
-                    className={`px-3 py-1.5 rounded-lg uppercase font-bold text-[10px] transition-all ${
-                      codeLang === lang
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {lang}
-                  </button>
-                ))}
-              </div>
+              {isVerified && canManageKeys && (
+                <button
+                  onClick={() => {
+                    setNewKeyEnv('LIVE');
+                    setNewKeyName('Production Key');
+                    setGenerateError(null);
+                    setIsGenerateModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Production Key</span>
+                </button>
+              )}
             </div>
 
-            {/* Code Block Container */}
-            <div className="relative rounded-xl overflow-hidden bg-[#060D18] border border-slate-800">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#091322] border-b border-slate-800 text-xs text-slate-400">
-                <span className="font-mono text-[11px]">
-                  POST https://api.baxato.com/v1/services/airtime/purchase
-                </span>
+            {/* KYC Guard for Live Keys */}
+            {!isVerified ? (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                      Identity Verification Required for Production Keys
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Verify your business identity (NIMC / BVN) to unlock real live vending credentials.
+                    </p>
+                  </div>
+                </div>
+
                 <button
-                  onClick={() => copyToClipboard(getCodeSnippet(), 'code-snippet')}
-                  className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                  onClick={() => setIsKycModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold shrink-0 shadow-xs transition-colors"
                 >
-                  {copiedKeyId === 'code-snippet' ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy Code</span>
-                    </>
-                  )}
+                  Verify Now
                 </button>
               </div>
+            ) : activeLiveKey ? (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                    {activeLiveKey.name}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                      {activeLiveKey.keyPrefix}••••••••••••••••••••••••••••••••
+                    </span>
+                  </div>
+                </div>
 
-              <pre className="p-4 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
-                <code>{getCodeSnippet()}</code>
-              </pre>
-            </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => copyToClipboard(activeLiveKey.keyPrefix, activeLiveKey.id)}
+                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                  >
+                    {copiedKeyId === activeLiveKey.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Prefix</span>
+                      </>
+                    )}
+                  </button>
+
+                  {canManageKeys && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setRotatingKey(activeLiveKey);
+                          setRotateError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
+                        <span>Roll Key</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRevokingKey(activeLiveKey);
+                          setRevokeError(null);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                        title="Revoke key"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  No active Production key found.
+                </p>
+                {canManageKeys && (
+                  <button
+                    onClick={() => {
+                      setNewKeyEnv('LIVE');
+                      setNewKeyName('Production Key');
+                      setGenerateError(null);
+                      setIsGenerateModalOpen(true);
+                    }}
+                    className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
+                  >
+                    Generate Production Key
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* List of Revoked / Inactive Live Keys */}
+            {isVerified && liveKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
+              <div className="pt-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                  Revoked Production Keys
+                </span>
+                <div className="space-y-1.5">
+                  {liveKeys
+                    .filter((k) => k.status !== 'ACTIVE')
+                    .map((k) => (
+                      <div
+                        key={k.id}
+                        className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
+                      >
+                        <span className="font-mono line-through">{k.keyPrefix}...</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
+                          {canManageKeys && (
+                            <button
+                              onClick={() => {
+                                setDeletingKey(k);
+                                setDeleteError(null);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1"
+                              title="Delete revoked key permanently"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Section 4: External Docs & Webhooks Navigation Card */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/80 dark:from-[#091528] dark:via-[#070D18] dark:to-[#0B1528] border border-blue-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Looking for full API schemas, request parameters, and response models?
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Inspect the complete interactive Scalar API documentation for Data bundles, Electricity discos, PayTV, and Exam PINs.
-                </p>
+          {/* SECTION 3: WEBHOOK SETUP & EVENTS */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                  <Webhook className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    Webhook Destination & Events
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Receive instant real-time HTTP callbacks whenever transactions succeed or fail.
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
-              <Link
-                href="/dashboard/webhooks"
-                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1528] text-slate-800 dark:text-slate-200 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                Webhooks Setup
-              </Link>
-              <a
-                href="/v1/docs"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-              >
-                <span>Interactive Docs</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+            {/* Webhook URL Form */}
+            <form onSubmit={handleSaveWebhook} className="space-y-4">
+              {webhookMessage && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                    webhookMessage.type === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
+                  }`}
+                >
+                  {webhookMessage.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  )}
+                  <span className="leading-relaxed">{webhookMessage.text}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Endpoint URL
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://api.yourdomain.com/webhooks/baxato"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    required
+                    disabled={!canManageKeys || isSavingWebhook}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-[#126BEB]"
+                  />
+
+                  <div className="flex items-center gap-2">
+                    {initialWebhookUrl && (
+                      <button
+                        type="button"
+                        onClick={handleTestWebhookPing}
+                        disabled={isTestingWebhook || isSavingWebhook}
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors disabled:opacity-60"
+                      >
+                        {isTestingWebhook ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5 text-purple-500" />
+                        )}
+                        <span>Ping Test</span>
+                      </button>
+                    )}
+
+                    {canManageKeys && (
+                      <button
+                        type="submit"
+                        disabled={isSavingWebhook || webhookUrl === initialWebhookUrl}
+                        className="px-4 py-2.5 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60"
+                      >
+                        {isSavingWebhook ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Pinging & Saving...</span>
+                          </>
+                        ) : (
+                          <span>Save Webhook</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Before saving, BAXATO verifies your server by dispatching a test ping. The endpoint must respond with HTTP 200 OK.
+                </p>
+              </div>
+
+              {webhookSecretPrefix && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 text-xs">
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                      Webhook HMAC Signing Secret
+                    </span>
+                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-bold">
+                      {webhookSecretPrefix}••••••••••••••••
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Header: x-baxato-signature
+                  </span>
+                </div>
+              )}
+            </form>
+
+            {/* Webhook Deliveries Log Table */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Recent Webhook Deliveries
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Last {deliveries.length} events
+                </span>
+              </div>
+
+              {deliveries.length === 0 ? (
+                <div className="py-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
+                  No outbound webhook deliveries logged yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                        <th className="py-2 px-3">Event</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">Attempts</th>
+                        <th className="py-2 px-3">Time</th>
+                        <th className="py-2 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                      {deliveries.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50">
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {item.eventType}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {item.status === 'SUCCESSFUL' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{item.responseStatus || 200} OK</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>{item.responseStatus ? `HTTP ${item.responseStatus}` : 'Failed'}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {item.attempts}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                            {new Date(item.createdAt).toLocaleTimeString('en-NG', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              onClick={() => handleRetryDelivery(item.id)}
+                              disabled={retryingDeliveryId === item.id}
+                              className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+                            >
+                              {retryingDeliveryId === item.id ? 'Retrying...' : 'Re-send'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </main>
@@ -951,15 +1124,15 @@ echo $response;`;
           <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 text-[#126BEB] flex items-center justify-center">
                   <Key className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                    Generate New API Key
+                    Generate {newKeyEnv === 'LIVE' ? 'Production' : 'Sandbox'} Key
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Issue a cryptographic token for external API access
+                    Create a new secret key for API requests
                   </p>
                 </div>
               </div>
@@ -979,73 +1152,20 @@ echo $response;`;
                 </div>
               )}
 
-              {/* Key Name Input */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Key Description / Name
+                  Key Name
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Primary Core Backend, Mobile App Server"
+                  placeholder="e.g. Core Backend, Mobile Service"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   required
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#126BEB]"
                 />
-                <p className="text-[10.5px] text-slate-400">
-                  A recognizable label describing what application will consume this key.
-                </p>
               </div>
 
-              {/* Environment Choice */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Environment Scope
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setNewKeyEnv('TEST')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      newKeyEnv === 'TEST'
-                        ? 'border-[#126BEB] bg-blue-50/50 dark:bg-blue-950/30'
-                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        Sandbox (Test)
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 block font-mono">
-                      bx_test_...
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewKeyEnv('LIVE')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      newKeyEnv === 'LIVE'
-                        ? 'border-[#126BEB] bg-blue-50/50 dark:bg-blue-950/30'
-                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        Production (Live)
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 block font-mono">
-                      bx_live_...
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -1065,7 +1185,7 @@ echo $response;`;
                       <span>Generating...</span>
                     </>
                   ) : (
-                    <span>Generate Key</span>
+                    <span>Create Key</span>
                   )}
                 </button>
               </div>
@@ -1074,7 +1194,7 @@ echo $response;`;
         </div>
       )}
 
-      {/* MODAL 2: Secret Reveal Modal (One-Time View) */}
+      {/* MODAL 2: Secret Reveal Modal (Shown ONCE) */}
       {revealedSecretData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5">
@@ -1084,36 +1204,27 @@ echo $response;`;
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                  API Key Generated Successfully
+                  {revealedSecretData.apiKey.name} Created
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  {revealedSecretData.apiKey.name} • {revealedSecretData.apiKey.environment}
+                  {revealedSecretData.apiKey.environment === 'LIVE' ? 'Production' : 'Sandbox'} Secret Key
                 </p>
               </div>
             </div>
 
-            {/* Warning Alert */}
             <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 text-xs space-y-1">
               <div className="font-bold flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>Save your API secret key now</span>
+                <span>Save your API key now</span>
               </div>
               <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-                For security reasons, this plaintext secret key is shown <strong>only once</strong> and cannot be recovered. If you navigate away without copying, you will need to rotate the key to issue a new one.
+                This secret key will <strong>never be shown again</strong>. Please copy it and store it securely in your environment variables.
               </p>
             </div>
 
-            {/* Secret Key Display Box */}
             <div className="p-3.5 rounded-xl bg-slate-900 dark:bg-[#060D18] border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>Secret API Key Token</span>
-                <span className="font-mono text-[10px]">
-                  {revealedSecretData.apiKey.environment === 'LIVE' ? 'Production' : 'Sandbox'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/40 border border-white/10 font-mono text-xs font-bold text-[#38BDF8] break-all">
-                <span>{revealedSecretData.secretKey}</span>
+              <div className="p-2.5 rounded-lg bg-black/40 border border-white/10 font-mono text-xs font-bold text-[#38BDF8] break-all">
+                {revealedSecretData.secretKey}
               </div>
 
               <div className="flex items-center justify-between pt-1">
@@ -1123,7 +1234,7 @@ echo $response;`;
                   className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-semibold transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download .env snippet</span>
+                  <span>Download .env</span>
                 </button>
 
                 <button
@@ -1131,7 +1242,7 @@ echo $response;`;
                   onClick={() => {
                     navigator.clipboard.writeText(revealedSecretData.secretKey);
                     setHasCopiedSecret(true);
-                    showToast('Secret key copied to clipboard');
+                    showToast('Secret key copied');
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
                     hasCopiedSecret
@@ -1154,7 +1265,6 @@ echo $response;`;
               </div>
             </div>
 
-            {/* Done Action */}
             <button
               onClick={() => {
                 setRevealedSecretData(null);
@@ -1162,13 +1272,13 @@ echo $response;`;
               }}
               className="w-full py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors"
             >
-              I have stored my secret securely
+              Done
             </button>
           </div>
         </div>
       )}
 
-      {/* MODAL 3: Rotate Key Confirmation Modal */}
+      {/* MODAL 3: Rotate Key Modal */}
       {rotatingKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">
@@ -1178,7 +1288,7 @@ echo $response;`;
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                  Rotate API Key
+                  Roll / Rotate API Key
                 </h3>
                 <p className="text-[11px] text-slate-400">
                   {rotatingKey.name} ({rotatingKey.environment})
@@ -1194,7 +1304,7 @@ echo $response;`;
             )}
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Rotating this key will <strong>immediately revoke the existing secret key</strong>. Any applications or backend servers currently communicating with the old key will begin receiving <code className="text-rose-500">401 Unauthorized</code> errors until updated with the new secret.
+              Rolling this key will <strong>immediately revoke the old secret</strong> and generate a replacement key. Any systems using the old secret will need to be updated.
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -1217,7 +1327,7 @@ echo $response;`;
                     <span>Rotating...</span>
                   </>
                 ) : (
-                  <span>Confirm Rotation</span>
+                  <span>Confirm Roll Key</span>
                 )}
               </button>
             </div>
@@ -1225,7 +1335,7 @@ echo $response;`;
         </div>
       )}
 
-      {/* MODAL 4: Revoke Key Confirmation Modal */}
+      {/* MODAL 4: Revoke Key Modal */}
       {revokingKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">
@@ -1251,7 +1361,7 @@ echo $response;`;
             )}
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to permanently revoke <strong>{revokingKey.name}</strong>? Any automated systems relying on this key will be permanently denied access. This action cannot be undone.
+              Are you sure you want to revoke <strong>{revokingKey.name}</strong>? Requests using this key will immediately be denied.
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -1274,7 +1384,64 @@ echo $response;`;
                     <span>Revoking...</span>
                   </>
                 ) : (
-                  <span>Revoke Key Permanently</span>
+                  <span>Revoke Key</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Delete Key Modal */}
+      {deletingKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Delete Key Record
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {deletingKey.name}
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Permanently delete this revoked key record from your list? Past vending history remains in your ledger.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingKey(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteKeySubmit}
+                disabled={isSubmittingDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60"
+              >
+                {isSubmittingDelete ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Key</span>
                 )}
               </button>
             </div>

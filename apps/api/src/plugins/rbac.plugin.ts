@@ -46,24 +46,48 @@ export function requireTenantPermission(permission: Permission) {
 
     // Resolve target businessId from header, query, or path params
     const params = request.params as Record<string, string> | undefined;
-    const businessId =
+    let businessId =
       (request.headers['x-business-id'] as string) ||
       params?.id ||
       params?.businessId ||
       request.businessId;
 
-    if (!businessId) {
-      throw new ValidationError('Target Business ID context is required (via x-business-id header or path).');
+    // Check if target business exists
+    let [biz] = businessId
+      ? await db
+          .select({ id: businesses.id, ownerId: businesses.ownerId })
+          .from(businesses)
+          .where(eq(businesses.id, businessId))
+          .limit(1)
+      : [undefined];
+
+    // Fallback if business not found or not specified: check user's actual business
+    if (!biz && request.user) {
+      const [ownedBiz] = await db
+        .select({ id: businesses.id, ownerId: businesses.ownerId })
+        .from(businesses)
+        .where(eq(businesses.ownerId, request.user.id))
+        .limit(1);
+
+      if (ownedBiz) {
+        biz = ownedBiz;
+        businessId = ownedBiz.id;
+      } else {
+        const [memberBiz] = await db
+          .select({ id: businesses.id, ownerId: businesses.ownerId })
+          .from(businesses)
+          .innerJoin(businessMembers, eq(businessMembers.businessId, businesses.id))
+          .where(eq(businessMembers.userId, request.user.id))
+          .limit(1);
+
+        if (memberBiz) {
+          biz = memberBiz;
+          businessId = memberBiz.id;
+        }
+      }
     }
 
-    // Check if user is the Owner of this business
-    const [biz] = await db
-      .select({ id: businesses.id, ownerId: businesses.ownerId })
-      .from(businesses)
-      .where(eq(businesses.id, businessId))
-      .limit(1);
-
-    if (!biz) {
+    if (!biz || !businessId) {
       throw new ForbiddenError('Business not found or access denied.');
     }
 

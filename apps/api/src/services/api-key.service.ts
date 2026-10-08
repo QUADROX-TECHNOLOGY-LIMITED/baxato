@@ -321,6 +321,17 @@ export class ApiKeyService {
       expiresAt: existing.expiresAt,
     });
   }
+
+  /**
+   * Permanently deletes a revoked or expired API key.
+   */
+  public async deleteApiKey(keyId: string, businessId: string): Promise<boolean> {
+    const existing = await this.getApiKey(keyId, businessId);
+    await db
+      .delete(apiKeys)
+      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.businessId, businessId)));
+    return true;
+  }
 }
 
 export const apiKeyService = new ApiKeyService();

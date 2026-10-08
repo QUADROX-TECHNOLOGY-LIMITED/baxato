@@ -10,7 +10,7 @@ import {
   type ApiKeyContext,
   type ApiKeyEnvironment,
 } from '@baxato/common';
-import { db, users, businesses, eq } from '@baxato/database';
+import { db, users, businesses, businessMembers, eq } from '@baxato/database';
 import { apiKeyService } from '../services/api-key.service.js';
 
 declare module 'fastify' {
@@ -116,15 +116,38 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     throw new AuthenticationError('User account is inactive, suspended, or not found.');
   }
 
-  // Get active business if present
+  // Verify and resolve active business
   let activeBizId = sessionUser.businessId;
-  if (!activeBizId && (dbUser.role === UserRole.BUSINESS_OWNER || dbUser.role === UserRole.BUSINESS_ADMIN)) {
-    const [biz] = await db
+  if (activeBizId) {
+    const [bizExists] = await db
+      .select({ id: businesses.id })
+      .from(businesses)
+      .where(eq(businesses.id, activeBizId))
+      .limit(1);
+    if (!bizExists) {
+      activeBizId = undefined;
+    }
+  }
+
+  if (!activeBizId) {
+    const [ownedBiz] = await db
       .select({ id: businesses.id })
       .from(businesses)
       .where(eq(businesses.ownerId, dbUser.id))
       .limit(1);
-    activeBizId = biz?.id;
+
+    if (ownedBiz) {
+      activeBizId = ownedBiz.id;
+    } else {
+      const [membership] = await db
+        .select({ businessId: businessMembers.businessId })
+        .from(businessMembers)
+        .where(eq(businessMembers.userId, dbUser.id))
+        .limit(1);
+      if (membership) {
+        activeBizId = membership.businessId;
+      }
+    }
   }
 
   request.user = {
