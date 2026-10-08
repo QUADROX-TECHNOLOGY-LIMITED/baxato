@@ -636,7 +636,7 @@ export class TeamService {
     }
 
     const [biz] = await db
-      .select({ id: businesses.id, name: businesses.name, slug: businesses.slug })
+      .select({ id: businesses.id, name: businesses.name, slug: businesses.slug, ownerId: businesses.ownerId })
       .from(businesses)
       .where(eq(businesses.id, invitation.businessId))
       .limit(1);
