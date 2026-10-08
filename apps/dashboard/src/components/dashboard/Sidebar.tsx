@@ -12,7 +12,7 @@ import {
   Zap,
   Tv,
   GraduationCap,
-  Wallet,
+  BarChart3,
   TrendingUp,
   Key,
   Webhook,
@@ -98,10 +98,10 @@ export default function Sidebar({
         ],
       },
       {
-        id: 'FINANCE',
-        title: 'FINANCE & PAYOUTS',
+        id: 'ANALYTICS',
+        title: 'ANALYTICS & INSIGHTS',
         items: [
-          { label: 'Settlement Wallets', href: '/dashboard/wallets', icon: Wallet },
+          { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
         ],
       },
       {
@@ -131,6 +131,7 @@ export default function Sidebar({
       return [
         allGroups[0], // CORE
         allGroups[1], // SERVICES
+        allGroups[2], // ANALYTICS
         allGroups[3], // DEVELOPER
         {
           id: 'ORGANIZATION',
@@ -143,7 +144,7 @@ export default function Sidebar({
     if (activeRole === 'FINANCE') {
       return [
         allGroups[0], // CORE
-        allGroups[2], // FINANCE
+        allGroups[2], // ANALYTICS
         {
           id: 'ORGANIZATION',
           title: 'ORGANIZATION',
@@ -156,6 +157,7 @@ export default function Sidebar({
       return [
         allGroups[0], // CORE
         allGroups[1], // SERVICES
+        allGroups[2], // ANALYTICS
         {
           id: 'ORGANIZATION',
           title: 'ORGANIZATION',
@@ -167,6 +169,7 @@ export default function Sidebar({
     if (activeRole === 'VIEWER') {
       return [
         allGroups[0], // CORE
+        allGroups[2], // ANALYTICS
         {
           id: 'ORGANIZATION',
           title: 'ORGANIZATION',
@@ -274,8 +277,7 @@ export default function Sidebar({
                             item.href.startsWith('/dashboard/data') ||
                             item.href.startsWith('/dashboard/electricity') ||
                             item.href.startsWith('/dashboard/cable') ||
-                            item.href.startsWith('/dashboard/education') ||
-                            item.href.startsWith('/dashboard/wallets'))
+                            item.href.startsWith('/dashboard/education'))
                         ) {
                           e.preventDefault();
                           onOpenKycModal();

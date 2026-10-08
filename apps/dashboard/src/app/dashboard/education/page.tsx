@@ -1077,7 +1077,7 @@ export default function EducationPage() {
                   <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
                     <span>Balance too low (Need {formatNaira(totalCostNaira)})</span>
                     <Link
-                      href="/dashboard/wallets"
+                      href="/dashboard"
                       className="font-bold underline text-amber-800 dark:text-amber-200 hover:text-amber-900"
                     >
                       Fund Wallet
