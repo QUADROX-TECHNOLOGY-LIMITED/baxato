@@ -365,7 +365,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         .set({
           status: updatedStatus,
           providerReference: requeryResult.providerReference || tx.providerReference,
-          errorMessage: requeryResult.status === TransactionStatus.FAILED ? requeryResult.message : tx.errorMessage,
+          errorMessage: requeryResult.status === TransactionStatus.FAILED ? requeryResult.responseMessage : tx.errorMessage,
           updatedAt: new Date(),
         })
         .where(eq(serviceTransactions.id, id));
@@ -380,7 +380,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           previousStatus: tx.status,
           newStatus: updatedStatus,
           providerResponseCode: requeryResult.responseCode,
-          providerMessage: requeryResult.message,
+          providerMessage: requeryResult.responseMessage,
         },
       });
     }
@@ -390,7 +390,10 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         {
           transactionId: id,
           currentStatus: updatedStatus,
-          providerResult: requeryResult,
+          providerResult: {
+            ...requeryResult,
+            amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,
+          },
         },
         request.id,
       ),
