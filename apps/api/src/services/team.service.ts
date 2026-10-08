@@ -865,14 +865,24 @@ export class TeamService {
       });
     }
 
-    // Mark invitation accepted
-    await db
+    // Mark invitation accepted (atomic single-use guard preventing link reuse or double-spend)
+    const [acceptedInvitation] = await db
       .update(teamInvitations)
       .set({
         status: InvitationStatus.ACCEPTED,
         updatedAt: new Date(),
       })
-      .where(eq(teamInvitations.tokenHash, tokenHash));
+      .where(
+        and(
+          eq(teamInvitations.tokenHash, tokenHash),
+          eq(teamInvitations.status, InvitationStatus.PENDING),
+        ),
+      )
+      .returning();
+
+    if (!acceptedInvitation) {
+      throw new ConflictError('This invitation has already been accepted or is no longer valid.');
+    }
 
     // Audit log
     await auditService.log({
