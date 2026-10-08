@@ -83,7 +83,7 @@ export default function Sidebar({
         title: 'CORE PLATFORM',
         items: [
           { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-          { label: 'Live Ledger', href: '/dashboard/ledger', icon: Receipt },
+          { label: 'Transaction History', href: '/dashboard/ledger', icon: Receipt },
         ],
       },
       {

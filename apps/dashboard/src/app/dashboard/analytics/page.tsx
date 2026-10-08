@@ -1024,7 +1024,7 @@ export default function AnalyticsPage() {
                   Need itemized receipt accounting and token lookups?
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Inspect granular audit logs, provider references, customer phone numbers, and electricity tokens in the Live Ledger.
+                  Inspect granular audit logs, provider references, customer phone numbers, and electricity tokens in Transaction History.
                 </p>
               </div>
             </div>
@@ -1033,7 +1033,7 @@ export default function AnalyticsPage() {
               href="/dashboard/ledger"
               className="px-4 py-2.5 rounded-xl bg-white dark:bg-[#0F1E36] text-slate-900 dark:text-white font-bold text-xs border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-[#152744] transition-colors shrink-0 flex items-center gap-1.5 shadow-xs"
             >
-              <span>Open Live Ledger</span>
+              <span>Open Transaction History</span>
               <ArrowUpRight className="w-4 h-4 text-[#126BEB]" />
             </Link>
           </div>

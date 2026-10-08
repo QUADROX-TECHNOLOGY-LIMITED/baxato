@@ -28,6 +28,7 @@ import {
   ExternalLink,
   ShieldCheck,
   X,
+  Download,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -56,6 +57,7 @@ export interface UnifiedTransaction {
   discountNaira: number;
   totalAmountKobo: string;
   totalAmountNaira: number;
+  channel?: 'API' | 'WEB' | string;
   status: 'SUCCESSFUL' | 'PROCESSING' | 'PENDING' | 'FAILED' | 'REVERSED';
   providerName?: string;
   metadata?: Record<string, any>;
@@ -183,6 +185,80 @@ function LedgerContent() {
     }
   };
 
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  const handleExportCSV = async () => {
+    try {
+      setIsExporting(true);
+      const authToken = getStoredAuthToken();
+      if (!authToken) return;
+
+      const params = new URLSearchParams();
+      if (selectedService && selectedService !== 'ALL') params.set('serviceType', selectedService);
+      if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      params.set('limit', '1000');
+      params.set('offset', '0');
+
+      const res = await fetch(`/api/transactions?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json().catch(() => null);
+
+      const exportList: UnifiedTransaction[] =
+        res.ok && data?.success && Array.isArray(data.data?.transactions)
+          ? data.data.transactions
+          : transactions;
+
+      if (exportList.length === 0) {
+        alert('No transactions to export.');
+        return;
+      }
+
+      const headers = [
+        'Reference',
+        'Date & Time',
+        'Service',
+        'Recipient',
+        'Channel',
+        'Amount (NGN)',
+        'Amount Paid (NGN)',
+        'Status',
+        'Provider Reference',
+      ];
+
+      const csvRows = [
+        headers.join(','),
+        ...exportList.map((t) => [
+          `"${t.reference || ''}"`,
+          `"${new Date(t.createdAt).toLocaleString('en-NG').replace(/"/g, '""')}"`,
+          `"${t.serviceType || ''}"`,
+          `"${t.recipient || ''}"`,
+          `"${t.channel || (t.id.startsWith('key_') ? 'API' : 'WEB')}"`,
+          (t.amountNaira || 0).toFixed(2),
+          (t.totalAmountNaira || t.amountNaira || 0).toFixed(2),
+          `"${t.status || ''}"`,
+          `"${t.providerReference || ''}"`,
+        ].join(',')),
+      ];
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvRows.join('\n'));
+      const downloadLink = document.createElement('a');
+      downloadLink.setAttribute('href', csvContent);
+      downloadLink.setAttribute(
+        'download',
+        `baxato-transactions-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    } catch {
+      alert('Failed to export transactions.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
   const activeServiceObj = SERVICE_OPTIONS.find((s) => s.value === selectedService) || SERVICE_OPTIONS[0];
@@ -306,7 +382,7 @@ function LedgerContent() {
           <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
 
           {/* Top Navigation & Action Controls */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <Link
               href="/dashboard"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
@@ -315,17 +391,31 @@ function LedgerContent() {
               <span>Back to Dashboard</span>
             </Link>
 
-            <button
-              onClick={() => {
-                setIsRefreshing(true);
-                fetchTransactions();
-              }}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                disabled={isExporting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
+                title="Export transactions as CSV / Excel spreadsheet"
+              >
+                <Download className={`w-3.5 h-3.5 text-emerald-500 ${isExporting ? 'animate-bounce' : ''}`} />
+                <span>{isExporting ? 'Exporting...' : 'Export Excel / CSV'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRefreshing(true);
+                  fetchTransactions();
+                }}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
 
           {/* Header Title Banner */}
@@ -336,10 +426,10 @@ function LedgerContent() {
               </div>
               <div>
                 <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Unified Service Ledger & History
+                  Transaction History
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Consolidated double-entry audit records for all vended utilities, bills, and PINs
+                  Real-time records of all airtime, data, electricity, cable TV, and exam PIN vending transactions
                 </p>
               </div>
             </div>
@@ -464,18 +554,20 @@ function LedgerContent() {
             </div>
           </div>
 
-          {/* Unified Ledger Data Table */}
+          {/* Unified Transactions Data Table */}
           <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
                 <thead className="bg-slate-50 dark:bg-[#070D18]/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Service</th>
-                    <th className="py-3 px-4">Recipient / Target</th>
+                    <th className="py-3 px-4">Recipient</th>
                     <th className="py-3 px-4">Reference</th>
+                    <th className="py-3 px-4">Channel</th>
                     <th className="py-3 px-4">Amount</th>
+                    <th className="py-3 px-4">Amount Paid</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4">Date &amp; Time</th>
                     <th className="py-3 px-4 text-right">Details</th>
                   </tr>
                 </thead>
@@ -486,6 +578,8 @@ function LedgerContent() {
                         <td className="py-4 px-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
                         <td className="py-4 px-4"><div className="w-32 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
                         <td className="py-4 px-4"><div className="w-28 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-4 px-4"><div className="w-14 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
                         <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
                         <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded-full" /></td>
                         <td className="py-4 px-4"><div className="w-28 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
@@ -494,13 +588,13 @@ function LedgerContent() {
                     ))
                   ) : transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center">
+                      <td colSpan={9} className="py-12 text-center">
                         <div className="max-w-xs mx-auto space-y-2">
                           <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800/60 text-slate-400 flex items-center justify-center mx-auto">
                             <FileText className="w-6 h-6" />
                           </div>
                           <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                            No ledger records found
+                            No transactions found
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {searchQuery || selectedService !== 'ALL' || selectedStatus !== 'ALL'
@@ -555,16 +649,27 @@ function LedgerContent() {
                           </button>
                         </td>
 
-                        {/* Amount */}
+                        {/* Channel (WEB vs API) */}
                         <td className="py-3.5 px-4">
-                          <div className="font-extrabold text-slate-900 dark:text-white">
-                            {tx.formattedAmount || `₦${(tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`}
-                          </div>
-                          {tx.discountNaira > 0 && (
-                            <div className="text-[10px] text-emerald-500 font-semibold">
-                              Saved ₦{tx.discountNaira.toLocaleString()}
-                            </div>
+                          {tx.channel === 'API' || tx.id.startsWith('key_') ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
+                              API
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                              WEB
+                            </span>
                           )}
+                        </td>
+
+                        {/* Amount (Face Value) */}
+                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          ₦{(tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                        </td>
+
+                        {/* Amount Paid */}
+                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          ₦{(tx.totalAmountNaira || tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                         </td>
 
                         {/* Status */}
@@ -672,15 +777,34 @@ function LedgerContent() {
             {/* Modal Body */}
             <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* Status Header Tile */}
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] text-slate-400 font-medium">Status</span>
-                  <div className="mt-0.5">{getStatusBadge(selectedTransaction.status)}</div>
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
+                    <div className="mt-0.5">{getStatusBadge(selectedTransaction.status)}</div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Channel</span>
+                    <div className="mt-0.5">
+                      {selectedTransaction.channel === 'API' || selectedTransaction.id.startsWith('key_') ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
+                          API
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+                          WEB
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-[11px] text-slate-400 font-medium">Amount</span>
-                  <div className="font-black text-base text-slate-900 dark:text-white mt-0.5">
-                    {selectedTransaction.formattedAmount || `₦${(selectedTransaction.amountNaira || 0).toLocaleString()}`}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount Paid</span>
+                  <div className="font-black text-base text-slate-900 dark:text-white">
+                    ₦{(selectedTransaction.totalAmountNaira || selectedTransaction.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Face Value: ₦{(selectedTransaction.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>

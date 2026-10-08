@@ -90,6 +90,9 @@ export const transactionRoutes: FastifyPluginAsync = async (fastify) => {
         discountNaira: koboToNaira(r.discount),
         totalAmountKobo: r.totalAmount.toString(),
         totalAmountNaira: koboToNaira(r.totalAmount),
+        channel:
+          (r.metadata as Record<string, any>)?.channel ||
+          (r.userId?.startsWith('key_') ? 'API' : 'WEB'),
         status: r.status,
         providerName: r.providerName,
         metadata: r.metadata,
