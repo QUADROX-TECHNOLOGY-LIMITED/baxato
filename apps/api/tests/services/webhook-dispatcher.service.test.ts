@@ -157,6 +157,17 @@ describe('WebhookDispatcherService', () => {
       const biz = inMemoryDb.businesses.find((b) => b.id === testBizId)!;
       expect(biz.webhookSecret).toBe(result.newSecret);
     });
+
+    it('updates sandbox webhook URL and automatically generates sandbox secret', async () => {
+      const result = await service.updateWebhookConfig(testBizId, {
+        webhookTestUrl: 'https://test-sandbox.example.com/webhook',
+      });
+
+      expect(result.config.webhookTestUrl).toBe('https://test-sandbox.example.com/webhook');
+      expect(result.config.hasTestSecret).toBe(true);
+      expect(result.newTestSecret).toBeDefined();
+      expect(result.newTestSecret).toMatch(/^whsec_[a-f0-9]{64}$/);
+    });
   });
 
   describe('Outbound Webhook Dispatching & Delivery', () => {

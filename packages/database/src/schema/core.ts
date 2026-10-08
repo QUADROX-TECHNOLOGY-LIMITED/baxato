@@ -93,6 +93,8 @@ export const businesses = pgTable(
     status: businessStatusEnum('status').default('ACTIVE').notNull(),
     webhookUrl: text('webhook_url'),
     webhookSecret: text('webhook_secret'),
+    webhookTestUrl: text('webhook_test_url'),
+    webhookTestSecret: text('webhook_test_secret'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

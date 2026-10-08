@@ -12,13 +12,15 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
   X,
   Download,
   ArrowLeft,
   Webhook,
   Send,
   Lock,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -54,16 +56,10 @@ export interface WebhookConfig {
   webhookUrl: string | null;
   webhookSecretPrefix: string | null;
   hasSecret: boolean;
-}
-
-export interface WebhookDeliveryItem {
-  id: string;
-  eventType: string;
-  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
-  responseStatus?: number | null;
-  attempts: number;
-  lastAttemptAt?: string | null;
-  createdAt: string;
+  webhookTestUrl: string | null;
+  webhookTestSecret: string | null;
+  hasTestSecret: boolean;
+  updatedAt: string | null;
 }
 
 export default function DeveloperKeysPage() {
@@ -80,16 +76,24 @@ export default function DeveloperKeysPage() {
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+  const [showTestKey, setShowTestKey] = useState(false);
 
-  // Webhook State
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [initialWebhookUrl, setInitialWebhookUrl] = useState('');
-  const [webhookSecretPrefix, setWebhookSecretPrefix] = useState<string | null>(null);
-  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
-  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
-  const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [deliveries, setDeliveries] = useState<WebhookDeliveryItem[]>([]);
-  const [retryingDeliveryId, setRetryingDeliveryId] = useState<string | null>(null);
+  // Sandbox Webhook State
+  const [webhookTestUrl, setWebhookTestUrl] = useState('');
+  const [initialWebhookTestUrl, setInitialWebhookTestUrl] = useState('');
+  const [webhookTestSecret, setWebhookTestSecret] = useState<string | null>(null);
+  const [showWebhookTestSecret, setShowWebhookTestSecret] = useState(false);
+  const [isSavingWebhookTest, setIsSavingWebhookTest] = useState(false);
+  const [isTestingWebhookTest, setIsTestingWebhookTest] = useState(false);
+  const [webhookTestMessage, setWebhookTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Production Webhook State
+  const [webhookLiveUrl, setWebhookLiveUrl] = useState('');
+  const [initialWebhookLiveUrl, setInitialWebhookLiveUrl] = useState('');
+  const [webhookLiveSecretPrefix, setWebhookLiveSecretPrefix] = useState<string | null>(null);
+  const [isSavingWebhookLive, setIsSavingWebhookLive] = useState(false);
+  const [isTestingWebhookLive, setIsTestingWebhookLive] = useState(false);
+  const [webhookLiveMessage, setWebhookLiveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Modal States
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -149,16 +153,15 @@ export default function DeveloperKeysPage() {
 
     loadKeys();
     loadWebhookConfig();
-    loadWebhookDeliveries();
   }, []);
 
-  const getAuthHeaders = () => {
-    const authToken = getStoredAuthToken();
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = getStoredAuthToken();
     const storedBiz = getStoredBusiness();
-    return {
-      Authorization: `Bearer ${authToken}`,
-      ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
-    };
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (storedBiz?.id) headers['x-business-id'] = storedBiz.id;
+    return headers;
   };
 
   const loadKeys = async () => {
@@ -170,11 +173,8 @@ export default function DeveloperKeysPage() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && Array.isArray(data.data)) {
         setKeys(data.data);
-      } else {
-        setKeys([]);
       }
     } catch {
-      setKeys([]);
     } finally {
       setIsLoadingKeys(false);
     }
@@ -187,21 +187,17 @@ export default function DeveloperKeysPage() {
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data.data) {
-        setWebhookUrl(data.data.webhookUrl || '');
-        setInitialWebhookUrl(data.data.webhookUrl || '');
-        setWebhookSecretPrefix(data.data.webhookSecretPrefix || null);
-      }
-    } catch {}
-  };
+        // Live
+        const liveUrl = data.data.webhookUrl || '';
+        setWebhookLiveUrl(liveUrl);
+        setInitialWebhookLiveUrl(liveUrl);
+        setWebhookLiveSecretPrefix(data.data.webhookSecretPrefix || null);
 
-  const loadWebhookDeliveries = async () => {
-    try {
-      const res = await fetch('/api/developer/webhooks/deliveries?limit=5', {
-        headers: getAuthHeaders(),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && Array.isArray(data.data?.deliveries)) {
-        setDeliveries(data.data.deliveries);
+        // Test
+        const testUrl = data.data.webhookTestUrl || '';
+        setWebhookTestUrl(testUrl);
+        setInitialWebhookTestUrl(testUrl);
+        setWebhookTestSecret(data.data.webhookTestSecret || null);
       }
     } catch {}
   };
@@ -210,7 +206,6 @@ export default function DeveloperKeysPage() {
     setIsRefreshing(true);
     loadKeys();
     loadWebhookConfig();
-    loadWebhookDeliveries();
     setTimeout(() => {
       setIsRefreshing(false);
       showToast('Developer configuration refreshed');
@@ -370,88 +365,64 @@ export default function DeveloperKeysPage() {
     }
   };
 
-  // Ping Webhook before saving
-  const handleSaveWebhook = async (e: React.FormEvent) => {
+  // Sandbox Webhook: Save
+  const handleSaveWebhookTest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!webhookUrl.trim()) {
-      setWebhookMessage({ type: 'error', text: 'Please enter a valid webhook URL.' });
+    if (!webhookTestUrl.trim()) {
+      setWebhookTestMessage({ type: 'error', text: 'Please enter a valid sandbox webhook URL.' });
       return;
     }
 
-    if (!webhookUrl.startsWith('https://') && !webhookUrl.startsWith('http://localhost')) {
-      setWebhookMessage({ type: 'error', text: 'Webhook URL must use secure HTTPS protocol.' });
+    if (
+      !webhookTestUrl.startsWith('https://') &&
+      !webhookTestUrl.startsWith('http://localhost') &&
+      !webhookTestUrl.startsWith('http://127.0.0.1')
+    ) {
+      setWebhookTestMessage({ type: 'error', text: 'Sandbox webhook URL should use HTTPS or local address.' });
       return;
     }
 
-    setIsSavingWebhook(true);
-    setWebhookMessage(null);
+    setIsSavingWebhookTest(true);
+    setWebhookTestMessage(null);
 
     try {
-      // Step 1: Temporarily update or test ping the endpoint
-      // We ping the endpoint first to ensure it responds with 200 OK
-      const pingRes = await fetch('/api/developer/webhooks/test', {
+      const res = await fetch('/api/developer/webhooks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ eventType: 'ping', testUrl: webhookUrl.trim() }),
+        body: JSON.stringify({ webhookTestUrl: webhookTestUrl.trim() }),
       });
 
-      const pingData = await pingRes.json().catch(() => null);
-
-      if (!pingRes.ok || !pingData?.success || !pingData?.data?.success) {
-        const errorDetail =
-          pingData?.data?.error ||
-          pingData?.error?.message ||
-          `Endpoint returned status ${pingData?.data?.statusCode || 'unreachable'}`;
-        setWebhookMessage({
-          type: 'error',
-          text: `Webhook validation failed: Unable to verify endpoint (Expected HTTP 200). Details: ${errorDetail}`,
-        });
-        setIsSavingWebhook(false);
-        return;
-      }
-
-      // Step 2: Ping succeeded! Persist the webhook configuration
-      const saveRes = await fetch('/api/developer/webhooks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
-      });
-
-      const saveData = await saveRes.json().catch(() => null);
-      if (saveRes.ok && saveData?.success) {
-        setInitialWebhookUrl(webhookUrl.trim());
-        setWebhookMessage({
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setInitialWebhookTestUrl(webhookTestUrl.trim());
+        setWebhookTestMessage({
           type: 'success',
-          text: `Endpoint verified and saved successfully (${pingData.data.latencyMs}ms response time).`,
+          text: 'Sandbox webhook endpoint saved successfully!',
         });
         loadWebhookConfig();
-        loadWebhookDeliveries();
       } else {
-        setWebhookMessage({
+        setWebhookTestMessage({
           type: 'error',
-          text: saveData?.error?.message || 'Failed to persist webhook configuration.',
+          text: data?.error?.message || 'Failed to save sandbox webhook.',
         });
       }
     } catch (err: any) {
-      setWebhookMessage({
+      setWebhookTestMessage({
         type: 'error',
-        text: err?.message || 'Network error while validating webhook endpoint.',
+        text: err?.message || 'Network error saving sandbox webhook.',
       });
     } finally {
-      setIsSavingWebhook(false);
+      setIsSavingWebhookTest(false);
     }
   };
 
-  // Test Webhook
-  const handleTestWebhookPing = async () => {
-    setIsTestingWebhook(true);
-    setWebhookMessage(null);
+  // Sandbox Webhook: Ping Test
+  const handleTestWebhookTestPing = async () => {
+    setIsTestingWebhookTest(true);
+    setWebhookTestMessage(null);
     try {
       const res = await fetch('/api/developer/webhooks/test', {
         method: 'POST',
@@ -459,51 +430,162 @@ export default function DeveloperKeysPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ eventType: 'ping' }),
+        body: JSON.stringify({ eventType: 'ping', environment: 'TEST' }),
       });
 
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data.data?.success) {
-        setWebhookMessage({
+        setWebhookTestMessage({
           type: 'success',
-          text: `Ping delivered successfully (HTTP ${data.data.statusCode}, ${data.data.latencyMs}ms latency).`,
+          text: `Sandbox Ping succeeded! HTTP ${data.data.statusCode || 200} OK in ${data.data.latencyMs}ms.`,
         });
-        loadWebhookDeliveries();
       } else {
-        setWebhookMessage({
+        const errorDetail = data?.data?.error || data?.error?.message || 'Failed to deliver ping';
+        setWebhookTestMessage({
           type: 'error',
-          text: `Ping failed: ${data?.data?.error || data?.error?.message || 'No response from destination server.'}`,
+          text: `Sandbox Ping failed: ${errorDetail}`,
         });
       }
     } catch (err: any) {
-      setWebhookMessage({
+      setWebhookTestMessage({
         type: 'error',
-        text: err?.message || 'Failed to dispatch test ping.',
+        text: err?.message || 'Network error during sandbox ping.',
       });
     } finally {
-      setIsTestingWebhook(false);
+      setIsTestingWebhookTest(false);
     }
   };
 
-  // Retry Webhook Delivery
-  const handleRetryDelivery = async (deliveryId: string) => {
-    setRetryingDeliveryId(deliveryId);
+  // Sandbox Webhook: Roll Secret
+  const handleRollWebhookTestSecret = async () => {
     try {
-      const res = await fetch(`/api/developer/webhooks/deliveries/${deliveryId}/retry`, {
+      const res = await fetch('/api/developer/webhooks', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ regenerateTestSecret: true }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
-        showToast('Webhook delivery re-dispatched');
-        loadWebhookDeliveries();
+        showToast('Sandbox webhook secret rolled');
+        loadWebhookConfig();
       } else {
-        showToast(data?.error?.message || 'Failed to retry delivery');
+        showToast(data?.error?.message || 'Failed to roll sandbox secret');
       }
     } catch {
-      showToast('Network error retrying delivery');
+      showToast('Network error rolling sandbox secret');
+    }
+  };
+
+  // Production Webhook: Save
+  const handleSaveWebhookLive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webhookLiveUrl.trim()) {
+      setWebhookLiveMessage({ type: 'error', text: 'Please enter a valid live webhook URL.' });
+      return;
+    }
+
+    if (!webhookLiveUrl.startsWith('https://')) {
+      setWebhookLiveMessage({ type: 'error', text: 'Production webhook URL must use secure HTTPS protocol.' });
+      return;
+    }
+
+    setIsSavingWebhookLive(true);
+    setWebhookLiveMessage(null);
+
+    try {
+      const res = await fetch('/api/developer/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ webhookUrl: webhookLiveUrl.trim() }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setInitialWebhookLiveUrl(webhookLiveUrl.trim());
+        setWebhookLiveMessage({
+          type: 'success',
+          text: 'Production webhook endpoint saved successfully!',
+        });
+        loadWebhookConfig();
+      } else {
+        setWebhookLiveMessage({
+          type: 'error',
+          text: data?.error?.message || 'Failed to save production webhook.',
+        });
+      }
+    } catch (err: any) {
+      setWebhookLiveMessage({
+        type: 'error',
+        text: err?.message || 'Network error saving production webhook.',
+      });
     } finally {
-      setRetryingDeliveryId(null);
+      setIsSavingWebhookLive(false);
+    }
+  };
+
+  // Production Webhook: Ping Test
+  const handleTestWebhookLivePing = async () => {
+    setIsTestingWebhookLive(true);
+    setWebhookLiveMessage(null);
+    try {
+      const res = await fetch('/api/developer/webhooks/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ eventType: 'ping', environment: 'LIVE' }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data.data?.success) {
+        setWebhookLiveMessage({
+          type: 'success',
+          text: `Production Ping succeeded! HTTP ${data.data.statusCode || 200} OK in ${data.data.latencyMs}ms.`,
+        });
+      } else {
+        const errorDetail = data?.data?.error || data?.error?.message || 'Failed to deliver ping';
+        setWebhookLiveMessage({
+          type: 'error',
+          text: `Production Ping failed: ${errorDetail}`,
+        });
+      }
+    } catch (err: any) {
+      setWebhookLiveMessage({
+        type: 'error',
+        text: err?.message || 'Network error during production ping.',
+      });
+    } finally {
+      setIsTestingWebhookLive(false);
+    }
+  };
+
+  // Production Webhook: Roll Secret
+  const handleRollWebhookLiveSecret = async () => {
+    try {
+      const res = await fetch('/api/developer/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ regenerateSecret: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        showToast('Production webhook secret rolled');
+        loadWebhookConfig();
+      } else {
+        showToast(data?.error?.message || 'Failed to roll production secret');
+      }
+    } catch {
+      showToast('Network error rolling production secret');
     }
   };
 
@@ -581,10 +663,10 @@ export default function DeveloperKeysPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                  API Keys & Webhooks
+                  API Keys &amp; Webhook Setup
                 </h1>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                  Manage your sandbox and live credentials, configure webhook destinations, and inspect delivery events.
+                  Manage your sandbox and live credentials, and configure dedicated webhook endpoints for each environment.
                 </p>
               </div>
 
@@ -613,19 +695,27 @@ export default function DeveloperKeysPage() {
             </div>
           )}
 
-          {/* SECTION 1: SANDBOX / TEST KEY (AT TOP) */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+          {/* ========================================================================= */}
+          {/* SECTION 1: SANDBOX ENVIRONMENT (TEST MODE)                                */}
+          {/* ========================================================================= */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-amber-200/80 dark:border-amber-900/50 shadow-xs space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
                   <Key className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Sandbox API Key (Test Mode)
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Use this key to authenticate development requests without charging real money.
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      Sandbox Environment
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      Test Mode
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Safe testing ground with simulated transactions. Sandbox API keys never expire or disappear.
                   </p>
                 </div>
               </div>
@@ -638,7 +728,7 @@ export default function DeveloperKeysPage() {
                     setGenerateError(null);
                     setIsGenerateModalOpen(true);
                   }}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Sandbox Key</span>
@@ -646,135 +736,314 @@ export default function DeveloperKeysPage() {
               )}
             </div>
 
-            {/* Active Sandbox Key Card */}
-            {activeTestKey ? (
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1 min-w-0">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                    {activeTestKey.name}
+            {/* Subsection 1A: Sandbox API Key Card */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                Sandbox API Key
+              </label>
+
+              {activeTestKey ? (
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {activeTestKey.name}
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
+                        ACTIVE
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 max-w-full overflow-hidden">
+                      <span className="font-mono text-xs font-bold text-slate-900 dark:text-white break-all select-all">
+                        {showTestKey
+                          ? activeTestKey.keyPrefix
+                          : activeTestKey.keyPrefix.startsWith('bx_test_') && !activeTestKey.keyPrefix.endsWith('...')
+                          ? `${activeTestKey.keyPrefix.slice(0, 14)}••••••••••••••••••••••••••••••••`
+                          : `${activeTestKey.keyPrefix}••••••••••••••••••••••••••••••••`}
+                      </span>
+
+                      {/* Eye Toggle to View / Hide Key */}
+                      <button
+                        type="button"
+                        onClick={() => setShowTestKey(!showTestKey)}
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
+                        title={showTestKey ? 'Hide Sandbox Key' : 'Reveal Full Sandbox Key'}
+                      >
+                        {showTestKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {activeTestKey.keyPrefix.endsWith('...') && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                        Tip: Click <strong>Roll Key</strong> to generate a fully unmaskable sandbox secret.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-slate-800">
+                    <button
+                      onClick={() => copyToClipboard(activeTestKey.keyPrefix, activeTestKey.id)}
+                      className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                    >
+                      {copiedKeyId === activeTestKey.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Key</span>
+                        </>
+                      )}
+                    </button>
+
+                    {canManageKeys && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setRotatingKey(activeTestKey);
+                            setRotateError(null);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
+                          <span>Roll Key</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRevokingKey(activeTestKey);
+                            setRevokeError(null);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                          title="Revoke key"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    No active Sandbox key found.
+                  </p>
+                  {canManageKeys && (
+                    <button
+                      onClick={() => {
+                        setNewKeyEnv('TEST');
+                        setNewKeyName('Sandbox Key');
+                        setGenerateError(null);
+                        setIsGenerateModalOpen(true);
+                      }}
+                      className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
+                    >
+                      Generate Sandbox Key
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Revoked Sandbox Keys list */}
+              {testKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    Revoked Sandbox Keys
                   </span>
+                  <div className="space-y-1.5">
+                    {testKeys
+                      .filter((k) => k.status !== 'ACTIVE')
+                      .map((k) => (
+                        <div
+                          key={k.id}
+                          className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
+                        >
+                          <span className="font-mono line-through text-[11px]">
+                            {k.keyPrefix.slice(0, 16)}...
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
+                            {canManageKeys && (
+                              <button
+                                onClick={() => {
+                                  setDeletingKey(k);
+                                  setDeleteError(null);
+                                }}
+                                className="text-slate-400 hover:text-rose-600 p-1"
+                                title="Delete revoked key record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Subsection 1B: Sandbox Webhook Configuration */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 space-y-4">
+              <div className="flex items-center gap-2">
+                <Webhook className="w-4 h-4 text-amber-500" />
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  Sandbox Webhook Destination
+                </h3>
+              </div>
+
+              {webhookTestMessage && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                    webhookTestMessage.type === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
+                  }`}
+                >
+                  {webhookTestMessage.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  )}
+                  <span className="leading-relaxed">{webhookTestMessage.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveWebhookTest} className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://api.yourdomain.com/webhooks/sandbox or https://ngrok-url..."
+                    value={webhookTestUrl}
+                    onChange={(e) => setWebhookTestUrl(e.target.value)}
+                    required
+                    disabled={!canManageKeys || isSavingWebhookTest}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                  />
+
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
-                      {activeTestKey.keyPrefix}••••••••••••••••••••••••••••••••
-                    </span>
+                    {initialWebhookTestUrl && (
+                      <button
+                        type="button"
+                        onClick={handleTestWebhookTestPing}
+                        disabled={isTestingWebhookTest || isSavingWebhookTest}
+                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors disabled:opacity-60"
+                        title="Send test ping to Sandbox endpoint"
+                      >
+                        {isTestingWebhookTest ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5 text-amber-500" />
+                        )}
+                        <span>Ping Test</span>
+                      </button>
+                    )}
+
+                    {canManageKeys && (
+                      <button
+                        type="submit"
+                        disabled={isSavingWebhookTest || webhookTestUrl === initialWebhookTestUrl}
+                        className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60"
+                      >
+                        {isSavingWebhookTest ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <span>Save Sandbox Webhook</span>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => copyToClipboard(activeTestKey.keyPrefix, activeTestKey.id)}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
-                  >
-                    {copiedKeyId === activeTestKey.id ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Prefix</span>
-                      </>
-                    )}
-                  </button>
-
-                  {canManageKeys && (
-                    <>
-                      <button
-                        onClick={() => {
-                          setRotatingKey(activeTestKey);
-                          setRotateError(null);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
-                        <span>Roll Key</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRevokingKey(activeTestKey);
-                          setRevokeError(null);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title="Revoke key"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  No active Sandbox key found.
+                <p className="text-[11px] text-slate-400">
+                  BAXATO dispatches real-time test event callbacks (like <code>transaction.successful</code>) to this endpoint during development.
                 </p>
-                {canManageKeys && (
-                  <button
-                    onClick={() => {
-                      setNewKeyEnv('TEST');
-                      setNewKeyName('Sandbox Key');
-                      setGenerateError(null);
-                      setIsGenerateModalOpen(true);
-                    }}
-                    className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
-                  >
-                    Generate Sandbox Key
-                  </button>
-                )}
-              </div>
-            )}
 
-            {/* List of Revoked / Inactive Sandbox Keys */}
-            {testKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
-              <div className="pt-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                  Revoked Sandbox Keys
-                </span>
-                <div className="space-y-1.5">
-                  {testKeys
-                    .filter((k) => k.status !== 'ACTIVE')
-                    .map((k) => (
-                      <div
-                        key={k.id}
-                        className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
-                      >
-                        <span className="font-mono line-through">{k.keyPrefix}...</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
-                          {canManageKeys && (
-                            <button
-                              onClick={() => {
-                                setDeletingKey(k);
-                                setDeleteError(null);
-                              }}
-                              className="text-slate-400 hover:text-rose-600 p-1"
-                              title="Delete revoked key permanently"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                {/* Sandbox Signing Secret */}
+                {webhookTestSecret && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 text-xs">
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                        Sandbox Webhook HMAC Secret (Header: <code>x-baxato-signature</code>)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-slate-900 dark:text-slate-100 font-bold select-all">
+                          {showWebhookTestSecret
+                            ? webhookTestSecret
+                            : `${webhookTestSecret.slice(0, 10)}••••••••••••••••••••••••••••••••`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowWebhookTestSecret(!showWebhookTestSecret)}
+                          className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                          title={showWebhookTestSecret ? 'Hide Secret' : 'Show Full Secret'}
+                        >
+                          {showWebhookTestSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
-                    ))}
-                </div>
-              </div>
-            )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(webhookTestSecret, 'whsec_test')}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
+                      >
+                        {copiedKeyId === 'whsec_test' ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-500" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy Secret</span>
+                          </>
+                        )}
+                      </button>
+
+                      {canManageKeys && (
+                        <button
+                          type="button"
+                          onClick={handleRollWebhookTestSecret}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          Roll Secret
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </form>
+            </div>
           </div>
 
-          {/* SECTION 2: PRODUCTION / LIVE KEY (AT BOTTOM) */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+          {/* ========================================================================= */}
+          {/* SECTION 2: PRODUCTION ENVIRONMENT (LIVE MODE)                              */}
+          {/* ========================================================================= */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
                   <Key className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Production API Key (Live Mode)
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Used on your production server to vend live airtime, data, power, and exam PINs.
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      Production Environment
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      Live Mode
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Used by your live backend server to vend airtime, electricity, data, and exam PINs with real funds.
                   </p>
                 </div>
               </div>
@@ -787,7 +1056,7 @@ export default function DeveloperKeysPage() {
                     setGenerateError(null);
                     setIsGenerateModalOpen(true);
                   }}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Production Key</span>
@@ -795,328 +1064,301 @@ export default function DeveloperKeysPage() {
               )}
             </div>
 
-            {/* KYC Guard for Live Keys */}
+            {/* KYC Guard for Live Credentials */}
             {!isVerified ? (
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
                     <Lock className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-                      Identity Verification Required for Production Keys
+                      Identity Verification Required for Production Credentials
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Verify your business identity (NIMC / BVN) to unlock real live vending credentials.
+                      Verify your business identity (NIMC / BVN) to unlock real live vending credentials and webhooks.
                     </p>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setIsKycModalOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold shrink-0 shadow-xs transition-colors"
+                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold shrink-0 shadow-xs transition-colors self-start sm:self-auto"
                 >
                   Verify Now
                 </button>
               </div>
-            ) : activeLiveKey ? (
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1 min-w-0">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                    {activeLiveKey.name}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
-                      {activeLiveKey.keyPrefix}••••••••••••••••••••••••••••••••
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => copyToClipboard(activeLiveKey.keyPrefix, activeLiveKey.id)}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
-                  >
-                    {copiedKeyId === activeLiveKey.id ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Prefix</span>
-                      </>
-                    )}
-                  </button>
-
-                  {canManageKeys && (
-                    <>
-                      <button
-                        onClick={() => {
-                          setRotatingKey(activeLiveKey);
-                          setRotateError(null);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
-                        <span>Roll Key</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRevokingKey(activeLiveKey);
-                          setRevokeError(null);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title="Revoke key"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
             ) : (
-              <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  No active Production key found.
-                </p>
-                {canManageKeys && (
-                  <button
-                    onClick={() => {
-                      setNewKeyEnv('LIVE');
-                      setNewKeyName('Production Key');
-                      setGenerateError(null);
-                      setIsGenerateModalOpen(true);
-                    }}
-                    className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
-                  >
-                    Generate Production Key
-                  </button>
-                )}
-              </div>
-            )}
+              <>
+                {/* Subsection 2A: Production API Key Card */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Production API Key
+                  </label>
 
-            {/* List of Revoked / Inactive Live Keys */}
-            {isVerified && liveKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
-              <div className="pt-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                  Revoked Production Keys
-                </span>
-                <div className="space-y-1.5">
-                  {liveKeys
-                    .filter((k) => k.status !== 'ACTIVE')
-                    .map((k) => (
-                      <div
-                        key={k.id}
-                        className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
-                      >
-                        <span className="font-mono line-through">{k.keyPrefix}...</span>
+                  {activeLiveKey ? (
+                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
-                          {canManageKeys && (
-                            <button
-                              onClick={() => {
-                                setDeletingKey(k);
-                                setDeleteError(null);
-                              }}
-                              className="text-slate-400 hover:text-rose-600 p-1"
-                              title="Delete revoked key permanently"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            {activeLiveKey.name}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
+                            ACTIVE
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                            {activeLiveKey.keyPrefix}••••••••••••••••••••••••••••••••
+                          </span>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-slate-800">
+                        <button
+                          onClick={() => copyToClipboard(activeLiveKey.keyPrefix, activeLiveKey.id)}
+                          className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                        >
+                          {copiedKeyId === activeLiveKey.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Copied Prefix</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Prefix</span>
+                            </>
+                          )}
+                        </button>
+
+                        {canManageKeys && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setRotatingKey(activeLiveKey);
+                                setRotateError(null);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-[#126BEB]" />
+                              <span>Roll Key</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRevokingKey(activeLiveKey);
+                                setRevokeError(null);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                              title="Revoke key"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-6 px-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        No active Production key found.
+                      </p>
+                      {canManageKeys && (
+                        <button
+                          onClick={() => {
+                            setNewKeyEnv('LIVE');
+                            setNewKeyName('Production Key');
+                            setGenerateError(null);
+                            setIsGenerateModalOpen(true);
+                          }}
+                          className="mt-2 text-xs font-bold text-[#126BEB] hover:underline"
+                        >
+                          Generate Production Key
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Revoked Production Keys list */}
+                  {liveKeys.filter((k) => k.status !== 'ACTIVE').length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                        Revoked Production Keys
+                      </span>
+                      <div className="space-y-1.5">
+                        {liveKeys
+                          .filter((k) => k.status !== 'ACTIVE')
+                          .map((k) => (
+                            <div
+                              key={k.id}
+                              className="px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#071120] text-xs flex items-center justify-between text-slate-500"
+                            >
+                              <span className="font-mono line-through text-[11px]">
+                                {k.keyPrefix.slice(0, 16)}...
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-rose-500 font-bold uppercase">Revoked</span>
+                                {canManageKeys && (
+                                  <button
+                                    onClick={() => {
+                                      setDeletingKey(k);
+                                      setDeleteError(null);
+                                    }}
+                                    className="text-slate-400 hover:text-rose-600 p-1"
+                                    title="Delete revoked key record"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {/* Subsection 2B: Production Webhook Configuration */}
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Webhook className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      Production Webhook Destination
+                    </h3>
+                  </div>
+
+                  {webhookLiveMessage && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                        webhookLiveMessage.type === 'success'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+                          : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
+                      }`}
+                    >
+                      {webhookLiveMessage.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-relaxed">{webhookLiveMessage.text}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSaveWebhookLive} className="space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://api.yourdomain.com/webhooks/production"
+                        value={webhookLiveUrl}
+                        onChange={(e) => setWebhookLiveUrl(e.target.value)}
+                        required
+                        disabled={!canManageKeys || isSavingWebhookLive}
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                      />
+
+                      <div className="flex items-center gap-2">
+                        {initialWebhookLiveUrl && (
+                          <button
+                            type="button"
+                            onClick={handleTestWebhookLivePing}
+                            disabled={isTestingWebhookLive || isSavingWebhookLive}
+                            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors disabled:opacity-60"
+                            title="Send test ping to Production endpoint"
+                          >
+                            {isTestingWebhookLive ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Send className="w-3.5 h-3.5 text-emerald-500" />
+                            )}
+                            <span>Ping Test</span>
+                          </button>
+                        )}
+
+                        {canManageKeys && (
+                          <button
+                            type="submit"
+                            disabled={isSavingWebhookLive || webhookLiveUrl === initialWebhookLiveUrl}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60"
+                          >
+                            {isSavingWebhookLive ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <span>Save Production Webhook</span>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400">
+                      Live events and transactions with real money are signed and sent to this endpoint via secure HTTPS.
+                    </p>
+
+                    {/* Production Signing Secret */}
+                    {webhookLiveSecretPrefix && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                            Production Webhook HMAC Secret (Header: <code>x-baxato-signature</code>)
+                          </span>
+                          <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-bold">
+                            {webhookLiveSecretPrefix}••••••••••••••••
+                          </span>
+                        </div>
+
+                        {canManageKeys && (
+                          <button
+                            type="button"
+                            onClick={handleRollWebhookLiveSecret}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors self-start sm:self-auto"
+                          >
+                            Roll Secret
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </form>
+                </div>
+              </>
             )}
           </div>
 
-          {/* SECTION 3: WEBHOOK SETUP & EVENTS */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-                  <Webhook className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Webhook Destination & Events
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Receive instant real-time HTTP callbacks whenever transactions succeed or fail.
-                  </p>
-                </div>
+          {/* ========================================================================= */}
+          {/* SECTION 3: WEBHOOK EVENTS & LOGS REDIRECT BANNER                          */}
+          {/* ========================================================================= */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                <Webhook className="w-5 h-5" />
               </div>
-            </div>
-
-            {/* Webhook URL Form */}
-            <form onSubmit={handleSaveWebhook} className="space-y-4">
-              {webhookMessage && (
-                <div
-                  className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
-                    webhookMessage.type === 'success'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200'
-                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
-                  }`}
-                >
-                  {webhookMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  )}
-                  <span className="leading-relaxed">{webhookMessage.text}</span>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Endpoint URL
-                </label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://api.yourdomain.com/webhooks/baxato"
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    required
-                    disabled={!canManageKeys || isSavingWebhook}
-                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-slate-900 dark:text-white text-xs font-mono focus:outline-hidden focus:ring-2 focus:ring-[#126BEB]"
-                  />
-
-                  <div className="flex items-center gap-2">
-                    {initialWebhookUrl && (
-                      <button
-                        type="button"
-                        onClick={handleTestWebhookPing}
-                        disabled={isTestingWebhook || isSavingWebhook}
-                        className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors disabled:opacity-60"
-                      >
-                        {isTestingWebhook ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Send className="w-3.5 h-3.5 text-purple-500" />
-                        )}
-                        <span>Ping Test</span>
-                      </button>
-                    )}
-
-                    {canManageKeys && (
-                      <button
-                        type="submit"
-                        disabled={isSavingWebhook || webhookUrl === initialWebhookUrl}
-                        className="px-4 py-2.5 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60"
-                      >
-                        {isSavingWebhook ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Pinging & Saving...</span>
-                          </>
-                        ) : (
-                          <span>Save Webhook</span>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Before saving, BAXATO verifies your server by dispatching a test ping. The endpoint must respond with HTTP 200 OK.
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Looking for Webhook Delivery Logs?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Inspect outbound delivery attempts, HTTP response statuses, payloads, and retry failed webhook events.
                 </p>
               </div>
-
-              {webhookSecretPrefix && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 text-xs">
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
-                      Webhook HMAC Signing Secret
-                    </span>
-                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-bold">
-                      {webhookSecretPrefix}••••••••••••••••
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Header: x-baxato-signature
-                  </span>
-                </div>
-              )}
-            </form>
-
-            {/* Webhook Deliveries Log Table */}
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Recent Webhook Deliveries
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Last {deliveries.length} events
-                </span>
-              </div>
-
-              {deliveries.length === 0 ? (
-                <div className="py-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
-                  No outbound webhook deliveries logged yet.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                        <th className="py-2 px-3">Event</th>
-                        <th className="py-2 px-3">Status</th>
-                        <th className="py-2 px-3">Attempts</th>
-                        <th className="py-2 px-3">Time</th>
-                        <th className="py-2 px-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                      {deliveries.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50">
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800 dark:text-slate-200">
-                            {item.eventType}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            {item.status === 'SUCCESSFUL' ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{item.responseStatus || 200} OK</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>{item.responseStatus ? `HTTP ${item.responseStatus}` : 'Failed'}</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500">
-                            {item.attempts}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-400 text-[11px]">
-                            {new Date(item.createdAt).toLocaleTimeString('en-NG', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <button
-                              onClick={() => handleRetryDelivery(item.id)}
-                              disabled={retryingDeliveryId === item.id}
-                              className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
-                            >
-                              {retryingDeliveryId === item.id ? 'Retrying...' : 'Re-send'}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
+
+            <Link
+              href="/dashboard/webhooks"
+              className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 text-xs font-bold shrink-0 flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+            >
+              <span>View Webhook Events</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </main>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODALS                                                                    */}
+      {/* ========================================================================= */}
 
       {/* MODAL 1: Generate New Key Modal */}
       {isGenerateModalOpen && (
@@ -1194,7 +1436,7 @@ export default function DeveloperKeysPage() {
         </div>
       )}
 
-      {/* MODAL 2: Secret Reveal Modal (Shown ONCE) */}
+      {/* MODAL 2: Secret Reveal Modal */}
       {revealedSecretData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5">
@@ -1215,15 +1457,21 @@ export default function DeveloperKeysPage() {
             <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 text-xs space-y-1">
               <div className="font-bold flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>Save your API key now</span>
+                <span>
+                  {revealedSecretData.apiKey.environment === 'LIVE'
+                    ? 'Save your Production API key now'
+                    : 'Sandbox Secret Key Issued'}
+                </span>
               </div>
               <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-                This secret key will <strong>never be shown again</strong>. Please copy it and store it securely in your environment variables.
+                {revealedSecretData.apiKey.environment === 'LIVE'
+                  ? 'Live keys are permanently masked after closing this dialog for your account security. Store it securely in your production environment.'
+                  : 'You can unmask and view your Sandbox key at any time directly on this setup page.'}
               </p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-900 dark:bg-[#060D18] border border-slate-800 space-y-2">
-              <div className="p-2.5 rounded-lg bg-black/40 border border-white/10 font-mono text-xs font-bold text-[#38BDF8] break-all">
+              <div className="p-2.5 rounded-lg bg-black/40 border border-white/10 font-mono text-xs font-bold text-[#38BDF8] break-all select-all">
                 {revealedSecretData.secretKey}
               </div>
 

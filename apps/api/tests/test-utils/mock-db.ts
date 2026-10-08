@@ -38,6 +38,8 @@ export interface MockBusiness {
   status: string;
   webhookUrl?: string | null;
   webhookSecret?: string | null;
+  webhookTestUrl?: string | null;
+  webhookTestSecret?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -90,9 +90,9 @@ export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const businessId = request.businessId!;
-      const { eventType } = parseResult.data as TestWebhookInput;
+      const { eventType, environment } = parseResult.data as TestWebhookInput;
 
-      const result = await webhookDispatcherService.testWebhook(businessId, eventType);
+      const result = await webhookDispatcherService.testWebhook(businessId, eventType, environment);
       return reply.send(createSuccessResponse(result, request.id));
     },
   );

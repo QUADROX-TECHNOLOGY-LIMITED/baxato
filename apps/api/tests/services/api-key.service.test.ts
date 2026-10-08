@@ -73,7 +73,7 @@ describe('ApiKeyService (Developer Platform Key Management)', () => {
       expect(res.apiKey.name).toBe('Sandbox Integration Key');
       expect(res.apiKey.environment).toBe(ApiKeyEnvironment.TEST);
       expect(res.apiKey.status).toBe(ApiKeyStatus.ACTIVE);
-      expect(res.apiKey.keyPrefix).toBe(`${res.secretKey.slice(0, 14)}...`);
+      expect(res.apiKey.keyPrefix).toBe(res.secretKey);
       expect(res.apiKey.businessId).toBe(testBizId);
 
       // Verify stored in DB

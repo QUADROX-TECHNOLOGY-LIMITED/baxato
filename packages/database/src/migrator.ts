@@ -78,6 +78,10 @@ export async function runMigrations(): Promise<boolean> {
     await sql`CREATE INDEX IF NOT EXISTS team_inv_email_idx ON team_invitations(email);`;
     await sql`CREATE INDEX IF NOT EXISTS team_inv_status_idx ON team_invitations(status);`;
 
+    // Idempotent schema guarantee for Sandbox Webhook fields
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_url TEXT;`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_secret TEXT;`;
+
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;
   } catch (err: any) {

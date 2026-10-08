@@ -5,6 +5,9 @@ export interface WebhookConfigDto {
   webhookUrl: string | null;
   webhookSecretPrefix: string | null;
   hasSecret: boolean;
+  webhookTestUrl: string | null;
+  webhookTestSecret: string | null;
+  hasTestSecret: boolean;
   updatedAt: Date | null;
 }
 
@@ -12,10 +15,17 @@ export const updateWebhookConfigSchema = z.object({
   webhookUrl: z
     .string()
     .trim()
-    .url('Webhook URL must be a valid HTTP or HTTPS URL')
+    .url('Production webhook URL must be a valid HTTP or HTTPS URL')
     .or(z.literal(''))
     .optional(),
   regenerateSecret: z.boolean().optional(),
+  webhookTestUrl: z
+    .string()
+    .trim()
+    .url('Sandbox webhook URL must be a valid HTTP or HTTPS URL')
+    .or(z.literal(''))
+    .optional(),
+  regenerateTestSecret: z.boolean().optional(),
 });
 
 export type UpdateWebhookConfigInput = z.infer<typeof updateWebhookConfigSchema>;
@@ -36,6 +46,7 @@ export interface WebhookDeliveryDto {
 
 export const testWebhookSchema = z.object({
   eventType: z.nativeEnum(WebhookEventType).default(WebhookEventType.PING),
+  environment: z.enum(['LIVE', 'TEST']).default('LIVE').optional(),
 });
 
 export type TestWebhookInput = z.infer<typeof testWebhookSchema>;

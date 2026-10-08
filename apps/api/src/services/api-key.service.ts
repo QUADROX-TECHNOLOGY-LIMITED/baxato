@@ -65,7 +65,10 @@ export class ApiKeyService {
     const envPrefix = environment === ApiKeyEnvironment.LIVE ? 'bx_live' : 'bx_test';
     const secretKey = `${envPrefix}_${randomHex}`;
     const keyHash = this.hashKey(secretKey);
-    const keyPrefix = `${secretKey.slice(0, 14)}...`;
+    const keyPrefix =
+      environment === ApiKeyEnvironment.TEST
+        ? secretKey
+        : `${secretKey.slice(0, 14)}...`;
 
     const keyId = generateEntityId('key');
 

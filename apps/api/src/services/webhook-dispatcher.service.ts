@@ -119,6 +119,8 @@ export class WebhookDispatcherService {
       .select({
         webhookUrl: businesses.webhookUrl,
         webhookSecret: businesses.webhookSecret,
+        webhookTestUrl: businesses.webhookTestUrl,
+        webhookTestSecret: businesses.webhookTestSecret,
         updatedAt: businesses.updatedAt,
       })
       .from(businesses)
@@ -133,6 +135,9 @@ export class WebhookDispatcherService {
       webhookUrl: biz.webhookUrl ?? null,
       webhookSecretPrefix: biz.webhookSecret ? `${biz.webhookSecret.slice(0, 12)}...` : null,
       hasSecret: Boolean(biz.webhookSecret),
+      webhookTestUrl: biz.webhookTestUrl ?? null,
+      webhookTestSecret: biz.webhookTestSecret ?? null,
+      hasTestSecret: Boolean(biz.webhookTestSecret),
       updatedAt: biz.updatedAt ?? null,
     };
   }
@@ -144,12 +149,14 @@ export class WebhookDispatcherService {
   public async updateWebhookConfig(
     businessId: string,
     input: UpdateWebhookConfigInput,
-  ): Promise<{ config: WebhookConfigDto; newSecret?: string }> {
+  ): Promise<{ config: WebhookConfigDto; newSecret?: string; newTestSecret?: string }> {
     const [biz] = await db
       .select({
         id: businesses.id,
         webhookUrl: businesses.webhookUrl,
         webhookSecret: businesses.webhookSecret,
+        webhookTestUrl: businesses.webhookTestUrl,
+        webhookTestSecret: businesses.webhookTestSecret,
       })
       .from(businesses)
       .where(eq(businesses.id, businessId))
@@ -162,18 +169,29 @@ export class WebhookDispatcherService {
     let newSecret: string | undefined;
     let finalSecret = biz.webhookSecret;
 
-    if (input.regenerateSecret || !finalSecret) {
+    if (input.regenerateSecret || (!finalSecret && input.webhookUrl)) {
       newSecret = this.generateSecret();
       finalSecret = newSecret;
     }
 
+    let newTestSecret: string | undefined;
+    let finalTestSecret = biz.webhookTestSecret;
+
+    if (input.regenerateTestSecret || (!finalTestSecret && input.webhookTestUrl)) {
+      newTestSecret = this.generateSecret();
+      finalTestSecret = newTestSecret;
+    }
+
     const updatedUrl = input.webhookUrl !== undefined ? input.webhookUrl || null : biz.webhookUrl;
+    const updatedTestUrl = input.webhookTestUrl !== undefined ? input.webhookTestUrl || null : biz.webhookTestUrl;
 
     const [updated] = await db
       .update(businesses)
       .set({
         webhookUrl: updatedUrl,
         webhookSecret: finalSecret,
+        webhookTestUrl: updatedTestUrl,
+        webhookTestSecret: finalTestSecret,
         updatedAt: new Date(),
       })
       .where(eq(businesses.id, businessId))
@@ -188,9 +206,13 @@ export class WebhookDispatcherService {
         webhookUrl: updated.webhookUrl,
         webhookSecretPrefix: updated.webhookSecret ? `${updated.webhookSecret.slice(0, 12)}...` : null,
         hasSecret: Boolean(updated.webhookSecret),
+        webhookTestUrl: updated.webhookTestUrl,
+        webhookTestSecret: updated.webhookTestSecret,
+        hasTestSecret: Boolean(updated.webhookTestSecret),
         updatedAt: updated.updatedAt,
       },
       newSecret,
+      newTestSecret,
     };
   }
 
@@ -202,22 +224,34 @@ export class WebhookDispatcherService {
     businessId: string,
     eventType: WebhookEventType | string,
     data: T,
+    environment: 'LIVE' | 'TEST' = 'LIVE',
   ): Promise<WebhookDeliveryDto | null> {
     const [biz] = await db
       .select({
         webhookUrl: businesses.webhookUrl,
         webhookSecret: businesses.webhookSecret,
+        webhookTestUrl: businesses.webhookTestUrl,
+        webhookTestSecret: businesses.webhookTestSecret,
       })
       .from(businesses)
       .where(eq(businesses.id, businessId))
       .limit(1);
 
-    if (!biz || !biz.webhookUrl) {
+    if (!biz) {
+      return null;
+    }
+
+    const targetUrl = environment === 'TEST' ? biz.webhookTestUrl : biz.webhookUrl;
+    const targetSecret =
+      environment === 'TEST'
+        ? biz.webhookTestSecret || this.generateSecret()
+        : biz.webhookSecret || this.generateSecret();
+
+    if (!targetUrl) {
       return null;
     }
 
     const deliveryId = generateEntityId('whd');
-    const secret = biz.webhookSecret || this.generateSecret();
 
     const envelope: WebhookEventEnvelope<T> = {
       id: generateEntityId('evt'),
@@ -245,7 +279,7 @@ export class WebhookDispatcherService {
     }
 
     // Execute first delivery attempt
-    return this.executeDelivery(created.id, biz.webhookUrl, secret, envelope, 0);
+    return this.executeDelivery(created.id, targetUrl, targetSecret, envelope, 0);
   }
 
   /**
@@ -341,30 +375,44 @@ export class WebhookDispatcherService {
   public async testWebhook(
     businessId: string,
     eventType: WebhookEventType = WebhookEventType.PING,
+    environment: 'LIVE' | 'TEST' = 'LIVE',
   ): Promise<TestWebhookResult> {
     const [biz] = await db
       .select({
         webhookUrl: businesses.webhookUrl,
         webhookSecret: businesses.webhookSecret,
+        webhookTestUrl: businesses.webhookTestUrl,
+        webhookTestSecret: businesses.webhookTestSecret,
       })
       .from(businesses)
       .where(eq(businesses.id, businessId))
       .limit(1);
 
-    if (!biz || !biz.webhookUrl) {
-      throw new ValidationError('Please configure a valid Webhook URL before sending a test event.');
+    if (!biz) {
+      throw new NotFoundError(`Business with ID [${businessId}] not found`);
     }
 
-    const secret = biz.webhookSecret || this.generateSecret();
+    const targetUrl = environment === 'TEST' ? biz.webhookTestUrl : biz.webhookUrl;
+    const targetSecret =
+      environment === 'TEST'
+        ? biz.webhookTestSecret || this.generateSecret()
+        : biz.webhookSecret || this.generateSecret();
+
+    if (!targetUrl) {
+      const mode = environment === 'TEST' ? 'Sandbox' : 'Production';
+      throw new ValidationError(`Please configure a valid ${mode} Webhook URL before sending a test event.`);
+    }
+
     const timestamp = Math.floor(Date.now() / 1000);
     const testPayload = {
       id: generateEntityId('evt'),
       event: eventType,
       timestamp,
       businessId,
-      message: 'BAXATO Developer Webhook Connection Test',
+      environment,
+      message: `BAXATO Developer ${environment === 'TEST' ? 'Sandbox' : 'Production'} Webhook Connection Test`,
       sampleData: {
-        transactionId: 'txn_test_preview_9981',
+        transactionId: `txn_${environment.toLowerCase()}_preview_9981`,
         amountNaira: 1000.0,
         currency: 'NGN',
         status: 'SUCCESSFUL',
@@ -372,16 +420,17 @@ export class WebhookDispatcherService {
     };
 
     const payloadString = JSON.stringify(testPayload);
-    const signature = this.generateSignature(payloadString, secret, timestamp);
+    const signature = this.generateSignature(payloadString, targetSecret, timestamp);
     const startTime = Date.now();
 
     try {
-      const response = await fetch(biz.webhookUrl, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'BAXATO-Webhook-Dispatcher/1.0 (Test-Ping)',
+          'User-Agent': `BAXATO-Webhook-Dispatcher/1.0 (${environment === 'TEST' ? 'Sandbox' : 'Production'}-Ping)`,
           'x-baxato-signature': signature,
+          'x-baxato-environment': environment,
           'x-baxato-test': 'true',
         },
         body: payloadString,
