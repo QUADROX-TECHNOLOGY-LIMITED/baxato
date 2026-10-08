@@ -37,6 +37,8 @@ interface SidebarProps {
 }
 
 const ROLE_TITLES: Record<string, string> = {
+  SUPER_ADMIN: 'Platform Owner',
+  STAFF: 'Platform Staff',
   BUSINESS_OWNER: 'Business Owner',
   BUSINESS_ADMIN: 'Administrator',
   DEVELOPER: 'Developer',
@@ -121,6 +123,17 @@ export default function Sidebar({
         ],
       },
     ];
+
+    const isStaffOrAdmin = activeRole === 'STAFF' || activeRole === 'SUPER_ADMIN';
+    const staffGroup = {
+      id: 'STAFF_OPERATIONS',
+      title: 'STAFF OPERATIONS',
+      items: [{ label: 'Staff Console', href: '/dashboard/admin', icon: ShieldCheck }],
+    };
+
+    if (isStaffOrAdmin) {
+      return [staffGroup, ...allGroups];
+    }
 
     if (isOwnerOrAdmin) {
       return allGroups;

@@ -24,6 +24,8 @@ interface HeaderProps {
 }
 
 const ROLE_TITLES: Record<string, string> = {
+  SUPER_ADMIN: 'Platform Owner',
+  STAFF: 'Platform Staff',
   BUSINESS_OWNER: 'Business Owner',
   BUSINESS_ADMIN: 'Administrator',
   DEVELOPER: 'Developer',

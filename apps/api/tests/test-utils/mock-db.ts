@@ -338,6 +338,22 @@ function isApiKeysTable(t: unknown): boolean {
   return false;
 }
 
+function isKycVerificationsTable(t: unknown): boolean {
+  if (t === 'kyc_verifications' || t === 'kycVerifications') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      'matchScore' in obj ||
+      'match_score' in obj ||
+      'photoExtracted' in obj ||
+      'photo_extracted' in obj ||
+      obj._name === 'kyc_verifications' ||
+      obj.name === 'kyc_verifications'
+    );
+  }
+  return false;
+}
+
 function isProvidersTable(t: unknown): boolean {
   if (t === 'providers') return true;
   if (typeof t === 'object' && t !== null) {
@@ -713,6 +729,14 @@ export function createMockDatabase() {
     kycVerifications: {
       id: 'id',
       userId: 'user_id',
+      nin: 'nin',
+      dob: 'dob',
+      status: 'status',
+      matchScore: 'match_score',
+      photoExtracted: 'photo_extracted',
+      failureReason: 'failure_reason',
+      verifiedAt: 'verified_at',
+      createdAt: 'created_at',
     },
     serviceTransactions: {
       id: 'id',
@@ -793,12 +817,16 @@ export function createMockDatabase() {
       config: 'config',
     },
     desc: (col: unknown) => ({ type: 'desc', col }),
+    asc: (col: unknown) => ({ type: 'asc', col }),
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
     eq: (col: unknown, val: unknown) => ({ type: 'eq', col: getColName(col), val }),
     lte: (col: unknown, val: unknown) => ({ type: 'lte', col: getColName(col), val }),
+    ilike: (col: unknown, val: unknown) => ({ type: 'ilike', col: getColName(col), val }),
+    like: (col: unknown, val: unknown) => ({ type: 'like', col: getColName(col), val }),
+    or: (...conditions: unknown[]) => ({ type: 'or', conditions }),
     and: (...conditions: Array<{ type: string; col: unknown; val: unknown }>) => ({
       type: 'and',
-      conditions: conditions.map((c) => ({ ...c, col: getColName(c.col) })),
+      conditions: conditions.map((c) => ({ ...c, col: getColName(c?.col) })),
     }),
     db: {
       select: (fields?: unknown) => ({
@@ -1076,6 +1104,19 @@ export function createMockDatabase() {
                 }
               }
               return inMemoryDb.auditLogs;
+            }
+
+            if (isKycVerificationsTable(table)) {
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'user_id' || col === 'userid') return inMemoryDb.kycVerifications.filter((k) => k.userId === p.val);
+                  if (col === 'nin') return inMemoryDb.kycVerifications.filter((k) => k.nin === p.val);
+                  if (col === 'status') return inMemoryDb.kycVerifications.filter((k) => k.status === p.val);
+                }
+              }
+              return inMemoryDb.kycVerifications;
             }
 
             if (isProvidersTable(table)) {
