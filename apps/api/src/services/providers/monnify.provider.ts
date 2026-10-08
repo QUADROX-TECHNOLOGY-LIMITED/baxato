@@ -166,13 +166,58 @@ export const DISCO_CODE_TO_MONNIFY: Record<
   },
 };
 
+export const OPERATOR_TO_MONNIFY_BILLER: Record<string, string> = {
+  DSTV: 'biller-dstv',
+  GOTV: 'biller-gotv',
+  STARTIMES: 'biller-startimes',
+  SHOWMAX: 'biller-showmax',
+  'biller-dstv': 'biller-dstv',
+  'biller-gotv': 'biller-gotv',
+  'biller-startimes': 'biller-startimes',
+  'biller-showmax': 'biller-showmax',
+};
+
 export const INTERSWITCH_TO_MONNIFY_CABLE: Record<
   string,
   { billerCode: string; productCode: string }
 > = {
-  '104154': { billerCode: 'DSTV', productCode: 'DSTV' },
-  '459137': { billerCode: 'GOTV', productCode: 'GOTV' },
-  '24019': { billerCode: 'STARTIMES', productCode: 'STARTIMES' },
+  // DStv Bouquets (Biller: biller-dstv)
+  '104154': { billerCode: 'biller-dstv', productCode: 'prd-dstv-padi' },
+  '104152': { billerCode: 'biller-dstv', productCode: 'prd-dstv-yng-e36' },
+  '104153': { billerCode: 'biller-dstv', productCode: 'prd-dstv-cfm-e36' },
+  '10403': { billerCode: 'biller-dstv', productCode: 'prd-dstv-cmp-e36' },
+  '10430': { billerCode: 'biller-dstv', productCode: 'prd-dstv-cppl-e36' },
+  '10401': { billerCode: 'biller-dstv', productCode: 'prd-dstv-prwa-e36' },
+  '10436': { billerCode: 'biller-dstv', productCode: 'prd-dstv-hdpvr' },
+  '104181': { billerCode: 'biller-dstv', productCode: 'prd-dstv-prstg' },
+
+  // GOtv Bouquets (Biller: biller-gotv)
+  '459137': { billerCode: 'biller-gotv', productCode: 'prd-gotv-smallie-mo' },
+  '459120': { billerCode: 'biller-gotv', productCode: 'product-gotv-jinja' },
+  '459121': { billerCode: 'biller-gotv', productCode: 'product-gotv-jolli' },
+  '459119': { billerCode: 'biller-gotv', productCode: 'product-gotv-max' },
+  '459133': { billerCode: 'biller-gotv', productCode: 'product-gotv-supa' },
+  '459134': { billerCode: 'biller-gotv', productCode: 'prd-gotv-supa-pls' },
+
+  // StarTimes Bouquets (Biller: biller-startimes)
+  '24019': { billerCode: 'biller-startimes', productCode: 'product-star-nova' },
+  '24018': { billerCode: 'biller-startimes', productCode: 'prd-star-nova-week' },
+  '24017': { billerCode: 'biller-startimes', productCode: 'product-star-basic' },
+  '24016': { billerCode: 'biller-startimes', productCode: 'prd-star-basic-week' },
+  '24013': { billerCode: 'biller-startimes', productCode: 'product-star-classic' },
+  '24012': { billerCode: 'biller-startimes', productCode: 'prd-star-cl-week' },
+  '24025': { billerCode: 'biller-startimes', productCode: 'prd-star-sup' },
+  '24024': { billerCode: 'biller-startimes', productCode: 'prd-star-sup-week' },
+  '24004': { billerCode: 'biller-startimes', productCode: 'prd-star-nova-d' },
+  '24008': { billerCode: 'biller-startimes', productCode: 'product-star-smart' },
+  '24021': { billerCode: 'biller-startimes', productCode: 'prd-star-cl-d' },
+  '24006': { billerCode: 'biller-startimes', productCode: 'product-star-d-super' },
+
+  // Base Operator Defaults
+  DSTV: { billerCode: 'biller-dstv', productCode: 'prd-dstv-padi' },
+  GOTV: { billerCode: 'biller-gotv', productCode: 'prd-gotv-smallie-mo' },
+  STARTIMES: { billerCode: 'biller-startimes', productCode: 'product-star-nova' },
+  SHOWMAX: { billerCode: 'biller-showmax', productCode: 'prd-shwmx-mbl-1' },
 };
 
 
@@ -337,19 +382,22 @@ export class MonnifyProvider implements ProviderAdapter {
         productCode = request.paymentCode;
       }
     } else if (request.serviceType === ServiceType.CABLE_TV) {
+      const op = String(request.metadata?.operator || request.paymentCode || '').toUpperCase();
       const mapped =
         INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
+        INTERSWITCH_TO_MONNIFY_CABLE[op] ||
         (request.metadata?.monnifyProductCode
           ? {
               billerCode:
                 (request.metadata.monnifyBillerCode as string) ||
-                (request.metadata.operator as string),
+                OPERATOR_TO_MONNIFY_BILLER[op] ||
+                `biller-${op.toLowerCase()}`,
               productCode: request.metadata.monnifyProductCode as string,
             }
           : null);
 
       if (mapped) {
-        billerCode = mapped.billerCode;
+        billerCode = OPERATOR_TO_MONNIFY_BILLER[mapped.billerCode] || mapped.billerCode;
         productCode = mapped.productCode;
       }
     }
@@ -507,22 +555,25 @@ export class MonnifyProvider implements ProviderAdapter {
       }
 
       case ServiceType.CABLE_TV: {
+        const op = String(request.metadata?.operator || '').toUpperCase();
         const mapped =
           INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
+          INTERSWITCH_TO_MONNIFY_CABLE[op] ||
           (request.metadata?.monnifyProductCode
             ? {
                 billerCode:
                   (request.metadata.monnifyBillerCode as string) ||
-                  (request.metadata.operator as string),
+                  OPERATOR_TO_MONNIFY_BILLER[op] ||
+                  `biller-${op.toLowerCase()}`,
                 productCode: request.metadata.monnifyProductCode as string,
               }
             : null);
 
         if (mapped) {
-          billerCode = mapped.billerCode;
+          billerCode = OPERATOR_TO_MONNIFY_BILLER[mapped.billerCode] || mapped.billerCode;
           productCode = mapped.productCode;
         } else {
-          billerCode = request.paymentCode;
+          billerCode = OPERATOR_TO_MONNIFY_BILLER[request.paymentCode] || request.paymentCode;
           productCode = (request.metadata?.productCode as string) || request.paymentCode;
         }
         break;

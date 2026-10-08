@@ -87,8 +87,7 @@ export class ProviderRouterService {
       allowFailover: false,
     });
 
-    // Cable TV is direct on Interswitch Quickteller Orion (Biller 104, 459, 240)
-    // Monnify VAS bills-payment is unprovisioned on Cable TV and rejects validation.
+    // Cable TV is supported on both Interswitch Quickteller Orion (Biller 104, 459, 240) and Monnify VAS
     this.routingConfigs.set(ServiceType.CABLE_TV, {
       serviceType: ServiceType.CABLE_TV,
       strategy: ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
