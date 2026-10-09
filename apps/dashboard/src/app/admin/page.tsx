@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,29 +13,17 @@ import {
   XCircle,
   Copy,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Tv,
-  GraduationCap,
   Zap,
   Smartphone,
   Wifi,
-  Layers,
   ArrowRightLeft,
   UserCheck,
-  Building,
-  CreditCard,
   Lock,
-  ExternalLink,
-  Eye,
   X,
-  Server,
-  Activity,
-  ArrowUpRight,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
-import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import {
   getStoredAuthToken,
@@ -50,6 +38,9 @@ export default function AdminStaffBackofficePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
 
+  // Authorization state: null = verifying auth, false = denied, true = authorized
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+
   // Session & User State
   const [userRole, setUserRole] = useState<string>('');
   const [merchantName, setMerchantName] = useState<string>('Staff User');
@@ -57,11 +48,10 @@ export default function AdminStaffBackofficePage() {
   const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   // Operational Overview State
   const [overviewData, setOverviewData] = useState<any>(null);
-  const [isLoadingOverview, setIsLoadingOverview] = useState<boolean>(true);
+  const [isLoadingOverview, setIsLoadingOverview] = useState<boolean>(false);
 
   // Transactions Desk State
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -98,10 +88,11 @@ export default function AdminStaffBackofficePage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // 1. Initial Authorization Check
+  // 1. Strict Auth Verification (Runs immediately on client mount)
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
+      setIsAuthorized(false);
       clearSessionAndRedirect('expired');
       return;
     }
@@ -109,20 +100,14 @@ export default function AdminStaffBackofficePage() {
     const user = getStoredUser();
     const biz = getStoredBusiness();
 
-    if (user) {
-      setUserRole(user.role || '');
+    if (user && (user.role === 'STAFF' || user.role === 'SUPER_ADMIN')) {
+      setUserRole(user.role);
       setMerchantName(`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Staff');
-      if (user.role === 'STAFF' || user.role === 'SUPER_ADMIN') {
-        setIsAuthorized(true);
-      } else {
-        setIsAuthorized(false);
-      }
+      if (biz?.name) setBusinessName(biz.name);
+      setIsAuthorized(true);
     } else {
+      // Immediate lock out — user is regular merchant or unauthenticated
       setIsAuthorized(false);
-    }
-
-    if (biz?.name) {
-      setBusinessName(biz.name);
     }
   }, []);
 
@@ -139,12 +124,8 @@ export default function AdminStaffBackofficePage() {
       const data = await res.json();
       if (res.ok && data?.success) {
         setOverviewData(data.data);
-        if (data.data?.providers?.health) {
-          setProvidersHealth(data.data.providers.health);
-        }
-        if (data.data?.providers?.routing) {
-          setRoutingConfig(data.data.providers.routing);
-        }
+        if (data.data?.providers?.health) setProvidersHealth(data.data.providers.health);
+        if (data.data?.providers?.routing) setRoutingConfig(data.data.providers.routing);
       }
     } catch (err) {
       console.error('Failed to load admin overview:', err);
@@ -231,9 +212,9 @@ export default function AdminStaffBackofficePage() {
     }
   };
 
-  // Trigger loads when tabs switch
+  // Trigger loads when tab changes, but ONLY if authorized
   useEffect(() => {
-    if (isAuthorized) {
+    if (isAuthorized === true) {
       if (activeTab === 'overview') loadOverview();
       if (activeTab === 'transactions') loadTransactions();
       if (activeTab === 'routing') loadProviderHealth();
@@ -256,7 +237,6 @@ export default function AdminStaffBackofficePage() {
       const data = await res.json();
       if (res.ok && data?.success) {
         setRequeryMessage(`Upstream Sync Complete: Status is ${data.data.currentStatus}`);
-        // Refresh local list and selected item
         loadTransactions();
         if (selectedTx && selectedTx.id === txId) {
           setSelectedTx((prev: any) => ({
@@ -282,7 +262,6 @@ export default function AdminStaffBackofficePage() {
       const token = getStoredAuthToken();
       if (!token) return;
 
-      // Flip primary provider: If Monnify is primary, flip to Interswitch primary; else flip to Monnify primary
       const newStrategy =
         currentPrimary === 'MONNIFY'
           ? 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK'
@@ -315,21 +294,30 @@ export default function AdminStaffBackofficePage() {
     }
   };
 
-  // If unauthorized
+  // 1. Silent loading state while evaluating auth — ABSOLUTELY ZERO CONTENT FLASH
+  if (isAuthorized === null) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-[#126BEB] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  // 2. Unauthorized Screen for non-staff accounts
   if (isAuthorized === false) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] flex items-center justify-center p-6 text-slate-900 dark:text-white">
-        <div className="max-w-md w-full bg-white dark:bg-[#0D1726] border border-red-500/30 rounded-2xl p-8 text-center shadow-xl">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center shadow-xl">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
             <Lock className="w-7 h-7" />
           </div>
           <h2 className="text-xl font-bold mb-2">Restricted Staff Area</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-            Your current account role does not have authorization to access internal Staff & Operations modules.
+            This console is strictly reserved for authorized Baxato Staff and Platform Administrators.
           </p>
           <Link
             href="/dashboard"
-            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl font-medium bg-[#126BEB] text-white hover:bg-[#0E58C4] transition shadow-md shadow-blue-500/20"
+            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl font-medium bg-[#126BEB] text-white hover:bg-[#0E58C4] transition shadow-md shadow-blue-500/20 text-xs"
           >
             Return to Merchant Dashboard
           </Link>
@@ -338,6 +326,7 @@ export default function AdminStaffBackofficePage() {
     );
   }
 
+  // 3. Authorized View: Rendered ONLY when isAuthorized === true
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-white">
       {/* Sidebar */}

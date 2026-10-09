@@ -128,7 +128,7 @@ export default function Sidebar({
     const staffGroup = {
       id: 'STAFF_OPERATIONS',
       title: 'STAFF OPERATIONS',
-      items: [{ label: 'Staff Console', href: '/dashboard/admin', icon: ShieldCheck }],
+      items: [{ label: 'Staff Console', href: '/admin', icon: ShieldCheck }],
     };
 
     if (isStaffOrAdmin) {
