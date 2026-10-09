@@ -387,7 +387,7 @@ export class InterswitchProvider implements ProviderAdapter {
     const token = await this.getAccessToken();
 
     const res = await fetch(
-      `${this.config.baseUrl}/quicktellerservice/api/v5/transactions?requestReference=${requestReference}`,
+      `${this.config.baseUrl}/quicktellerservice/api/v5/Transactions?requestRef=${encodeURIComponent(requestReference)}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -399,21 +399,35 @@ export class InterswitchProvider implements ProviderAdapter {
     const rawData = await safeParseResponse(res);
     const data = (rawData || {}) as {
       ResponseCode?: string;
+      TransactionResponseCode?: string;
       ResponseDescription?: string;
       TransactionRef?: string;
       ApprovedAmount?: string;
+      Amount?: string;
+      Status?: string;
+      ResponseCodeGrouping?: string;
     };
 
-    const isSuccess = data.ResponseCode === '90000';
+    const isSuccess = Boolean(
+      data.ResponseCode === '90000' ||
+        data.TransactionResponseCode === '90000' ||
+        data.Status?.toLowerCase() === 'complete' ||
+        data.ResponseCodeGrouping === 'SUCCESSFUL',
+    );
 
     return {
       status: isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED,
       providerName: this.providerName,
-      providerReference: data.TransactionRef,
+      providerReference: data.TransactionRef || _providerReference,
       requestReference,
-      amountKobo: data.ApprovedAmount ? BigInt(data.ApprovedAmount) : undefined,
-      responseCode: data.ResponseCode || 'UNKNOWN',
-      responseMessage: data.ResponseDescription || (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
+      amountKobo: data.ApprovedAmount
+        ? BigInt(data.ApprovedAmount)
+        : data.Amount
+          ? BigInt(data.Amount)
+          : undefined,
+      responseCode: data.TransactionResponseCode || data.ResponseCode || 'UNKNOWN',
+      responseMessage:
+        data.ResponseDescription || (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
       rawResponse: data as Record<string, unknown>,
     };
   }

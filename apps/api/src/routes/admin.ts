@@ -73,7 +73,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
     const totalTx = Number(txStats?.totalCount || 0);
     const successTx = Number(txStats?.successCount || 0);
-    const successRate = totalTx > 0 ? Number(((successTx / totalTx) * 100).toFixed(2)) : 100;
+    const successRate = totalTx > 0 ? Number(((successTx / totalTx) * 100).toFixed(2)) : 0;
 
     return reply.status(200).send(
       createSuccessResponse(
@@ -353,36 +353,63 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     );
 
     let updatedStatus = tx.status;
-    if (requeryResult.status === TransactionStatus.SUCCESSFUL && tx.status !== TransactionStatus.SUCCESSFUL) {
-      updatedStatus = TransactionStatus.SUCCESSFUL;
-    } else if (requeryResult.status === TransactionStatus.FAILED && tx.status !== TransactionStatus.FAILED) {
-      updatedStatus = TransactionStatus.FAILED;
-    }
+    let syncMessage = '';
 
-    if (updatedStatus !== tx.status || requeryResult.providerReference) {
-      await db
-        .update(serviceTransactions)
-        .set({
-          status: updatedStatus,
-          providerReference: requeryResult.providerReference || tx.providerReference,
-          errorMessage: requeryResult.status === TransactionStatus.FAILED ? requeryResult.responseMessage : tx.errorMessage,
-          updatedAt: new Date(),
-        })
-        .where(eq(serviceTransactions.id, id));
+    if (tx.status === TransactionStatus.SUCCESSFUL) {
+      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+        syncMessage = 'Confirmed: Upstream gateway verifies transaction is SUCCESSFUL.';
+      } else {
+        syncMessage = `Preserved: Local state is SUCCESSFUL. Upstream returned: ${requeryResult.responseMessage || 'Inconclusive'}.`;
+      }
+      if (requeryResult.providerReference && !tx.providerReference) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            providerReference: requeryResult.providerReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, id));
+      }
+    } else {
+      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+        updatedStatus = TransactionStatus.SUCCESSFUL;
+        syncMessage = 'Updated: Upstream gateway confirmed transaction is SUCCESSFUL.';
+      } else if (
+        requeryResult.status === TransactionStatus.FAILED &&
+        requeryResult.responseCode !== 'UNKNOWN' &&
+        requeryResult.responseCode !== '20010'
+      ) {
+        updatedStatus = TransactionStatus.FAILED;
+        syncMessage = `Updated: Upstream gateway confirmed transaction is FAILED (${requeryResult.responseMessage}).`;
+      } else {
+        syncMessage = `Unchanged: Upstream response code ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+      }
 
-      await auditService.log({
-        userId: request.user?.id,
-        businessId: tx.businessId,
-        action: 'ADMIN_TRANSACTION_REQUERY_SYNC',
-        resourceType: 'TRANSACTION',
-        resourceId: id,
-        changes: {
-          previousStatus: tx.status,
-          newStatus: updatedStatus,
-          providerResponseCode: requeryResult.responseCode,
-          providerMessage: requeryResult.responseMessage,
-        },
-      });
+      if (updatedStatus !== tx.status || requeryResult.providerReference) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: updatedStatus,
+            providerReference: requeryResult.providerReference || tx.providerReference,
+            errorMessage: requeryResult.status === TransactionStatus.FAILED ? requeryResult.responseMessage : tx.errorMessage,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, id));
+
+        await auditService.log({
+          userId: request.user?.id,
+          businessId: tx.businessId,
+          action: 'STAFF_TRANSACTION_REQUERY_SYNC',
+          resourceType: 'TRANSACTION',
+          resourceId: id,
+          changes: {
+            previousStatus: tx.status,
+            newStatus: updatedStatus,
+            providerResponseCode: requeryResult.responseCode,
+            providerMessage: requeryResult.responseMessage,
+          },
+        });
+      }
     }
 
     return reply.status(200).send(
@@ -390,6 +417,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         {
           transactionId: id,
           currentStatus: updatedStatus,
+          message: syncMessage,
           providerResult: {
             ...requeryResult,
             amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,
@@ -418,12 +446,36 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const conditions: any[] = [];
     if (query.search && query.search.trim()) {
       const term = `%${query.search.trim()}%`;
-      conditions.push(
-        or(
-          ilike(businesses.name, term),
-          ilike(businesses.slug, term),
-        ),
-      );
+      const matchedUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          or(
+            ilike(users.email, term),
+            ilike(users.phoneNumber, term),
+            ilike(users.nin, term),
+            ilike(users.firstName, term),
+            ilike(users.lastName, term),
+          ),
+        );
+      const matchedUserIds = matchedUsers.map((u) => u.id);
+
+      if (matchedUserIds.length > 0) {
+        conditions.push(
+          or(
+            ilike(businesses.name, term),
+            ilike(businesses.slug, term),
+            sql`${businesses.ownerId} IN ${matchedUserIds}`,
+          ),
+        );
+      } else {
+        conditions.push(
+          or(
+            ilike(businesses.name, term),
+            ilike(businesses.slug, term),
+          ),
+        );
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -444,41 +496,89 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
     const totalCount = Number(countResult[0]?.count || bizRows.length);
 
-    // Fetch owner user and wallets for each merchant
+    // Fetch owner user, all associated businesses, and wallets for each merchant
     const merchantsWithWallets = await Promise.all(
       bizRows.map(async (b) => {
-        let ownerEmail = '';
-        let ownerFirstName = '';
-        let ownerLastName = '';
-        let ownerPhone = '';
-        let kycStatus = 'UNVERIFIED';
-        let nin = '';
-        let dob = '';
+        let ownerUser: any = null;
+        let ownerBusinesses: any[] = [];
+        let kycRecord: any = null;
 
         if (b.ownerId) {
           const [owner] = await db
             .select({
+              id: users.id,
               email: users.email,
               firstName: users.firstName,
               lastName: users.lastName,
+              middleName: users.middleName,
               phoneNumber: users.phoneNumber,
+              role: users.role,
+              status: users.status,
+              isEmailVerified: users.isEmailVerified,
+              isPhoneVerified: users.isPhoneVerified,
               kycStatus: users.kycStatus,
               nin: users.nin,
               dob: users.dob,
+              ninData: users.ninData,
+              avatarUrl: users.avatarUrl,
+              createdAt: users.createdAt,
             })
             .from(users)
             .where(eq(users.id, b.ownerId))
             .limit(1);
 
-          if (owner) {
-            ownerEmail = owner.email;
-            ownerFirstName = owner.firstName;
-            ownerLastName = owner.lastName;
-            ownerPhone = owner.phoneNumber || '';
-            kycStatus = owner.kycStatus;
-            nin = owner.nin || '';
-            dob = owner.dob || '';
-          }
+          ownerUser = owner;
+
+          // Fetch all businesses owned by this merchant user
+          const allUserBiz = await db
+            .select()
+            .from(businesses)
+            .where(eq(businesses.ownerId, b.ownerId));
+
+          ownerBusinesses = await Promise.all(
+            allUserBiz.map(async (ub) => {
+              const ubWallets = await db
+                .select({
+                  id: wallets.id,
+                  type: wallets.type,
+                  balance: wallets.balance,
+                })
+                .from(wallets)
+                .where(eq(wallets.businessId, ub.id));
+
+              const ubMain = ubWallets.find((w) => w.type === 'MAIN');
+              const ubComm = ubWallets.find((w) => w.type === 'COMMISSION');
+
+              return {
+                id: ub.id,
+                name: ub.name,
+                slug: ub.slug,
+                status: ub.status,
+                country: ub.country,
+                state: ub.state,
+                lga: ub.lga,
+                createdAt: ub.createdAt,
+                wallets: {
+                  mainBalanceKobo: ubMain ? ubMain.balance.toString() : '0',
+                  mainBalanceNaira: ubMain ? koboToNaira(ubMain.balance) : 0,
+                  formattedMain: ubMain ? formatNairaFromKobo(ubMain.balance) : '₦0.00',
+                  commissionBalanceKobo: ubComm ? ubComm.balance.toString() : '0',
+                  commissionBalanceNaira: ubComm ? koboToNaira(ubComm.balance) : 0,
+                  formattedCommission: ubComm ? formatNairaFromKobo(ubComm.balance) : '₦0.00',
+                },
+              };
+            }),
+          );
+
+          // Fetch latest KYC verification record
+          const [kRecord] = await db
+            .select()
+            .from(kycVerifications)
+            .where(eq(kycVerifications.userId, b.ownerId))
+            .orderBy(desc(kycVerifications.createdAt))
+            .limit(1);
+
+          kycRecord = kRecord || null;
         }
 
         const bizWallets = await db
@@ -500,15 +600,33 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           status: b.status,
           country: b.country,
           state: b.state,
+          lga: b.lga,
           createdAt: b.createdAt,
           ownerId: b.ownerId,
-          ownerEmail,
-          ownerFirstName,
-          ownerLastName,
-          ownerPhone,
-          kycStatus,
-          nin,
-          dob,
+          ownerEmail: ownerUser?.email || '',
+          ownerFirstName: ownerUser?.firstName || '',
+          ownerLastName: ownerUser?.lastName || '',
+          ownerMiddleName: ownerUser?.middleName || '',
+          ownerPhone: ownerUser?.phoneNumber || '',
+          ownerStatus: ownerUser?.status || 'ACTIVE',
+          ownerCreatedAt: ownerUser?.createdAt || b.createdAt,
+          isEmailVerified: ownerUser?.isEmailVerified || false,
+          isPhoneVerified: ownerUser?.isPhoneVerified || false,
+          kycStatus: ownerUser?.kycStatus || 'UNVERIFIED',
+          nin: ownerUser?.nin || '',
+          dob: ownerUser?.dob || '',
+          ninData: ownerUser?.ninData || {},
+          avatarUrl: ownerUser?.avatarUrl || null,
+          kycRecord: kycRecord
+            ? {
+                providerName: kycRecord.providerName,
+                matchScore: kycRecord.matchScore,
+                verifiedAt: kycRecord.verifiedAt,
+                failureReason: kycRecord.failureReason,
+                rawResponse: kycRecord.rawResponse,
+              }
+            : null,
+          ownerBusinesses,
           wallets: {
             mainBalanceKobo: main ? main.balance.toString() : '0',
             mainBalanceNaira: main ? koboToNaira(main.balance) : 0,
@@ -768,7 +886,9 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send(
       createSuccessResponse(
         {
+          providers: providerStatuses,
           providerStatuses,
+          routing: routingTable,
           routingTable,
           checkedAt: new Date(),
         },

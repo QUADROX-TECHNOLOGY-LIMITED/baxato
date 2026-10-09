@@ -158,23 +158,6 @@ export default function StaffSidebar({
             </nav>
           </div>
 
-          {/* Super Admin link if caller has SUPER_ADMIN role */}
-          {isSuperAdmin && (
-            <div>
-              <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-purple-400 flex items-center justify-between">
-                <span>Governance</span>
-                <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
-              </div>
-
-              <Link
-                href="/admin"
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-200 hover:bg-purple-900/40 text-xs transition font-medium"
-              >
-                <span>Super Admin Console</span>
-                <span className="text-[10px] font-mono bg-purple-500/30 px-1.5 py-0.5 rounded text-purple-300">/admin</span>
-              </Link>
-            </div>
-          )}
         </div>
 
         {/* Bottom Staff Profile Card & Portal Switch */}
@@ -196,14 +179,8 @@ export default function StaffSidebar({
                 {staffName || 'Staff Member'}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span
-                  className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${
-                    isSuperAdmin
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                      : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                  }`}
-                >
-                  {userRole}
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  STAFF
                 </span>
               </div>
             </div>
