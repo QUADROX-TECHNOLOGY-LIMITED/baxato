@@ -22,9 +22,8 @@ import {
   Lock,
   X,
 } from 'lucide-react';
-import Sidebar from '@/components/dashboard/Sidebar';
-import Header from '@/components/dashboard/Header';
-import KycModal from '@/components/dashboard/KycModal';
+import StaffSidebar, { StaffTab } from '@/components/admin/StaffSidebar';
+import StaffHeader from '@/components/admin/StaffHeader';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -329,24 +328,21 @@ export default function AdminStaffBackofficePage() {
   // 3. Authorized View: Rendered ONLY when isAuthorized === true
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-900 dark:text-white">
-      {/* Sidebar */}
-      <Sidebar
-        businessName={businessName}
-        merchantName={merchantName}
-        kycStatus={kycStatus}
+      {/* Dedicated Staff Operations Navigation Sidebar */}
+      <StaffSidebar
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab)}
         userRole={userRole}
-        onOpenKycModal={() => setIsKycModalOpen(true)}
+        staffName={merchantName}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="md:pl-64 flex flex-col min-h-screen">
-        {/* Header */}
-        <Header
+      <div className="lg:pl-72 flex flex-col min-h-screen">
+        {/* Dedicated Staff Header */}
+        <StaffHeader
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          onOpenKycModal={() => setIsKycModalOpen(true)}
-          merchantName={merchantName}
-          kycStatus={kycStatus}
+          staffName={merchantName}
           userRole={userRole}
           isRefreshing={isLoadingOverview || isLoadingTx || isLoadingHealth || isLoadingMerchants}
           onRefresh={() => {
@@ -355,6 +351,15 @@ export default function AdminStaffBackofficePage() {
             if (activeTab === 'routing') loadProviderHealth();
             if (activeTab === 'merchants') loadMerchants();
           }}
+          activeTabTitle={
+            activeTab === 'overview'
+              ? 'Platform Overview'
+              : activeTab === 'transactions'
+              ? 'Transaction Desk'
+              : activeTab === 'routing'
+              ? 'Provider Failover'
+              : 'Merchants & NIN Directory'
+          }
         />
 
         <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto space-y-6">
@@ -1087,12 +1092,6 @@ export default function AdminStaffBackofficePage() {
           )}
         </main>
       </div>
-
-      <KycModal
-        isOpen={isKycModalOpen}
-        onClose={() => setIsKycModalOpen(false)}
-        onSuccess={() => setKycStatus('VERIFIED')}
-      />
     </div>
   );
 }

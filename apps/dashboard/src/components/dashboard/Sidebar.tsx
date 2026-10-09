@@ -124,17 +124,6 @@ export default function Sidebar({
       },
     ];
 
-    const isStaffOrAdmin = activeRole === 'STAFF' || activeRole === 'SUPER_ADMIN';
-    const staffGroup = {
-      id: 'STAFF_OPERATIONS',
-      title: 'STAFF OPERATIONS',
-      items: [{ label: 'Staff Console', href: '/admin', icon: ShieldCheck }],
-    };
-
-    if (isStaffOrAdmin) {
-      return [staffGroup, ...allGroups];
-    }
-
     if (isOwnerOrAdmin) {
       return allGroups;
     }
