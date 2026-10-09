@@ -72,9 +72,9 @@ export default function StaffLayout({
           <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
             <Lock className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold mb-2">Restricted Staff Area</h2>
+          <h2 className="text-xl font-bold mb-2">Staff Access Only</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-            This console is strictly reserved for authorized Baxato Staff and Operations Personnel.
+            Please sign in with your staff account to continue.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link

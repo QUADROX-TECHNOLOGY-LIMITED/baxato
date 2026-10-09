@@ -579,11 +579,17 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { email, password, twoFactorCode } = parseResult.data;
+    const cleanEmail = email.toLowerCase().trim();
+
+    // STRICT CHECK: Reject non-@baxato.com emails immediately without touching the database
+    if (!cleanEmail.endsWith('@baxato.com')) {
+      throw new AuthenticationError('Staff login requires an official @baxato.com email address.');
+    }
 
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(eq(users.email, cleanEmail))
       .limit(1);
 
     if (!user || !user.passwordHash) {
@@ -596,14 +602,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (user.status !== 'ACTIVE') {
-      throw new AuthenticationError(`Your account is ${user.status}. Please contact platform security.`);
+      throw new AuthenticationError(`Account status is ${user.status}. Please contact platform administration.`);
     }
 
     // Strict Staff Role Enforcement
     if (user.role !== 'STAFF' && user.role !== 'SUPER_ADMIN') {
-      throw new AuthenticationError(
-        'Access denied: This portal is strictly restricted to platform operations staff and administrators. Merchants must sign in at /login.',
-      );
+      throw new AuthenticationError('Access denied: Staff accounts only.');
     }
 
     // MANDATORY 2FA ENFORCEMENT FOR STAFF
@@ -622,8 +626,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             tempToken,
             email: user.email,
             firstName: user.firstName,
-            message:
-              'Two-Factor Authentication is mandatory for platform staff. Please select Authenticator App (TOTP) or Email OTP to complete enrollment.',
+            message: 'Two-Factor Authentication is required for staff accounts.',
           },
           request.id,
         ),
@@ -649,8 +652,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             email: user.email,
             message:
               user.twoFactorMethod === 'TOTP'
-                ? 'Please enter the 6-digit code from your authenticator app.'
-                : `A 6-digit verification code has been dispatched to ${user.email}.`,
+                ? 'Enter the 6-digit code from your authenticator app.'
+                : `Enter the 6-digit verification code sent to ${user.email}.`,
           },
           request.id,
         ),

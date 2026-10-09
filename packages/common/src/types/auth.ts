@@ -94,7 +94,12 @@ export const disable2FaSchema = z.object({
 export type Disable2FaInput = z.infer<typeof disable2FaSchema>;
 
 export const staffLoginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z
+    .string()
+    .email('Invalid email address')
+    .refine((val) => val.toLowerCase().trim().endsWith('@baxato.com'), {
+      message: 'Staff login requires an official @baxato.com email address',
+    }),
   password: z.string().min(1, 'Password is required'),
   twoFactorCode: z.string().optional(),
 });

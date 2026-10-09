@@ -84,35 +84,22 @@ export default function StaffSidebar({
       >
         {/* Brand & Backoffice Badge Header */}
         <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2.5">
-              <div className="relative w-7 h-7 flex-shrink-0">
-                <Image
-                  src="/baxato-logo-white.png"
-                  alt="Baxato"
-                  fill
-                  className="object-contain"
-                  onError={(e) => {
-                    (e.target as any).src = '/baxato-logo-blue.png';
-                  }}
-                />
-              </div>
-              <span className="font-extrabold text-base tracking-wider text-white">
-                BAXATO
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                STAFF
-              </span>
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-7 h-7 flex-shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-white dark:bg-[#0A1324] p-0.5">
+              <Image
+                src="/baxato-logo.jpg"
+                alt="Baxato"
+                fill
+                priority
+                className="object-contain rounded"
+              />
             </div>
-            <div className="flex items-center gap-1.5 pl-9">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-[11px] font-medium text-emerald-400 tracking-wide">
-                Live Operations Desk
-              </span>
-            </div>
+            <span className="font-bold text-base tracking-wider text-white">
+              BAXATO
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              STAFF
+            </span>
           </div>
 
           <button
@@ -146,12 +133,12 @@ export default function StaffSidebar({
                     }}
                     className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-xl text-xs transition-all group ${
                       isActive
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-md shadow-blue-500/20'
+                        ? 'bg-[#126BEB] text-white font-medium shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                     }`}
                   >
                     <Icon
-                      className={`w-4 h-4 mt-0.5 flex-shrink-0 transition-transform group-hover:scale-110 ${
+                      className={`w-4 h-4 mt-0.5 flex-shrink-0 transition-transform ${
                         isActive ? 'text-white' : 'text-slate-400'
                       }`}
                     />
@@ -169,31 +156,6 @@ export default function StaffSidebar({
                 );
               })}
             </nav>
-          </div>
-
-          {/* Security & Access Info */}
-          <div>
-            <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center justify-between">
-              <span>Access & Security</span>
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] space-y-2">
-              <div className="flex items-center justify-between text-slate-400">
-                <span>Access Level</span>
-                <span className="font-mono font-bold text-slate-200">
-                  {isSuperAdmin ? 'Super Administrator' : 'Platform Staff'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-400">
-                <span>Identity System</span>
-                <span className="text-emerald-400 font-semibold">NIMC NIN Only</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-400">
-                <span>Internal Scope</span>
-                <span className="font-mono text-slate-300">Staff Ops Desk</span>
-              </div>
-            </div>
           </div>
 
           {/* Super Admin link if caller has SUPER_ADMIN role */}

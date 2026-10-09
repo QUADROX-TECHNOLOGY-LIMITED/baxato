@@ -91,17 +91,12 @@ export default function StaffRoutingPage() {
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              Provider Control
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Circuit Breakers & Dynamic Failover
-            </span>
-          </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Provider Routing & Failover Controls
+            Provider Routing
           </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Circuit breakers, provider health, and dynamic failover configuration.
+          </p>
         </div>
 
         <button

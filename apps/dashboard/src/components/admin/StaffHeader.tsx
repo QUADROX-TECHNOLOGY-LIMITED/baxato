@@ -45,11 +45,10 @@ export default function StaffHeader({
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-semibold">
-              <Activity className="w-3.5 h-3.5" />
-              <span>Operations Desk</span>
-            </div>
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">/</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Staff
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">/</span>
             <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
               {activeTabTitle}
             </span>
