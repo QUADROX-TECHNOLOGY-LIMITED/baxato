@@ -1,11 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import {
   registerUserSchema,
   sendPhoneOtpSchema,
   verifyPhoneOtpSchema,
   loginUserSchema,
+  staffLoginSchema,
+  staff2FaSetupSchema,
+  staff2FaVerifySchema,
   changePasswordRequestSchema,
   changePasswordConfirmSchema,
   verify2FaEmailSchema,
@@ -555,6 +559,337 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
               }
             : null,
           token,
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
+   * POST /auth/staff/login
+   * Dedicated secure authentication endpoint for Baxato Platform Staff and Super Admins.
+   * Enforces mandatory staff roles and compulsory 2FA.
+   */
+  fastify.post('/staff/login', async (request, reply) => {
+    const parseResult = staffLoginSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      throw new ValidationError(
+        parseResult.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+
+    const { email, password, twoFactorCode } = parseResult.data;
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+      .limit(1);
+
+    if (!user || !user.passwordHash) {
+      throw new AuthenticationError('Invalid email or password.');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      throw new AuthenticationError('Invalid email or password.');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new AuthenticationError(`Your account is ${user.status}. Please contact platform security.`);
+    }
+
+    // Strict Staff Role Enforcement
+    if (user.role !== 'STAFF' && user.role !== 'SUPER_ADMIN') {
+      throw new AuthenticationError(
+        'Access denied: This portal is strictly restricted to platform operations staff and administrators. Merchants must sign in at /login.',
+      );
+    }
+
+    // MANDATORY 2FA ENFORCEMENT FOR STAFF
+    // Case 1: First-time staff login or 2FA not yet enabled
+    if (!user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { userId: user.id, email: user.email, role: user.role, purpose: 'STAFF_2FA_SETUP' },
+        env.JWT_SECRET,
+        { expiresIn: '15m' },
+      );
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactorSetup: true,
+            tempToken,
+            email: user.email,
+            firstName: user.firstName,
+            message:
+              'Two-Factor Authentication is mandatory for platform staff. Please select Authenticator App (TOTP) or Email OTP to complete enrollment.',
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Case 2: 2FA is already enabled - require verification code
+    const code = twoFactorCode?.trim();
+    if (!code) {
+      if (user.twoFactorMethod === 'EMAIL') {
+        await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+        const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+        if (env.NODE_ENV !== 'production') {
+          request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Staff Login 2FA Email OTP dispatched');
+        }
+      }
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactor: true,
+            twoFactorMethod: user.twoFactorMethod || 'EMAIL',
+            email: user.email,
+            message:
+              user.twoFactorMethod === 'TOTP'
+                ? 'Please enter the 6-digit code from your authenticator app.'
+                : `A 6-digit verification code has been dispatched to ${user.email}.`,
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Verify 2FA code
+    let is2FaValid = false;
+    if (user.twoFactorMethod === 'TOTP') {
+      if (user.twoFactorSecret) {
+        is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
+      }
+      if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
+        const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+        const backupList = user.twoFactorBackupCodes as string[];
+        const matchIdx = backupList.indexOf(codeHash);
+        if (matchIdx !== -1) {
+          is2FaValid = true;
+          const remaining = backupList.filter((_, idx) => idx !== matchIdx);
+          await db
+            .update(users)
+            .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
+      }
+    } else {
+      const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+      is2FaValid = emailVerify.valid;
+    }
+
+    if (!is2FaValid) {
+      throw new ValidationError('Invalid or expired two-factor authentication code.');
+    }
+
+    // Issue staff session token
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      kycStatus: user.kycStatus as KycStatus,
+    });
+
+    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    await auditService.log({
+      userId: user.id,
+      action: 'STAFF_LOGIN_SUCCESS',
+      resourceType: 'USER',
+      resourceId: user.id,
+      ipAddress: clientIp,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: { email: user.email, role: user.role },
+    });
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            kycStatus: user.kycStatus,
+          },
+          token,
+          message: 'Staff authentication successful. Welcome to Baxato Operations Console.',
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
+   * POST /auth/staff/2fa/setup
+   * Prepares first-time 2FA enrollment for staff (returns TOTP secret + QR code or sends Email OTP).
+   */
+  fastify.post('/staff/2fa/setup', async (request, reply) => {
+    const parseResult = staff2FaSetupSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      throw new ValidationError(parseResult.error.errors.map((e) => e.message).join(', '));
+    }
+
+    const { tempToken, method } = parseResult.data;
+    let decoded: any;
+    try {
+      decoded = jwt.verify(tempToken, env.JWT_SECRET);
+      if (decoded.purpose !== 'STAFF_2FA_SETUP') throw new Error();
+    } catch {
+      throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, decoded.userId))
+      .limit(1);
+
+    if (!user) {
+      throw new AuthenticationError('User not found.');
+    }
+
+    if (method === 'TOTP') {
+      const secret = twoFactorService.generateSecret();
+      const otpAuthUri = twoFactorService.generateOtpAuthUri(user.email, secret, 'BAXATO-STAFF');
+      const qrCodeDataUrl = await twoFactorService.generateQrCodeDataUrl(otpAuthUri);
+      const { codes } = twoFactorService.generateBackupRecoveryCodes();
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            method: 'TOTP',
+            secret,
+            qrCodeDataUrl,
+            otpAuthUri,
+            backupCodes: codes,
+            message: 'Scan the QR code in your Authenticator app and enter the 6-digit code.',
+          },
+          request.id,
+        ),
+      );
+    } else {
+      await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+      const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+      if (env.NODE_ENV !== 'production') {
+        request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Staff 2FA Setup Email OTP dispatched');
+      }
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            method: 'EMAIL',
+            sent: true,
+            email: user.email,
+            message: `A 6-digit confirmation code has been dispatched to ${user.email}.`,
+          },
+          request.id,
+        ),
+      );
+    }
+  });
+
+  /**
+   * POST /auth/staff/2fa/verify
+   * Validates the 6-digit code during first-time staff enrollment, enables 2FA, and logs the staff member in.
+   */
+  fastify.post('/staff/2fa/verify', async (request, reply) => {
+    const parseResult = staff2FaVerifySchema.safeParse(request.body);
+    if (!parseResult.success) {
+      throw new ValidationError(parseResult.error.errors.map((e) => e.message).join(', '));
+    }
+
+    const { tempToken, method, code, secret, backupCodes } = parseResult.data;
+    let decoded: any;
+    try {
+      decoded = jwt.verify(tempToken, env.JWT_SECRET);
+      if (decoded.purpose !== 'STAFF_2FA_SETUP') throw new Error();
+    } catch {
+      throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, decoded.userId))
+      .limit(1);
+
+    if (!user) {
+      throw new AuthenticationError('User not found.');
+    }
+
+    if (method === 'TOTP') {
+      if (!secret) throw new ValidationError('Authenticator secret is required.');
+      const is2FaValid = twoFactorService.verifyTotp(secret, code);
+      if (!is2FaValid) {
+        throw new ValidationError('Invalid authenticator code. Check your app and try again.');
+      }
+
+      const hashedCodes = Array.isArray(backupCodes)
+        ? backupCodes.map((c) => crypto.createHash('sha256').update(c).digest('hex'))
+        : [];
+
+      await db
+        .update(users)
+        .set({
+          twoFactorEnabled: true,
+          twoFactorMethod: 'TOTP',
+          twoFactorSecret: secret,
+          twoFactorBackupCodes: hashedCodes,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+    } else {
+      const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+      if (!emailVerify.valid) {
+        throw new ValidationError(emailVerify.reason || 'Invalid or expired email verification code.');
+      }
+
+      await db
+        .update(users)
+        .set({
+          twoFactorEnabled: true,
+          twoFactorMethod: 'EMAIL',
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+    }
+
+    // Now issue full staff session token!
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      kycStatus: user.kycStatus as KycStatus,
+    });
+
+    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    await auditService.log({
+      userId: user.id,
+      action: 'STAFF_2FA_ENROLLED_AND_LOGGED_IN',
+      resourceType: 'USER',
+      resourceId: user.id,
+      ipAddress: clientIp,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: { email: user.email, method },
+    });
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            kycStatus: user.kycStatus,
+          },
+          token,
+          message: 'Two-Factor Authentication successfully enrolled. Welcome to Baxato Staff Operations.',
         },
         request.id,
       ),

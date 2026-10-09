@@ -93,6 +93,28 @@ export const disable2FaSchema = z.object({
 
 export type Disable2FaInput = z.infer<typeof disable2FaSchema>;
 
+export const staffLoginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+  twoFactorCode: z.string().optional(),
+});
+export type StaffLoginInput = z.infer<typeof staffLoginSchema>;
+
+export const staff2FaSetupSchema = z.object({
+  tempToken: z.string().min(1, 'Temporary token is required'),
+  method: z.enum(['TOTP', 'EMAIL']),
+});
+export type Staff2FaSetupInput = z.infer<typeof staff2FaSetupSchema>;
+
+export const staff2FaVerifySchema = z.object({
+  tempToken: z.string().min(1, 'Temporary token is required'),
+  method: z.enum(['TOTP', 'EMAIL']),
+  code: z.string().length(6, 'Verification code must be exactly 6 digits'),
+  secret: z.string().optional(),
+  backupCodes: z.array(z.string()).optional(),
+});
+export type Staff2FaVerifyInput = z.infer<typeof staff2FaVerifySchema>;
+
 export interface AuthSessionUser {
   id: string;
   email: string;

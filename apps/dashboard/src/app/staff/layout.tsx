@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Lock } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { Lock, LogIn } from 'lucide-react';
 import StaffSidebar from '@/components/admin/StaffSidebar';
 import StaffHeader from '@/components/admin/StaffHeader';
 import {
@@ -18,6 +18,9 @@ export default function StaffLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/staff/login';
+
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [userRole, setUserRole] = useState<string>('STAFF');
   const [staffName, setStaffName] = useState<string>('Staff User');
@@ -26,6 +29,8 @@ export default function StaffLayout({
 
   // 1. Strict Auth Verification (Runs immediately on client mount)
   useEffect(() => {
+    if (isLoginPage) return;
+
     const token = getStoredAuthToken();
     if (!token) {
       setIsAuthorized(false);
@@ -43,7 +48,12 @@ export default function StaffLayout({
       // Immediate lock out — user is regular merchant or unauthenticated
       setIsAuthorized(false);
     }
-  }, []);
+  }, [isLoginPage]);
+
+  // If on dedicated staff login page, bypass staff layout and auth gating
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   // 1. Silent loading state while evaluating auth — ABSOLUTELY ZERO CONTENT FLASH
   if (isAuthorized === null) {
@@ -66,12 +76,21 @@ export default function StaffLayout({
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
             This console is strictly reserved for authorized Baxato Staff and Operations Personnel.
           </p>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl font-medium bg-[#126BEB] text-white hover:bg-[#0E58C4] transition shadow-md shadow-blue-500/20 text-xs"
-          >
-            Return to Merchant Dashboard
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/staff/login"
+              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl font-medium bg-[#126BEB] text-white hover:bg-[#0E58C4] transition shadow-md shadow-blue-500/20 text-xs"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Staff Sign In</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-xs"
+            >
+              Merchant Portal
+            </Link>
+          </div>
         </div>
       </div>
     );
