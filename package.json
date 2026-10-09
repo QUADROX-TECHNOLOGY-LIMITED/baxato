@@ -12,7 +12,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
     "dev:api": "pnpm --filter @baxato/api dev",
     "dev:dashboard": "pnpm --filter @baxato/dashboard dev",
-    "db:seed": "pnpm --filter @baxato/database db:seed"
+    "db:seed": "pnpm --filter @baxato/database db:seed",
+    "create:staff": "pnpm --filter @baxato/api exec tsx src/commands/create-staff.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
