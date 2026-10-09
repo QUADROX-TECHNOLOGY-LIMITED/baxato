@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   ArrowRightLeft,
@@ -12,63 +13,57 @@ import {
   ExternalLink,
   LogOut,
   X,
-  Radio,
   Activity,
+  ShieldAlert,
 } from 'lucide-react';
 import { clearSessionAndRedirect } from '@/lib/auth-session';
 
 export type StaffTab = 'overview' | 'transactions' | 'routing' | 'merchants';
 
 interface StaffSidebarProps {
-  activeTab: StaffTab;
-  onSelectTab: (tab: StaffTab) => void;
-  userRole: string;
-  staffName: string;
+  userRole?: string;
+  staffName?: string;
   isOpen: boolean;
   onClose: () => void;
+  activeTab?: StaffTab;
+  onSelectTab?: (tab: StaffTab) => void;
 }
 
 export default function StaffSidebar({
-  activeTab,
-  onSelectTab,
-  userRole,
-  staffName,
+  userRole = 'STAFF',
+  staffName = 'Staff User',
   isOpen,
   onClose,
 }: StaffSidebarProps) {
+  const pathname = usePathname();
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
   const navItems = [
     {
-      id: 'overview' as StaffTab,
+      href: '/staff/overview',
       label: 'Platform Overview',
       subtitle: 'Telemetry & Volume',
       icon: LayoutDashboard,
     },
     {
-      id: 'transactions' as StaffTab,
+      href: '/staff/transactions',
       label: 'Transaction Desk',
       subtitle: 'Audit & Upstream Sync',
       icon: ArrowRightLeft,
     },
     {
-      id: 'routing' as StaffTab,
+      href: '/staff/routing',
       label: 'Provider Failovers',
       subtitle: 'Monnify / Interswitch',
       icon: Server,
     },
     {
-      id: 'merchants' as StaffTab,
+      href: '/staff/merchants',
       label: 'Merchants & NIN Directory',
       subtitle: 'KYC & Business Accounts',
       icon: UserCheck,
     },
   ];
-
-  const handleTabClick = (tabId: StaffTab) => {
-    onSelectTab(tabId);
-    if (isOpen) onClose();
-  };
 
   return (
     <>
@@ -98,7 +93,6 @@ export default function StaffSidebar({
                   fill
                   className="object-contain"
                   onError={(e) => {
-                    // Fallback to blue logo if white missing
                     (e.target as any).src = '/baxato-logo-blue.png';
                   }}
                 />
@@ -141,12 +135,15 @@ export default function StaffSidebar({
             <nav className="space-y-1.5">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const isActive = pathname === item.href || (item.href === '/staff/overview' && pathname === '/staff');
 
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleTabClick(item.id)}
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      if (isOpen) onClose();
+                    }}
                     className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-xl text-xs transition-all group ${
                       isActive
                         ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-md shadow-blue-500/20'
@@ -168,13 +165,13 @@ export default function StaffSidebar({
                         {item.subtitle}
                       </span>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </nav>
           </div>
 
-          {/* Security & System Info */}
+          {/* Security & Access Info */}
           <div>
             <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center justify-between">
               <span>Access & Security</span>
@@ -193,11 +190,29 @@ export default function StaffSidebar({
                 <span className="text-emerald-400 font-semibold">NIMC NIN Only</span>
               </div>
               <div className="flex items-center justify-between text-slate-400">
-                <span>Internal API</span>
-                <span className="font-mono text-slate-300">/admin/* (Non-v1)</span>
+                <span>Internal Scope</span>
+                <span className="font-mono text-slate-300">Staff Ops Desk</span>
               </div>
             </div>
           </div>
+
+          {/* Super Admin link if caller has SUPER_ADMIN role */}
+          {isSuperAdmin && (
+            <div>
+              <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-purple-400 flex items-center justify-between">
+                <span>Governance</span>
+                <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
+              </div>
+
+              <Link
+                href="/admin"
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-200 hover:bg-purple-900/40 text-xs transition font-medium"
+              >
+                <span>Super Admin Console</span>
+                <span className="text-[10px] font-mono bg-purple-500/30 px-1.5 py-0.5 rounded text-purple-300">/admin</span>
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Bottom Staff Profile Card & Portal Switch */}
