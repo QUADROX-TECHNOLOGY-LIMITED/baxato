@@ -685,8 +685,9 @@ export class MonnifyProvider implements ProviderAdapter {
 
   /**
    * Re-query transaction status using official Monnify Bills Payment API:
-   * GET /api/v1/vas/bills-payment/requery?paymentReference=...
-   * Supports fallback to transactionReference if providerReference is available.
+   * GET /api/v1/vas/bills-payment/requery?reference=...
+   * Uses providerReference (vendReference / transactionReference) if available,
+   * falling back to requestReference.
    */
   public async requeryTransaction(
     requestReference: string,
@@ -694,9 +695,10 @@ export class MonnifyProvider implements ProviderAdapter {
   ): Promise<TransactionStatusResult> {
     const token = await this.getAccessToken();
 
-    // 1. First attempt: Query with paymentReference
+    // 1. Primary query: Monnify strictly requires ?reference= (providerReference preferred if available)
+    const primaryRef = providerReference || requestReference;
     let res = await fetch(
-      `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?paymentReference=${encodeURIComponent(requestReference)}`,
+      `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(primaryRef)}`,
       {
         method: 'GET',
         headers: {
@@ -721,10 +723,11 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    // 2. If paymentReference didn't succeed and providerReference is available, query by transactionReference
-    if (!data?.requestSuccessful && providerReference && providerReference !== requestReference) {
+    // 2. Fallback query with requestReference if primary query failed and differed
+    const fallbackRef = providerReference && providerReference !== requestReference ? requestReference : undefined;
+    if (!data?.requestSuccessful && fallbackRef) {
       const fallbackRes = await fetch(
-        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?transactionReference=${encodeURIComponent(providerReference)}`,
+        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(fallbackRef)}`,
         {
           method: 'GET',
           headers: {
@@ -747,11 +750,22 @@ export class MonnifyProvider implements ProviderAdapter {
           data?.responseCode === '00'),
     );
 
+    const isExplicitFailed = Boolean(
+      data?.responseBody?.vendStatus === 'FAILED' ||
+      data?.responseBody?.vendStatus === 'REVERSED',
+    );
+
+    const status = isSuccess
+      ? TransactionStatus.SUCCESSFUL
+      : isExplicitFailed
+        ? TransactionStatus.FAILED
+        : TransactionStatus.PENDING;
+
     return {
-      status: isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED,
+      status,
       providerName: this.providerName,
       providerReference:
-        data?.responseBody?.vendReference || data?.responseBody?.transactionReference,
+        data?.responseBody?.vendReference || data?.responseBody?.transactionReference || providerReference,
       requestReference,
       amountKobo: data?.responseBody?.amount
         ? BigInt(Math.round(data.responseBody.amount * 100))
@@ -760,7 +774,7 @@ export class MonnifyProvider implements ProviderAdapter {
       responseMessage:
         data?.responseBody?.description ||
         data?.responseMessage ||
-        (isSuccess ? 'Transaction Confirmed' : 'Transaction Failed'),
+        (isSuccess ? 'Transaction Confirmed' : 'Transaction Pending Upstream Confirmation'),
       rawResponse: data as Record<string, unknown>,
     };
   }

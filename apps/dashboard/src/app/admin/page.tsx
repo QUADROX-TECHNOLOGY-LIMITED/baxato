@@ -31,7 +31,7 @@ import {
   clearSessionAndRedirect,
 } from '@/lib/auth-session';
 
-type ActiveTab = 'overview' | 'transactions' | 'routing' | 'merchants';
+type ActiveTab = 'overview' | 'transactions' | 'routing' | 'merchants' | 'security';
 
 export default function AdminStaffBackofficePage() {
   const router = useRouter();

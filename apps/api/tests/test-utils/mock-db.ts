@@ -820,7 +820,10 @@ export function createMockDatabase() {
     asc: (col: unknown) => ({ type: 'asc', col }),
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
     eq: (col: unknown, val: unknown) => ({ type: 'eq', col: getColName(col), val }),
+    gte: (col: unknown, val: unknown) => ({ type: 'gte', col: getColName(col), val }),
+    gt: (col: unknown, val: unknown) => ({ type: 'gt', col: getColName(col), val }),
     lte: (col: unknown, val: unknown) => ({ type: 'lte', col: getColName(col), val }),
+    lt: (col: unknown, val: unknown) => ({ type: 'lt', col: getColName(col), val }),
     ilike: (col: unknown, val: unknown) => ({ type: 'ilike', col: getColName(col), val }),
     like: (col: unknown, val: unknown) => ({ type: 'like', col: getColName(col), val }),
     or: (...conditions: unknown[]) => ({ type: 'or', conditions }),
@@ -989,6 +992,12 @@ export function createMockDatabase() {
                   if (col === 'id') return inMemoryDb.serviceTransactions.filter((s) => s.id === p.val);
                   if (col === 'business_id' || col === 'businessid') return inMemoryDb.serviceTransactions.filter((s) => s.businessId === p.val);
                   if (col === 'service_type' || col === 'servicetype') return inMemoryDb.serviceTransactions.filter((s) => s.serviceType === p.val);
+                }
+                if (p.type === 'gte') {
+                  const col = getColName(p.col);
+                  if (col === 'created_at' || col === 'createdat') {
+                    return inMemoryDb.serviceTransactions.filter((s) => s.createdAt >= (p.val as Date));
+                  }
                 }
                 if (p.type === 'and' && Array.isArray(p.conditions)) {
                   const conds = p.conditions as Array<{ col: unknown; val: unknown }>;

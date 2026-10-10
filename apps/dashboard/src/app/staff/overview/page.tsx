@@ -112,21 +112,21 @@ export default function StaffOverviewPage() {
         <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
           <span className="text-xs text-slate-500 font-medium">Businesses</span>
           <div className="text-xl font-bold mt-1 text-slate-900 dark:text-white font-mono">
-            {overviewData?.merchants?.totalBusinesses || 0}
+            {overviewData?.merchants?.totalBusinesses ?? 0}
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
             Registered businesses
           </div>
         </div>
 
-        {/* Verified Merchants */}
+        {/* Verified Users */}
         <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
-          <span className="text-xs text-slate-500 font-medium">Verified Identity</span>
+          <span className="text-xs text-slate-500 font-medium">Verified Users</span>
           <div className="text-xl font-bold mt-1 text-slate-900 dark:text-white font-mono">
-            {overviewData?.merchants?.verifiedUsers || 0}
+            {overviewData?.merchants?.verifiedUsers ?? 0}
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
-            NIN verified merchants
+            KYC verified users
           </div>
         </div>
       </div>

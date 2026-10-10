@@ -21,7 +21,6 @@ export default function StaffTransactionsPage() {
   const [txPagination, setTxPagination] = useState<any>(null);
   const [isLoadingTx, setIsLoadingTx] = useState<boolean>(false);
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
-  const [queryRefInput, setQueryRefInput] = useState<string>('');
   const [isRequerying, setIsRequerying] = useState<boolean>(false);
   const [requeryFeedback, setRequeryFeedback] = useState<{
     type: 'success' | 'warning' | 'error';
@@ -71,10 +70,9 @@ export default function StaffTransactionsPage() {
   const handleOpenInspect = (tx: any) => {
     setSelectedTx(tx);
     setRequeryFeedback(null);
-    setQueryRefInput(tx.requestReference || tx.providerReference || tx.clientReference || '');
   };
 
-  const handleRequery = async (txId: string, customRef?: string) => {
+  const handleRequery = async (txId: string) => {
     try {
       setIsRequerying(true);
       setRequeryFeedback(null);
@@ -87,9 +85,6 @@ export default function StaffTransactionsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          customReference: customRef ? customRef.trim() : undefined,
-        }),
       });
       const data = await res.json();
       if (res.ok && data?.success) {
@@ -315,8 +310,8 @@ export default function StaffTransactionsPage() {
 
       {/* TRANSACTION INSPECTOR MODAL */}
       {selectedTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedTx(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"
@@ -439,34 +434,31 @@ export default function StaffTransactionsPage() {
             </div>
 
             {/* Requery Reference Section */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  Requery Upstream ({selectedTx.providerName})
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  Upstream Verification ({selectedTx.providerName})
                 </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {selectedTx.providerName === 'INTERSWITCH'
-                    ? 'Expected: requestRef or paymentReference'
-                    : 'Expected: paymentReference or transactionReference'}
+                <span className="text-[10px] text-slate-500">
+                  Locked to transaction record
                 </span>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={queryRefInput}
-                  onChange={(e) => setQueryRefInput(e.target.value)}
-                  placeholder="Enter reference to query..."
-                  className="flex-1 px-3 py-2 rounded-lg text-xs font-mono bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
-                />
-                <button
-                  disabled={isRequerying || !queryRefInput.trim()}
-                  onClick={() => handleRequery(selectedTx.id, queryRefInput)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 disabled:opacity-50 shrink-0"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRequerying ? 'animate-spin' : ''}`} />
-                  <span>{isRequerying ? 'Querying...' : 'Re-query'}</span>
-                </button>
+
+              <div className="p-2 rounded-lg bg-white dark:bg-[#0B132B] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 overflow-hidden">
+                <span className="text-slate-500 text-[11px] shrink-0">Verified Ref:</span>
+                <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold text-[11px] truncate text-right">
+                  {selectedTx.providerReference || selectedTx.requestReference || selectedTx.clientReference || selectedTx.id}
+                </span>
               </div>
+
+              <button
+                disabled={isRequerying}
+                onClick={() => handleRequery(selectedTx.id)}
+                className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRequerying ? 'animate-spin' : ''}`} />
+                <span>{isRequerying ? 'Querying Upstream Gateway...' : 'Re-query Upstream Status'}</span>
+              </button>
             </div>
 
             <div className="pt-1">

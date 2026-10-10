@@ -255,34 +255,34 @@ export default function StaffMerchantsPage() {
       </div>
 
       {/* Pagination */}
-      {merchantPagination && merchantPagination.totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <span className="text-xs text-slate-500">
-            Page {merchantPagination.page} of {merchantPagination.totalPages} ({merchantPagination.totalCount} items)
-          </span>
-          <div className="flex gap-2">
-            <button
-              disabled={!merchantPagination.hasPrevPage}
-              onClick={() => setMerchantPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <button
-              disabled={!merchantPagination.hasNextPage}
-              onClick={() => setMerchantPage((p) => p + 1)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+        <span className="text-xs text-slate-500 order-2 sm:order-1">
+          {merchantPagination
+            ? `Page ${merchantPagination.page} of ${merchantPagination.totalPages || 1} (${merchantPagination.totalCount} total merchants)`
+            : `Showing ${merchants.length} merchants`}
+        </span>
+        <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto justify-end">
+          <button
+            disabled={!merchantPagination?.hasPrevPage}
+            onClick={() => setMerchantPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+          >
+            Previous
+          </button>
+          <button
+            disabled={!merchantPagination?.hasNextPage}
+            onClick={() => setMerchantPage((p) => p + 1)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+          >
+            Next
+          </button>
         </div>
-      )}
+      </div>
 
       {/* MERCHANT DETAILS MODAL */}
       {selectedMerchant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-4 sm:p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedMerchant(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"
@@ -292,21 +292,21 @@ export default function StaffMerchantsPage() {
 
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Merchant Details
+                Merchant Details & Audit Inspector
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Owner identity, verified NIN, and associated businesses.
+                Full unmasked identity audit, registered national identity details, and businesses.
               </p>
             </div>
 
             {/* SECTION 1: OWNER IDENTITY */}
             <div className="space-y-2 text-xs">
               <h4 className="font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-1">
-                Owner Profile
+                Owner Account Details
               </h4>
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <span className="text-slate-500 block">Name:</span>
+                  <span className="text-slate-500 block">Full Name:</span>
                   <span className="font-semibold text-slate-900 dark:text-white">
                     {[selectedMerchant.ownerFirstName, selectedMerchant.ownerMiddleName, selectedMerchant.ownerLastName]
                       .filter(Boolean)
@@ -320,13 +320,13 @@ export default function StaffMerchantsPage() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Email:</span>
+                  <span className="text-slate-500 block">Email Address:</span>
                   <span className="text-slate-800 dark:text-slate-200">
                     {selectedMerchant.ownerEmail || 'N/A'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Phone:</span>
+                  <span className="text-slate-500 block">Account Phone:</span>
                   <span className="font-mono text-slate-800 dark:text-slate-200">
                     {selectedMerchant.ownerPhone || 'N/A'}
                   </span>
@@ -334,47 +334,80 @@ export default function StaffMerchantsPage() {
               </div>
             </div>
 
-            {/* SECTION 2: NATIONAL IDENTITY (NIN) */}
+            {/* SECTION 2: NATIONAL IDENTITY (NIN) - FULL UNMASKED AUDIT */}
             <div className="space-y-2 text-xs">
-              <h4 className="font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-1">
-                National Identity (NIN)
-              </h4>
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300">
+                  National Identity (NIN) Records
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                  Full Audit Visible
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <span className="text-slate-500 block">NIN:</span>
-                  <div className="flex items-center gap-1 font-mono font-bold text-blue-600 dark:text-blue-400">
-                    <span>{selectedMerchant.nin || 'Not submitted'}</span>
-                    {selectedMerchant.nin && (
+                  <span className="text-slate-500 block">National Identity Number (NIN):</span>
+                  <div className="flex items-center gap-1.5 font-mono font-bold text-sm text-blue-600 dark:text-blue-400 mt-0.5">
+                    <span className="tracking-wider">
+                      {selectedMerchant.nin || selectedMerchant.kycRecord?.nin || 'Not submitted'}
+                    </span>
+                    {(selectedMerchant.nin || selectedMerchant.kycRecord?.nin) && (
                       <button
-                        onClick={() => copyToClipboard(selectedMerchant.nin, 'nin')}
-                        className="text-slate-400 hover:text-slate-600"
+                        onClick={() => copyToClipboard(selectedMerchant.nin || selectedMerchant.kycRecord?.nin, 'nin')}
+                        className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                        title="Copy full NIN"
                       >
-                        {copiedKey === 'nin' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copiedKey === 'nin' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     )}
                   </div>
                 </div>
+
                 <div>
-                  <span className="text-slate-500 block">Status:</span>
+                  <span className="text-slate-500 block">KYC Verification Status:</span>
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                    className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-semibold ${
                       selectedMerchant.kycStatus === 'VERIFIED'
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                     }`}
                   >
-                    {selectedMerchant.kycStatus === 'VERIFIED' ? 'Verified' : 'Pending'}
+                    {selectedMerchant.kycStatus === 'VERIFIED' ? 'Verified by NIMC' : 'Pending Verification'}
                   </span>
                 </div>
+
                 <div>
                   <span className="text-slate-500 block">Date of Birth:</span>
-                  <span className="font-mono text-slate-800 dark:text-slate-200">
-                    {selectedMerchant.dob || 'N/A'}
+                  <span className="font-mono text-slate-800 dark:text-slate-200 font-medium">
+                    {selectedMerchant.kycRecord?.dob || selectedMerchant.dob || 'N/A'}
                   </span>
                 </div>
+
                 <div>
-                  <span className="text-slate-500 block">Match Score:</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-semibold">
+                  <span className="text-slate-500 block">Gender:</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-medium">
+                    {selectedMerchant.kycRecord?.rawResponse?.responseBody?.gender || 'N/A'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">NIMC Linked Phone:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                    {selectedMerchant.kycRecord?.rawResponse?.responseBody?.mobileNumber || selectedMerchant.ownerPhone || 'N/A'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Verification Provider:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                    {selectedMerchant.kycRecord?.providerName || (selectedMerchant.kycStatus === 'VERIFIED' ? 'MONNIFY' : 'N/A')}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Identity Match Score:</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-semibold font-mono">
                     {selectedMerchant.kycRecord?.matchScore
                       ? `${selectedMerchant.kycRecord.matchScore}%`
                       : selectedMerchant.kycStatus === 'VERIFIED'
@@ -382,7 +415,29 @@ export default function StaffMerchantsPage() {
                         : 'N/A'}
                   </span>
                 </div>
+
+                <div>
+                  <span className="text-slate-500 block">Verified Date:</span>
+                  <span className="text-slate-800 dark:text-slate-200 text-[11px]">
+                    {selectedMerchant.kycRecord?.verifiedAt
+                      ? new Date(selectedMerchant.kycRecord.verifiedAt).toLocaleDateString('en-NG', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : selectedMerchant.kycStatus === 'VERIFIED'
+                        ? 'Verified'
+                        : 'N/A'}
+                  </span>
+                </div>
               </div>
+
+              {selectedMerchant.kycRecord?.failureReason && (
+                <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[11px]">
+                  <span className="font-semibold block mb-0.5">Verification Note:</span>
+                  {selectedMerchant.kycRecord.failureReason}
+                </div>
+              )}
             </div>
 
             {/* SECTION 3: ALL REGISTERED BUSINESSES */}
@@ -419,6 +474,11 @@ export default function StaffMerchantsPage() {
                       <div className="text-[10px] text-slate-500 font-mono">
                         {biz.slug}
                       </div>
+                      {(biz.state || biz.lga) && (
+                        <div className="text-[10px] text-slate-400">
+                          {[biz.lga, biz.state].filter(Boolean).join(', ')}
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-right">

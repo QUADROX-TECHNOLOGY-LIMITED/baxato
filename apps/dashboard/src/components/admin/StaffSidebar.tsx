@@ -9,12 +9,14 @@ import {
   ArrowRightLeft,
   Server,
   UserCheck,
+  KeyRound,
+  HelpCircle,
   LogOut,
   X,
 } from 'lucide-react';
 import { clearSessionAndRedirect } from '@/lib/auth-session';
 
-export type StaffTab = 'overview' | 'transactions' | 'routing' | 'merchants';
+export type StaffTab = 'overview' | 'transactions' | 'routing' | 'merchants' | 'security';
 
 interface StaffSidebarProps {
   userRole?: string;
@@ -33,7 +35,7 @@ export default function StaffSidebar({
 }: StaffSidebarProps) {
   const pathname = usePathname();
 
-  const navItems = [
+  const primaryNavItems = [
     {
       href: '/staff/overview',
       label: 'Overview',
@@ -103,33 +105,77 @@ export default function StaffSidebar({
         </div>
 
         {/* Staff Navigation */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                (item.href === '/staff/overview' && pathname === '/staff');
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+          {/* Section 1: Operations */}
+          <div className="space-y-1">
+            <span className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 block mb-2">
+              Operations
+            </span>
+            <nav className="space-y-1">
+              {primaryNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  pathname === item.href ||
+                  (item.href === '/staff/overview' && pathname === '/staff');
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    if (isOpen) onClose();
-                  }}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      if (isOpen) onClose();
+                    }}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Section 2: Account & System */}
+          <div className="space-y-1 pt-2 border-t border-slate-800/80">
+            <span className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 block mb-2">
+              Account & Help
+            </span>
+            <nav className="space-y-1">
+              {/* Change Password */}
+              <Link
+                href="/staff/security"
+                onClick={() => {
+                  if (isOpen) onClose();
+                }}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                  pathname === '/staff/security'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <KeyRound className="w-4 h-4 shrink-0" />
+                <span>Change Password</span>
+              </Link>
+
+              {/* Support (Inactive placeholder) */}
+              <div
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium text-slate-500 cursor-not-allowed select-none bg-slate-900/30 border border-transparent"
+                title="Support desk is currently offline"
+              >
+                <div className="flex items-center gap-3">
+                  <HelpCircle className="w-4 h-4 shrink-0 text-slate-500" />
+                  <span>Support</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                  Inactive
+                </span>
+              </div>
+            </nav>
+          </div>
         </div>
 
         {/* Bottom Staff Profile Card */}

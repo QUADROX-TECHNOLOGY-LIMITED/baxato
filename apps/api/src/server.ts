@@ -278,6 +278,7 @@ export function buildServer(): FastifyInstance {
   app.register(teamRoutes, { prefix: '/team' });
   app.register(inviteOnboardingRoutes, { prefix: '/invites' });
   app.register(adminRoutes, { prefix: '/admin' });
+  app.register(adminRoutes, { prefix: '/v1/admin' });
 
   return app;
 }

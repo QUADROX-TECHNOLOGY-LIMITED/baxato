@@ -21,6 +21,7 @@ import {
   and,
   or,
   desc,
+  gte,
   ilike,
   sql,
 } from '@baxato/database';
@@ -55,7 +56,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         pendingCount: sql<number>`count(*) filter (where ${serviceTransactions.status} in ('PENDING', 'PROCESSING'))`,
       })
       .from(serviceTransactions)
-      .where(sql`${serviceTransactions.createdAt} >= ${todayStart}`);
+      .where(gte(serviceTransactions.createdAt, todayStart));
 
     // 2. Merchant & KYC counts
     const [bizCount] = await db
@@ -381,10 +382,13 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       } else if (
         requeryResult.status === TransactionStatus.FAILED &&
         requeryResult.responseCode !== 'UNKNOWN' &&
-        requeryResult.responseCode !== '20010'
+        requeryResult.responseCode !== '20010' &&
+        requeryResult.responseCode !== '99'
       ) {
         updatedStatus = TransactionStatus.FAILED;
         syncMessage = `Updated: Upstream gateway confirmed transaction is FAILED (${requeryResult.responseMessage}).`;
+      } else if (requeryResult.status === TransactionStatus.PENDING || requeryResult.responseCode === '99') {
+        syncMessage = `Inconclusive: Upstream returned response code ${requeryResult.responseCode} (${requeryResult.responseMessage}). Transaction remains ${tx.status}.`;
       } else {
         syncMessage = `Unchanged: Upstream response code ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
       }
@@ -622,14 +626,18 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           isEmailVerified: ownerUser?.isEmailVerified || false,
           isPhoneVerified: ownerUser?.isPhoneVerified || false,
           kycStatus: ownerUser?.kycStatus || 'UNVERIFIED',
-          nin: ownerUser?.nin || '',
-          dob: ownerUser?.dob || '',
+          nin: kycRecord?.nin || ownerUser?.nin || '',
+          dob: kycRecord?.dob || ownerUser?.dob || '',
           ninData: ownerUser?.ninData || {},
           avatarUrl: ownerUser?.avatarUrl || null,
           kycRecord: kycRecord
             ? {
+                nin: kycRecord.nin,
+                dob: kycRecord.dob,
                 providerName: kycRecord.providerName,
+                status: kycRecord.status,
                 matchScore: kycRecord.matchScore,
+                photoExtracted: kycRecord.photoExtracted,
                 verifiedAt: kycRecord.verifiedAt,
                 failureReason: kycRecord.failureReason,
                 rawResponse: kycRecord.rawResponse,
