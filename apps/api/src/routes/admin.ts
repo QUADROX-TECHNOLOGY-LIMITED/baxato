@@ -222,6 +222,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           clientReference: r.clientReference,
           requestReference: r.requestReference,
           errorMessage: r.errorMessage,
+          metadata: r.metadata,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
         };
