@@ -280,7 +280,7 @@ export default function StaffTransactionsPage() {
                           setIsReceiptOpen(true);
                         }}
                         className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition flex items-center gap-1"
-                        title="View printable receipt voucher"
+                        title="View printable receipt"
                       >
                         <Receipt className="w-3 h-3" />
                         <span>Receipt</span>
@@ -488,7 +488,7 @@ export default function StaffTransactionsPage() {
                 className="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center gap-1.5 transition"
               >
                 <Receipt className="w-3.5 h-3.5" />
-                <span>View Official Receipt</span>
+                <span>View Receipt</span>
               </button>
               <button
                 onClick={() => setSelectedTx(null)}
