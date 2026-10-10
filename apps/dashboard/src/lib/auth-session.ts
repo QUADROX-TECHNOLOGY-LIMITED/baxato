@@ -18,6 +18,10 @@ export interface StoredUser {
 export interface StoredBusiness {
   id: string;
   name: string;
+  slug?: string;
+  email?: string;
+  phoneNumber?: string;
+  role?: string;
   rcNumber?: string;
   bvn?: string;
 }
@@ -58,6 +62,29 @@ export function getStoredBusiness(): StoredBusiness | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Updates the active business profile (and optionally token) in localStorage,
+ * and notifies listening components via a window event.
+ */
+export function setActiveBusiness(biz: StoredBusiness, token?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('bx_business', JSON.stringify(biz));
+    if (token) {
+      localStorage.setItem('bx_auth_token', token);
+    }
+    if (biz.role) {
+      const userRaw = localStorage.getItem('bx_user');
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        u.role = biz.role;
+        localStorage.setItem('bx_user', JSON.stringify(u));
+      }
+    }
+    window.dispatchEvent(new CustomEvent('bx_business_switched', { detail: { business: biz } }));
+  } catch {}
 }
 
 /**

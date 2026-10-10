@@ -25,6 +25,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
+import BusinessSwitcher from './BusinessSwitcher';
 
 interface SidebarProps {
   businessName: string;
@@ -238,21 +239,9 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Business Workspace */}
-        <div className="px-5 py-3 bg-slate-50/70 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
-              <Building className="w-3.5 h-3.5" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
-                {businessName || 'Business Workspace'}
-              </span>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
-                Merchant Gateway
-              </span>
-            </div>
-          </div>
+        {/* Business Workspace Switcher */}
+        <div className="px-3.5 py-3 bg-slate-50/70 dark:bg-[#071120] border-b border-slate-200 dark:border-slate-800/80">
+          <BusinessSwitcher currentBusinessName={businessName} />
         </div>
 
         {/* Navigation Links Scrollable Area */}

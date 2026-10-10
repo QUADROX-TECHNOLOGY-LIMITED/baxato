@@ -238,4 +238,38 @@ describe('Multi-Business Architecture & 3-Business Cap (/businesses/*)', () => {
     expect(body.success).toBe(true);
     expect(body.data?.removed).toBe(true);
   });
+
+  it('POST /businesses/:id/switch successfully switches active business and issues refreshed token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/businesses/${secondBizId}/switch`,
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ token: string; business: { id: string; name: string }; wallets: { main: any; commission: any } }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.token).toBeDefined();
+    expect(body.data?.business.id).toBe(secondBizId);
+    expect(body.data?.wallets.main).toBeDefined();
+    expect(body.data?.wallets.commission).toBeDefined();
+  });
+
+  it('GET /wallets respects x-business-id header for authorized business', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/wallets',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': secondBizId,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body: ApiResponse<{ wallets: Array<{ businessId: string; type: string }> }> = res.json();
+    expect(body.success).toBe(true);
+    expect(body.data?.wallets[0]?.businessId).toBe(secondBizId);
+  });
 });

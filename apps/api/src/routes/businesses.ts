@@ -36,6 +36,7 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       createSuccessResponse(
         {
           business: result.business,
+          token: result.token,
           wallets: result.wallets,
           message: 'Business created successfully.',
         },
@@ -54,13 +55,48 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('User ID required');
     }
 
-    const businesses = await businessService.getBusinessesForUser(userId);
+    const list = await businessService.getBusinessesForUser(userId);
+    const activeId = request.businessId;
+
+    const businesses = list.map((b) => ({
+      ...b,
+      isActive: b.id === activeId,
+    }));
+
     return reply.status(200).send(
       createSuccessResponse(
         {
           businesses,
+          activeBusinessId: activeId,
           count: businesses.length,
           maxAllowed: 3,
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
+   * POST /businesses/:id/switch
+   * Switches active business workspace context and returns refreshed session token.
+   */
+  fastify.post('/:id/switch', async (request, reply) => {
+    const userId = request.user?.id;
+    const { id } = request.params as { id: string };
+
+    if (!userId || !id) {
+      throw new ValidationError('User ID and Business ID are required');
+    }
+
+    const result = await businessService.switchBusiness(userId, id);
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          token: result.token,
+          business: result.business,
+          wallets: result.wallets,
+          message: `Switched active workspace to ${result.business.name}.`,
         },
         request.id,
       ),

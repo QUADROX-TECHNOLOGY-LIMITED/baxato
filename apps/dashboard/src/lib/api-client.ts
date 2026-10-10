@@ -90,17 +90,21 @@ export async function proxyToBackendApi<T = any>(
   if (incomingRequest) {
     const reqUa = incomingRequest.headers.get('user-agent');
     const reqFwd = incomingRequest.headers.get('x-forwarded-for') || incomingRequest.headers.get('x-real-ip');
+    const reqBiz = incomingRequest.headers.get('x-business-id');
     if (reqUa) clientHeaders['user-agent'] = reqUa;
     if (reqFwd) clientHeaders['x-forwarded-for'] = reqFwd;
+    if (reqBiz) clientHeaders['x-business-id'] = reqBiz;
   }
 
-  if (!clientHeaders['user-agent'] || !clientHeaders['x-forwarded-for']) {
+  if (!clientHeaders['user-agent'] || !clientHeaders['x-forwarded-for'] || !clientHeaders['x-business-id']) {
     try {
       const h = headers();
       const ua = h.get('user-agent');
       const fwd = h.get('x-forwarded-for') || h.get('x-real-ip');
+      const biz = h.get('x-business-id');
       if (ua && !clientHeaders['user-agent']) clientHeaders['user-agent'] = ua;
       if (fwd && !clientHeaders['x-forwarded-for']) clientHeaders['x-forwarded-for'] = fwd;
+      if (biz && !clientHeaders['x-business-id']) clientHeaders['x-business-id'] = biz;
     } catch {
       // headers() not available in background or static build context
     }

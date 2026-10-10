@@ -5,13 +5,21 @@ export const MAX_BUSINESSES_PER_USER = 3;
 
 export const createBusinessSchema = z.object({
   name: z.string().min(2, 'Business name must be at least 2 characters'),
+  email: z.string().email('Please enter a valid business email address').optional().or(z.literal('')),
   websiteUrl: z.string().url('Invalid website URL').optional().or(z.literal('')),
-  country: z.string().min(2, 'Country code must be at least 2 characters').default('NG'),
-  state: z.string().min(2, 'State is required'),
-  lga: z.string().min(2, 'LGA or City is required'),
+  phoneNumber: z.string().optional().or(z.literal('')),
+  country: z.string().min(2).default('NG').optional(),
+  state: z.string().default('Lagos').optional(),
+  lga: z.string().default('Ikeja').optional(),
 });
 
 export type CreateBusinessInput = z.infer<typeof createBusinessSchema>;
+
+export const switchBusinessSchema = z.object({
+  businessId: z.string().min(1, 'Business ID is required'),
+});
+
+export type SwitchBusinessInput = z.infer<typeof switchBusinessSchema>;
 
 export const updateBusinessSchema = z.object({
   name: z.string().min(2).optional(),

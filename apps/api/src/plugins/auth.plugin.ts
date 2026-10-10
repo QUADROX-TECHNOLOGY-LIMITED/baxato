@@ -10,7 +10,7 @@ import {
   type ApiKeyContext,
   type ApiKeyEnvironment,
 } from '@baxato/common';
-import { db, users, businesses, businessMembers, eq } from '@baxato/database';
+import { db, users, businesses, businessMembers, eq, and } from '@baxato/database';
 import { apiKeyService } from '../services/api-key.service.js';
 
 declare module 'fastify' {
@@ -116,19 +116,39 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     throw new AuthenticationError('User account is inactive, suspended, or not found.');
   }
 
-  // Verify and resolve active business
-  let activeBizId = sessionUser.businessId;
-  if (activeBizId) {
-    const [bizExists] = await db
-      .select({ id: businesses.id })
+  // Support explicit x-business-id header override with strict authorization check
+  const headerBizId = (request.headers['x-business-id'] as string | undefined)?.trim();
+  const requestedBizId = headerBizId || sessionUser.businessId;
+
+  let activeBizId: string | undefined;
+  let activeRole: UserRole = dbUser.role as UserRole;
+
+  if (requestedBizId) {
+    const [biz] = await db
+      .select({ id: businesses.id, ownerId: businesses.ownerId })
       .from(businesses)
-      .where(eq(businesses.id, activeBizId))
+      .where(eq(businesses.id, requestedBizId))
       .limit(1);
-    if (!bizExists) {
-      activeBizId = undefined;
+
+    if (biz) {
+      if (biz.ownerId === dbUser.id) {
+        activeBizId = biz.id;
+        activeRole = UserRole.BUSINESS_OWNER;
+      } else {
+        const [membership] = await db
+          .select({ businessId: businessMembers.businessId, role: businessMembers.role })
+          .from(businessMembers)
+          .where(and(eq(businessMembers.businessId, biz.id), eq(businessMembers.userId, dbUser.id)))
+          .limit(1);
+        if (membership) {
+          activeBizId = membership.businessId;
+          activeRole = membership.role as UserRole;
+        }
+      }
     }
   }
 
+  // Fallback to primary owned business or first membership if no valid active business found
   if (!activeBizId) {
     const [ownedBiz] = await db
       .select({ id: businesses.id })
@@ -138,14 +158,16 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
     if (ownedBiz) {
       activeBizId = ownedBiz.id;
+      activeRole = UserRole.BUSINESS_OWNER;
     } else {
       const [membership] = await db
-        .select({ businessId: businessMembers.businessId })
+        .select({ businessId: businessMembers.businessId, role: businessMembers.role })
         .from(businessMembers)
         .where(eq(businessMembers.userId, dbUser.id))
         .limit(1);
       if (membership) {
         activeBizId = membership.businessId;
+        activeRole = membership.role as UserRole;
       }
     }
   }
@@ -153,7 +175,10 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   request.user = {
     id: dbUser.id,
     email: dbUser.email,
-    role: dbUser.role as UserRole,
+    role:
+      dbUser.role === UserRole.SUPER_ADMIN || dbUser.role === UserRole.STAFF
+        ? (dbUser.role as UserRole)
+        : activeRole,
     businessId: activeBizId,
     kycStatus: dbUser.kycStatus as KycStatus,
   };

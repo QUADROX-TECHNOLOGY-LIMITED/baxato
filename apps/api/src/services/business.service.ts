@@ -9,6 +9,7 @@ import {
   generateEntityId,
   formatNairaFromKobo,
   koboToNaira,
+  KycStatus,
   type CreateBusinessInput,
   type UpdateBusinessInput,
 } from '@baxato/common';
@@ -22,6 +23,7 @@ import {
   and,
 } from '@baxato/database';
 import crypto from 'crypto';
+import { generateToken } from '../plugins/auth.plugin.js';
 
 export class BusinessService {
   /**
@@ -57,16 +59,28 @@ export class BusinessService {
     const webhookSecret = this.generateWebhookSecret();
 
     // 3. Insert Business
+    let businessEmail = input.email ? input.email.trim().toLowerCase() : null;
+    if (!businessEmail) {
+      const [owner] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, ownerId))
+        .limit(1);
+      businessEmail = owner?.email || null;
+    }
+
     const [newBusiness] = await db
       .insert(businesses)
       .values({
         ownerId,
         name: input.name.trim(),
         slug,
+        email: businessEmail,
+        phoneNumber: input.phoneNumber ? input.phoneNumber.trim() : null,
         websiteUrl: input.websiteUrl || null,
-        country: input.country.toUpperCase(),
-        state: input.state.trim(),
-        lga: input.lga.trim(),
+        country: (input.country || 'NG').toUpperCase(),
+        state: (input.state || 'Lagos').trim(),
+        lga: (input.lga || 'Ikeja').trim(),
         status: 'ACTIVE',
         webhookSecret,
       })
@@ -100,8 +114,26 @@ export class BusinessService {
       role: UserRole.BUSINESS_OWNER,
     });
 
+    // 6. Generate fresh session token scoped to the newly created business
+    const [ownerUser] = await db
+      .select({ id: users.id, email: users.email, role: users.role, kycStatus: users.kycStatus })
+      .from(users)
+      .where(eq(users.id, ownerId))
+      .limit(1);
+
+    const token = ownerUser
+      ? generateToken({
+          id: ownerUser.id,
+          email: ownerUser.email,
+          role: UserRole.BUSINESS_OWNER,
+          businessId: newBusiness.id,
+          kycStatus: ownerUser.kycStatus as KycStatus,
+        })
+      : undefined;
+
     return {
       business: newBusiness,
+      token,
       wallets: {
         main: mainWallet
           ? {
@@ -174,6 +206,8 @@ export class BusinessService {
           id: biz.id,
           name: biz.name,
           slug: biz.slug,
+          email: biz.email,
+          phoneNumber: biz.phoneNumber,
           websiteUrl: biz.websiteUrl,
           country: biz.country,
           state: biz.state,
@@ -247,6 +281,8 @@ export class BusinessService {
       id: biz.id,
       name: biz.name,
       slug: biz.slug,
+      email: biz.email,
+      phoneNumber: biz.phoneNumber,
       websiteUrl: biz.websiteUrl,
       country: biz.country,
       state: biz.state,
@@ -507,6 +543,105 @@ export class BusinessService {
       .where(eq(businessMembers.businessId, businessId));
 
     return members;
+  }
+
+  /**
+   * Switches active business workspace for the authenticated user and issues a fresh session token.
+   */
+  public async switchBusiness(userId: string, targetBusinessId: string) {
+    const [biz] = await db
+      .select()
+      .from(businesses)
+      .where(eq(businesses.id, targetBusinessId))
+      .limit(1);
+
+    if (!biz || biz.status !== 'ACTIVE') {
+      throw new NotFoundError('Business workspace not found or is inactive.');
+    }
+
+    const isOwner = biz.ownerId === userId;
+    let memberRole: UserRole = UserRole.BUSINESS_OWNER;
+
+    if (!isOwner) {
+      const [membership] = await db
+        .select()
+        .from(businessMembers)
+        .where(and(eq(businessMembers.businessId, targetBusinessId), eq(businessMembers.userId, userId)))
+        .limit(1);
+
+      if (!membership) {
+        throw new ForbiddenError('You do not have access to this business workspace.');
+      }
+      memberRole = membership.role as UserRole;
+    }
+
+    const [dbUser] = await db
+      .select({ id: users.id, email: users.email, role: users.role, kycStatus: users.kycStatus })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!dbUser) {
+      throw new NotFoundError('User profile');
+    }
+
+    const effectiveRole =
+      dbUser.role === UserRole.SUPER_ADMIN || dbUser.role === UserRole.STAFF
+        ? (dbUser.role as UserRole)
+        : memberRole;
+
+    const token = generateToken({
+      id: dbUser.id,
+      email: dbUser.email,
+      role: effectiveRole,
+      businessId: biz.id,
+      kycStatus: dbUser.kycStatus as KycStatus,
+    });
+
+    const bizWallets = await db
+      .select()
+      .from(wallets)
+      .where(eq(wallets.businessId, biz.id));
+
+    const main = bizWallets.find((w) => w.type === 'MAIN');
+    const comm = bizWallets.find((w) => w.type === 'COMMISSION');
+
+    return {
+      token,
+      business: {
+        id: biz.id,
+        name: biz.name,
+        slug: biz.slug,
+        email: biz.email,
+        phoneNumber: biz.phoneNumber,
+        websiteUrl: biz.websiteUrl,
+        country: biz.country,
+        state: biz.state,
+        lga: biz.lga,
+        status: biz.status,
+        role: memberRole,
+        isOwner,
+        createdAt: biz.createdAt,
+      },
+      wallets: {
+        main: main
+          ? {
+              id: main.id,
+              balanceKobo: main.balance.toString(),
+              balanceNaira: koboToNaira(main.balance),
+              formatted: formatNairaFromKobo(main.balance),
+            }
+          : null,
+        commission: comm
+          ? {
+              id: comm.id,
+              balanceKobo: comm.balance.toString(),
+              balanceNaira: koboToNaira(comm.balance),
+              formatted: formatNairaFromKobo(comm.balance),
+            }
+          : null,
+      },
+    };
   }
 }
 

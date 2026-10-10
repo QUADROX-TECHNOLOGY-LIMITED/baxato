@@ -60,9 +60,11 @@ export default function DashboardOverviewPage() {
         return;
       }
 
+      const storedBiz = getStoredBusiness();
       const res = await fetch('/api/wallets', {
         headers: {
           Authorization: `Bearer ${authToken}`,
+          ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
         },
       });
       const data = await res.json().catch(() => null);
@@ -128,14 +130,28 @@ export default function DashboardOverviewPage() {
 
     loadWallets();
     loadRecentTransactions();
+
+    const handleBizSwitched = () => {
+      const updatedBiz = getStoredBusiness();
+      if (updatedBiz?.name) setBusinessName(updatedBiz.name);
+      loadWallets();
+      loadRecentTransactions();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
 
   const loadRecentTransactions = async () => {
     try {
       const authToken = getStoredAuthToken();
       if (!authToken) return;
+      const storedBiz = getStoredBusiness();
       const res = await fetch('/api/transactions?limit=6', {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
+        },
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && Array.isArray(data.data?.transactions)) {
