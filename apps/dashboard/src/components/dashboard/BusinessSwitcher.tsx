@@ -37,11 +37,13 @@ interface BusinessItem {
 interface BusinessSwitcherProps {
   currentBusinessName?: string;
   onBusinessChanged?: (business: StoredBusiness) => void;
+  variant?: 'sidebar' | 'header';
 }
 
 export default function BusinessSwitcher({
   currentBusinessName,
   onBusinessChanged,
+  variant = 'sidebar',
 }: BusinessSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [businesses, setBusinesses] = useState<BusinessItem[]>([]);
@@ -181,35 +183,69 @@ export default function BusinessSwitcher({
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Workspace Switcher Trigger Button */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-left p-2.5 rounded-xl bg-slate-50/90 dark:bg-[#071120] hover:bg-slate-100 dark:hover:bg-[#0B1528] border border-slate-200 dark:border-slate-800/80 transition-all flex items-center justify-between gap-2 group"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
-            <Building className="w-3.5 h-3.5" />
+      {variant === 'header' ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100/90 dark:bg-[#0E1828] hover:bg-slate-200/80 dark:hover:bg-[#15233a] border border-slate-200/80 dark:border-slate-800 transition-all flex items-center justify-between gap-2 max-w-[170px] sm:max-w-[220px] md:max-w-[260px] group shadow-sm"
+          title={`Active Workspace: ${displayName}`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
+              <Building className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
+                {displayName}
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:block truncate">
+                {activeBiz?.email || 'Merchant Workspace'}
+              </span>
+            </div>
           </div>
-          <div className="min-w-0">
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
-              {displayName}
-            </span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate">
-              {activeBiz?.email || 'Merchant Workspace'}
-            </span>
-          </div>
-        </div>
 
-        <ChevronDown
-          className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform shrink-0 ${
-            isOpen ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform shrink-0 ${
+              isOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full text-left p-2.5 rounded-xl bg-slate-50/90 dark:bg-[#071120] hover:bg-slate-100 dark:hover:bg-[#0B1528] border border-slate-200 dark:border-slate-800/80 transition-all flex items-center justify-between gap-2 group"
+          title={`Active Workspace: ${displayName}`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
+              <Building className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">
+                {displayName}
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 block truncate">
+                {activeBiz?.email || 'Merchant Workspace'}
+              </span>
+            </div>
+          </div>
+
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform shrink-0 ${
+              isOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      )}
 
       {/* Switcher Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+        <div
+          className={`absolute ${
+            variant === 'header' ? 'left-0 w-72 sm:w-80' : 'left-0 right-0'
+          } top-full mt-1.5 z-50 bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150`}
+        >
           {/* Header */}
           <div className="px-3.5 py-2.5 bg-slate-50 dark:bg-[#080E1A] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
@@ -292,7 +328,7 @@ export default function BusinessSwitcher({
           </div>
 
           {/* Bottom Action: Add New Workspace */}
-          <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#080E1A]/60">
+          <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#080E1A]/60">
             {canAddMore ? (
               <button
                 type="button"
@@ -300,9 +336,9 @@ export default function BusinessSwitcher({
                   setIsOpen(false);
                   setIsCreateModalOpen(true);
                 }}
-                className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-white dark:bg-[#0D1726] hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-blue-600 dark:text-blue-400 transition flex items-center justify-center gap-1.5 shadow-sm"
+                className="w-full py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 <span>Add Business Workspace</span>
               </button>
             ) : (

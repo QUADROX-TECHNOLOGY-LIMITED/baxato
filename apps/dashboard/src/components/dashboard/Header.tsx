@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import BusinessSwitcher from './BusinessSwitcher';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -64,20 +65,23 @@ export default function Header({
   const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
 
   return (
-    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-150`}>
-      <div className="flex items-center justify-between gap-4">
-        {/* Left Side: Mobile Menu Button & Search */}
-        <div className="flex items-center gap-3 flex-1 max-w-md">
+    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 transition-colors duration-150`}>
+      <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+        {/* Left Side: Mobile Menu Button, Business Switcher & Search */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onToggleSidebar}
-            className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
             aria-label="Open menu"
           >
             <Menu className="w-5 h-5" />
           </button>
 
+          {/* Business Workspace Switcher in Header (accessible directly on mobile & desktop) */}
+          <BusinessSwitcher currentBusinessName={merchantName} variant="header" />
+
           {/* Quick Search */}
-          <div className="relative w-full hidden sm:block">
+          <div className="relative w-full max-w-xs hidden md:block">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -91,7 +95,7 @@ export default function Header({
         </div>
 
         {/* Right Side: Refresh, Theme, Bell & Profile */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Refresh Balances */}
           <button
             onClick={onRefresh}
