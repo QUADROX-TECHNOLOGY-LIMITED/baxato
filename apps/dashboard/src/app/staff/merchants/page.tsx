@@ -23,6 +23,8 @@ export default function StaffMerchantsPage() {
   const [selectedMerchant, setSelectedMerchant] = useState<any | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
@@ -32,6 +34,7 @@ export default function StaffMerchantsPage() {
   const loadMerchants = async () => {
     try {
       setIsLoadingMerchants(true);
+      setLoadError(null);
       const token = getStoredAuthToken();
       if (!token) return;
 
@@ -44,7 +47,7 @@ export default function StaffMerchantsPage() {
       const res = await fetch(`/api/admin/merchants?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (res.ok && data?.success) {
         let list = data.data || [];
         if (kycFilter === 'VERIFIED') {
@@ -54,9 +57,13 @@ export default function StaffMerchantsPage() {
         }
         setMerchants(list);
         setMerchantPagination(data.pagination);
+      } else {
+        const errorMsg = data?.error?.message || data?.message || 'Failed to retrieve merchants directory.';
+        setLoadError(errorMsg);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to load merchants:', err);
+      setLoadError(err instanceof Error ? err.message : 'Network error loading merchants.');
     } finally {
       setIsLoadingMerchants(false);
     }
@@ -173,7 +180,23 @@ export default function StaffMerchantsPage() {
             {merchants.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-8 text-center text-slate-500">
-                  {isLoadingMerchants ? 'Loading...' : 'No merchants found.'}
+                  {isLoadingMerchants ? (
+                    'Loading merchants...'
+                  ) : loadError ? (
+                    <div className="space-y-2 py-2">
+                      <p className="text-red-500 font-medium">{loadError}</p>
+                      <button
+                        onClick={loadMerchants}
+                        className="px-3 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 font-semibold text-xs transition"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : merchantSearch.trim() ? (
+                    `No merchants matching "${merchantSearch}".`
+                  ) : (
+                    'No merchants found.'
+                  )}
                 </td>
               </tr>
             ) : (

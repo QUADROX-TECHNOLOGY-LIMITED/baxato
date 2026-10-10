@@ -82,6 +82,10 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_url TEXT;`;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_secret TEXT;`;
 
+    // Idempotent schema guarantee for Multi-business contact fields
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT;`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS phone_number TEXT;`;
+
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;
   } catch (err: any) {

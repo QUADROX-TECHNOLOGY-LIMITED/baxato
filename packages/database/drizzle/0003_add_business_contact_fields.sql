@@ -1,0 +1,2 @@
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS phone_number TEXT;
