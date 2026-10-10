@@ -9,12 +9,8 @@ import {
   ArrowRightLeft,
   Server,
   UserCheck,
-  ShieldCheck,
-  ExternalLink,
   LogOut,
   X,
-  Activity,
-  ShieldAlert,
 } from 'lucide-react';
 import { clearSessionAndRedirect } from '@/lib/auth-session';
 
@@ -36,32 +32,27 @@ export default function StaffSidebar({
   onClose,
 }: StaffSidebarProps) {
   const pathname = usePathname();
-  const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
   const navItems = [
     {
       href: '/staff/overview',
-      label: 'Platform Overview',
-      subtitle: 'Telemetry & Volume',
+      label: 'Overview',
       icon: LayoutDashboard,
     },
     {
       href: '/staff/transactions',
-      label: 'Transaction Desk',
-      subtitle: 'Audit & Upstream Sync',
+      label: 'Transactions',
       icon: ArrowRightLeft,
     },
     {
-      href: '/staff/routing',
-      label: 'Provider Failovers',
-      subtitle: 'Monnify / Interswitch',
-      icon: Server,
+      href: '/staff/merchants',
+      label: 'Merchants',
+      icon: UserCheck,
     },
     {
-      href: '/staff/merchants',
-      label: 'Merchants & NIN Directory',
-      subtitle: 'KYC & Business Accounts',
-      icon: UserCheck,
+      href: '/staff/routing',
+      label: 'Routing',
+      icon: Server,
     },
   ];
 
@@ -78,14 +69,14 @@ export default function StaffSidebar({
 
       {/* Staff Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#0B132B] text-slate-200 border-r border-slate-800/80 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#0B132B] text-slate-200 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Brand & Backoffice Badge Header */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="relative w-7 h-7 flex-shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-white dark:bg-[#0A1324] p-0.5">
+            <div className="relative w-7 h-7 flex-shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-white p-0.5">
               <Image
                 src="/baxato-logo.jpg"
                 alt="Baxato"
@@ -97,74 +88,54 @@ export default function StaffSidebar({
             <span className="font-bold text-base tracking-wider text-white">
               BAXATO
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-slate-300 border border-slate-700">
               STAFF
             </span>
           </div>
 
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Dedicated Staff Navigation */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
-          <div>
-            <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center justify-between">
-              <span>Operations & Routing</span>
-              <Activity className="w-3.5 h-3.5 text-slate-500" />
-            </div>
+        {/* Staff Navigation */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          <nav className="space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href === '/staff/overview' && pathname === '/staff');
 
-            <nav className="space-y-1.5">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href || (item.href === '/staff/overview' && pathname === '/staff');
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => {
-                      if (isOpen) onClose();
-                    }}
-                    className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-xl text-xs transition-all group ${
-                      isActive
-                        ? 'bg-[#126BEB] text-white font-medium shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Icon
-                      className={`w-4 h-4 mt-0.5 flex-shrink-0 transition-transform ${
-                        isActive ? 'text-white' : 'text-slate-400'
-                      }`}
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="truncate">{item.label}</span>
-                      <span
-                        className={`text-[10px] truncate ${
-                          isActive ? 'text-blue-100' : 'text-slate-500'
-                        }`}
-                      >
-                        {item.subtitle}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    if (isOpen) onClose();
+                  }}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
-        {/* Bottom Staff Profile Card & Portal Switch */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/40 space-y-3">
-          {/* User Details */}
-          <div className="flex items-center gap-3 px-2 py-1">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-sm shadow-blue-500/20">
+        {/* Bottom Staff Profile Card */}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/50 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 font-semibold flex items-center justify-center text-xs shrink-0">
               {staffName
                 ? staffName
                     .split(' ')
@@ -175,33 +146,19 @@ export default function StaffSidebar({
                 : 'ST'}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-white truncate">
+              <div className="text-xs font-medium text-white truncate">
                 {staffName || 'Staff Member'}
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  STAFF
-                </span>
+              <div className="text-[10px] text-slate-400 font-mono">
+                Staff Account
               </div>
             </div>
           </div>
 
-          {/* Quick Switch to Merchant View */}
-          <Link
-            href="/dashboard"
-            className="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs transition"
-          >
-            <span className="flex items-center gap-2">
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-              <span>Merchant Portal</span>
-            </span>
-            <span className="text-[10px] text-slate-500">/dashboard</span>
-          </Link>
-
           {/* Sign Out Button */}
           <button
             onClick={() => clearSessionAndRedirect('logout')}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 transition"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>

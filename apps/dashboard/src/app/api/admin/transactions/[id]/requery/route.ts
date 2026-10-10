@@ -7,11 +7,14 @@ export async function POST(
 ) {
   try {
     const authHeader = request.headers.get('authorization') || '';
+    const body = await request.json().catch(() => ({}));
     const result = await proxyToBackendApi(`/admin/transactions/${params.id}/requery`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         ...(authHeader ? { Authorization: authHeader } : {}),
       },
+      body: JSON.stringify(body),
     });
 
     return NextResponse.json(result.data, { status: result.status });

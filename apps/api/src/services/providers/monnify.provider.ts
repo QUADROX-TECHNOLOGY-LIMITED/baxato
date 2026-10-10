@@ -686,14 +686,16 @@ export class MonnifyProvider implements ProviderAdapter {
   /**
    * Re-query transaction status using official Monnify Bills Payment API:
    * GET /api/v1/vas/bills-payment/requery?paymentReference=...
+   * Supports fallback to transactionReference if providerReference is available.
    */
   public async requeryTransaction(
     requestReference: string,
-    _providerReference?: string,
+    providerReference?: string,
   ): Promise<TransactionStatusResult> {
     const token = await this.getAccessToken();
 
-    const res = await fetch(
+    // 1. First attempt: Query with paymentReference
+    let res = await fetch(
       `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?paymentReference=${encodeURIComponent(requestReference)}`,
       {
         method: 'GET',
@@ -704,8 +706,8 @@ export class MonnifyProvider implements ProviderAdapter {
       },
     );
 
-    const rawData = await safeParseResponse(res);
-    const data = (rawData || {}) as {
+    let rawData = await safeParseResponse(res);
+    let data = (rawData || {}) as {
       requestSuccessful: boolean;
       responseMessage: string;
       responseCode: string;
@@ -718,6 +720,24 @@ export class MonnifyProvider implements ProviderAdapter {
         amount?: number;
       };
     };
+
+    // 2. If paymentReference didn't succeed and providerReference is available, query by transactionReference
+    if (!data?.requestSuccessful && providerReference && providerReference !== requestReference) {
+      const fallbackRes = await fetch(
+        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?transactionReference=${encodeURIComponent(providerReference)}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      const fallbackData = await safeParseResponse(fallbackRes);
+      if (fallbackData && (fallbackData as any).requestSuccessful) {
+        data = fallbackData as typeof data;
+      }
+    }
 
     const isSuccess = Boolean(
       data?.requestSuccessful &&

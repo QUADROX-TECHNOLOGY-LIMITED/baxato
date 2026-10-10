@@ -5,14 +5,10 @@ import {
   Search,
   RefreshCw,
   X,
-  ShieldCheck,
   Copy,
   Check,
-  ArrowRightLeft,
   CheckCircle2,
   AlertTriangle,
-  Clock,
-  ExternalLink,
 } from 'lucide-react';
 import { getStoredAuthToken } from '@/lib/auth-session';
 
@@ -25,6 +21,7 @@ export default function StaffTransactionsPage() {
   const [txPagination, setTxPagination] = useState<any>(null);
   const [isLoadingTx, setIsLoadingTx] = useState<boolean>(false);
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
+  const [queryRefInput, setQueryRefInput] = useState<string>('');
   const [isRequerying, setIsRequerying] = useState<boolean>(false);
   const [requeryFeedback, setRequeryFeedback] = useState<{
     type: 'success' | 'warning' | 'error';
@@ -71,7 +68,13 @@ export default function StaffTransactionsPage() {
     loadTransactions();
   }, [txPage, txServiceFilter, txStatusFilter]);
 
-  const handleRequery = async (txId: string) => {
+  const handleOpenInspect = (tx: any) => {
+    setSelectedTx(tx);
+    setRequeryFeedback(null);
+    setQueryRefInput(tx.requestReference || tx.providerReference || tx.clientReference || '');
+  };
+
+  const handleRequery = async (txId: string, customRef?: string) => {
     try {
       setIsRequerying(true);
       setRequeryFeedback(null);
@@ -80,11 +83,17 @@ export default function StaffTransactionsPage() {
 
       const res = await fetch(`/api/admin/transactions/${txId}/requery`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customReference: customRef ? customRef.trim() : undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data?.success) {
-        const syncMsg = data.data.syncMessage || `Upstream Sync Complete: Status is ${data.data.currentStatus}`;
+        const syncMsg = data.data.syncMessage || `Status: ${data.data.currentStatus}`;
         const currentStatus = data.data.currentStatus;
 
         setRequeryFeedback({
@@ -105,13 +114,13 @@ export default function StaffTransactionsPage() {
       } else {
         setRequeryFeedback({
           type: 'error',
-          message: data?.error?.message || 'Failed to re-query upstream provider gateway.',
+          message: data?.error?.message || 'Failed to re-query provider.',
         });
       }
     } catch (err) {
       setRequeryFeedback({
         type: 'error',
-        message: 'An error occurred while contacting the upstream gateway.',
+        message: 'An error occurred while contacting the upstream provider.',
       });
     } finally {
       setIsRequerying(false);
@@ -120,38 +129,38 @@ export default function StaffTransactionsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Page Title */}
+      {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Transactions Desk
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Transactions
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Global audit records, provider payload inspection, and upstream status synchronizations.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Audit logs, provider references, and live upstream status verification.
           </p>
         </div>
 
         <button
           onClick={loadTransactions}
           disabled={isLoadingTx}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition self-start md:self-auto shadow-sm"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTx ? 'animate-spin text-blue-500' : ''}`} />
-          <span>Refresh Desk</span>
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTx ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </button>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Search & Filters */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by reference, recipient phone, meter number, smartcard..."
+            placeholder="Search by reference, recipient phone, meter number..."
             value={txSearch}
             onChange={(e) => setTxSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && loadTransactions()}
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full pl-9 pr-4 py-2 rounded-lg text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
           />
         </div>
 
@@ -162,7 +171,7 @@ export default function StaffTransactionsPage() {
               setTxServiceFilter(e.target.value);
               setTxPage(1);
             }}
-            className="px-3 py-2 rounded-xl text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
+            className="px-3 py-2 rounded-lg text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
           >
             <option value="ALL">All Services</option>
             <option value="AIRTIME">Airtime</option>
@@ -178,7 +187,7 @@ export default function StaffTransactionsPage() {
               setTxStatusFilter(e.target.value);
               setTxPage(1);
             }}
-            className="px-3 py-2 rounded-xl text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
+            className="px-3 py-2 rounded-lg text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
           >
             <option value="ALL">All Statuses</option>
             <option value="SUCCESSFUL">Successful</option>
@@ -188,7 +197,7 @@ export default function StaffTransactionsPage() {
 
           <button
             onClick={loadTransactions}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTx ? 'animate-spin' : ''}`} />
             Filter
@@ -196,68 +205,67 @@ export default function StaffTransactionsPage() {
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="overflow-x-auto rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
-              <th className="py-3 px-4 font-semibold">Service</th>
-              <th className="py-3 px-4 font-semibold">Recipient</th>
-              <th className="py-3 px-4 font-semibold">Merchant / Business</th>
-              <th className="py-3 px-4 font-semibold">Amount</th>
-              <th className="py-3 px-4 font-semibold">Provider & Ref</th>
-              <th className="py-3 px-4 font-semibold">Status</th>
-              <th className="py-3 px-4 font-semibold">Date</th>
-              <th className="py-3 px-4 font-semibold text-right">Action</th>
+              <th className="py-2.5 px-4 font-semibold">Service</th>
+              <th className="py-2.5 px-4 font-semibold">Recipient</th>
+              <th className="py-2.5 px-4 font-semibold">Merchant</th>
+              <th className="py-2.5 px-4 font-semibold">Amount</th>
+              <th className="py-2.5 px-4 font-semibold">Provider & Reference</th>
+              <th className="py-2.5 px-4 font-semibold">Status</th>
+              <th className="py-2.5 px-4 font-semibold">Date</th>
+              <th className="py-2.5 px-4 font-semibold text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {transactions.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-8 text-center text-slate-500">
-                  {isLoadingTx ? 'Loading transactions...' : 'No transactions matched the criteria.'}
+                  {isLoadingTx ? 'Loading...' : 'No transactions found.'}
                 </td>
               </tr>
             ) : (
               transactions.map((tx) => (
                 <tr key={tx.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition">
-                  <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                  <td className="py-2.5 px-4 font-medium text-slate-900 dark:text-white">
                     {tx.serviceType}
                   </td>
-                  <td className="py-3 px-4 font-mono text-[11px] text-slate-800 dark:text-slate-200">
+                  <td className="py-2.5 px-4 font-mono text-slate-700 dark:text-slate-300">
                     {tx.recipient}
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-slate-900 dark:text-white truncate max-w-[150px]">
+                  <td className="py-2.5 px-4">
+                    <div className="font-medium text-slate-900 dark:text-white truncate max-w-[140px]">
                       {tx.businessName || 'Business'}
                     </div>
-                    <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{tx.userEmail}</div>
                   </td>
-                  <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white font-mono">
+                  <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white font-mono">
                     {tx.formattedAmount}
                   </td>
-                  <td className="py-3 px-4">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                  <td className="py-2.5 px-4">
+                    <div className="font-mono text-slate-700 dark:text-slate-300">
                       {tx.providerName}
-                    </span>
-                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[140px] mt-0.5">
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[150px]">
                       {tx.providerReference || tx.requestReference || tx.clientReference}
                     </div>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-2.5 px-4">
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                         tx.status === 'SUCCESSFUL'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           : tx.status === 'FAILED'
-                            ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                       }`}
                     >
                       {tx.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-slate-500 text-[11px] whitespace-nowrap">
+                  <td className="py-2.5 px-4 text-slate-500 text-[11px] whitespace-nowrap">
                     {new Date(tx.createdAt).toLocaleDateString('en-NG', {
                       day: '2-digit',
                       month: 'short',
@@ -265,12 +273,9 @@ export default function StaffTransactionsPage() {
                       minute: '2-digit',
                     })}
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-2.5 px-4 text-right">
                     <button
-                      onClick={() => {
-                        setSelectedTx(tx);
-                        setRequeryFeedback(null);
-                      }}
+                      onClick={() => handleOpenInspect(tx)}
                       className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition"
                     >
                       Inspect
@@ -308,7 +313,7 @@ export default function StaffTransactionsPage() {
         </div>
       )}
 
-      {/* TRANSACTION INSPECT DRAWER / MODAL */}
+      {/* TRANSACTION INSPECTOR MODAL */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -319,25 +324,29 @@ export default function StaffTransactionsPage() {
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-blue-500" />
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Transaction Inspector</h3>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Transaction Details
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review references and verify status directly with provider.
+              </p>
             </div>
 
             {requeryFeedback && (
               <div
-                className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                className={`p-3 rounded-lg border text-xs font-medium flex items-center gap-2 ${
                   requeryFeedback.type === 'success'
-                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
                     : requeryFeedback.type === 'error'
-                      ? 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400'
-                      : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400'
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+                      : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'
                 }`}
               >
                 {requeryFeedback.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 ) : (
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" />
                 )}
                 <span>{requeryFeedback.message}</span>
               </div>
@@ -345,29 +354,33 @@ export default function StaffTransactionsPage() {
 
             <div className="space-y-2 text-xs divide-y divide-slate-100 dark:divide-slate-800">
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Service Category:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedTx.serviceType}</span>
+                <span className="text-slate-500">Service:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedTx.serviceType}</span>
               </div>
 
               <div className="py-2 flex justify-between items-center">
                 <span className="text-slate-500">Amount:</span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono text-sm">{selectedTx.formattedAmount}</span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono text-sm">
+                  {selectedTx.formattedAmount}
+                </span>
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Recipient / Identifier:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{selectedTx.recipient}</span>
+                <span className="text-slate-500">Recipient:</span>
+                <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                  {selectedTx.recipient}
+                </span>
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Execution Status:</span>
+                <span className="text-slate-500">Status:</span>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                     selectedTx.status === 'SUCCESSFUL'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                       : selectedTx.status === 'FAILED'
-                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
-                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                   }`}
                 >
                   {selectedTx.status}
@@ -375,12 +388,14 @@ export default function StaffTransactionsPage() {
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Gateway Provider:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedTx.providerName}</span>
+                <span className="text-slate-500">Provider:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {selectedTx.providerName}
+                </span>
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Provider Reference:</span>
+                <span className="text-slate-500">Provider Ref:</span>
                 <div className="flex items-center gap-1 font-mono text-slate-700 dark:text-slate-300">
                   <span>{selectedTx.providerReference || 'N/A'}</span>
                   {selectedTx.providerReference && (
@@ -392,7 +407,7 @@ export default function StaffTransactionsPage() {
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Request Reference:</span>
+                <span className="text-slate-500">Request Ref:</span>
                 <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 dark:text-slate-300">
                   <span>{selectedTx.requestReference || selectedTx.clientReference || 'N/A'}</span>
                   {(selectedTx.requestReference || selectedTx.clientReference) && (
@@ -404,7 +419,7 @@ export default function StaffTransactionsPage() {
               </div>
 
               <div className="py-2 flex justify-between items-center">
-                <span className="text-slate-500">Internal Audit ID:</span>
+                <span className="text-slate-500">Internal ID:</span>
                 <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 dark:text-slate-300">
                   <span>{selectedTx.id}</span>
                   <button onClick={() => copyToClipboard(selectedTx.id, 'txId')}>
@@ -416,35 +431,48 @@ export default function StaffTransactionsPage() {
               {selectedTx.errorMessage && (
                 <div className="py-2">
                   <span className="text-slate-500 block mb-0.5">Error Message:</span>
-                  <p className="text-red-600 dark:text-red-400 text-xs font-mono bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                  <p className="text-red-600 dark:text-red-400 text-xs font-mono bg-red-50 dark:bg-red-950/20 p-2 rounded">
                     {selectedTx.errorMessage}
                   </p>
                 </div>
               )}
-
-              {selectedTx.metadata && (
-                <div className="py-2">
-                  <span className="text-slate-500 block mb-1">Gateway Payload & Metadata:</span>
-                  <pre className="p-2.5 rounded bg-slate-100 dark:bg-slate-900 text-[10px] overflow-x-auto text-slate-700 dark:text-slate-300 font-mono">
-                    {JSON.stringify(selectedTx.metadata, null, 2)}
-                  </pre>
-                </div>
-              )}
             </div>
 
-            <div className="pt-2 flex gap-3">
-              <button
-                disabled={isRequerying}
-                onClick={() => handleRequery(selectedTx.id)}
-                className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRequerying ? 'animate-spin' : ''}`} />
-                {isRequerying ? 'Syncing with Gateway...' : 'Re-query Upstream Gateway'}
-              </button>
+            {/* Requery Reference Section */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Requery Upstream ({selectedTx.providerName})
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {selectedTx.providerName === 'INTERSWITCH'
+                    ? 'Expected: requestRef or paymentReference'
+                    : 'Expected: paymentReference or transactionReference'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={queryRefInput}
+                  onChange={(e) => setQueryRefInput(e.target.value)}
+                  placeholder="Enter reference to query..."
+                  className="flex-1 px-3 py-2 rounded-lg text-xs font-mono bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
+                />
+                <button
+                  disabled={isRequerying || !queryRefInput.trim()}
+                  onClick={() => handleRequery(selectedTx.id, queryRefInput)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRequerying ? 'animate-spin' : ''}`} />
+                  <span>{isRequerying ? 'Querying...' : 'Re-query'}</span>
+                </button>
+              </div>
+            </div>
 
+            <div className="pt-1">
               <button
                 onClick={() => setSelectedTx(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                className="w-full py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
               >
                 Close
               </button>

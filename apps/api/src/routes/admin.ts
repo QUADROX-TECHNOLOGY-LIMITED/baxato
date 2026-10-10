@@ -343,13 +343,17 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError(`Transaction '${id}'`);
     }
 
-    const refToQuery = tx.requestReference || tx.clientReference || tx.id;
+    const body =
+      (request.body as { customReference?: string; providerReference?: string } | undefined) ||
+      {};
+    const refToQuery = body.customReference || tx.requestReference || tx.clientReference || tx.id;
+    const providerRef = body.providerReference || tx.providerReference || undefined;
     const provider = tx.providerName as ProviderName;
 
     const requeryResult = await providerRouterService.requeryTransaction(
       provider,
       refToQuery,
-      tx.providerReference || undefined,
+      providerRef,
     );
 
     let updatedStatus = tx.status;
@@ -418,6 +422,11 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           transactionId: id,
           currentStatus: updatedStatus,
           message: syncMessage,
+          syncMessage,
+          queriedReference: refToQuery,
+          providerReference: requeryResult.providerReference || tx.providerReference,
+          providerResponseCode: requeryResult.responseCode,
+          providerMessage: requeryResult.responseMessage,
           providerResult: {
             ...requeryResult,
             amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,

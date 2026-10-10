@@ -100,6 +100,10 @@ export default function DashboardOverviewPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
+        if (storedUser.role === 'STAFF') {
+          router.replace('/staff/overview');
+          return;
+        }
         if (storedUser.role) {
           setUserRole(storedUser.role);
         }

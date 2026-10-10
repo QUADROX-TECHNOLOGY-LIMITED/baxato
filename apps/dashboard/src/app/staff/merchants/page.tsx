@@ -4,21 +4,10 @@ import React, { useState, useEffect } from 'react';
 import {
   Search,
   RefreshCw,
-  UserCheck,
   X,
   Copy,
   Check,
   Building,
-  Mail,
-  Phone,
-  ShieldCheck,
-  ShieldAlert,
-  Wallet,
-  Calendar,
-  Layers,
-  ExternalLink,
-  ChevronRight,
-  Info,
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
@@ -82,59 +71,51 @@ export default function StaffMerchantsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Merchants & Identity Audit
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Merchants
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Merchant profile directory, National Identity (NIN) KYC records, and multi-business wallet balances.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Registered merchant accounts, identity records, and business wallets.
           </p>
         </div>
 
         <button
           onClick={loadMerchants}
           disabled={isLoadingMerchants}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition self-start md:self-auto shadow-sm"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMerchants ? 'animate-spin text-blue-500' : ''}`} />
-          <span>Refresh Directory</span>
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMerchants ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </button>
       </div>
 
-      {/* KPI Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Directory</span>
-          <div className="text-xl md:text-2xl font-bold mt-1 text-slate-900 dark:text-white">
+      {/* Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
+          <span className="text-xs text-slate-500 font-medium">Total Merchants</span>
+          <div className="text-xl font-bold mt-1 text-slate-900 dark:text-white font-mono">
             {merchantPagination?.totalCount ?? merchants.length}
           </div>
-          <span className="text-[11px] text-slate-500 mt-1 block">Registered merchants</span>
+          <span className="text-[11px] text-slate-500 mt-1 block">Registered in directory</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">NIN Verified</span>
-          <div className="text-xl md:text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
+        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
+          <span className="text-xs text-slate-500 font-medium">NIN Verified</span>
+          <div className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400 font-mono">
             {verifiedCount}
           </div>
-          <span className="text-[11px] text-slate-500 mt-1 block">Confirmed NIMC identity</span>
+          <span className="text-[11px] text-slate-500 mt-1 block">Confirmed identity</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Pending Verification</span>
-          <div className="text-xl md:text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
+        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
+          <span className="text-xs text-slate-500 font-medium">Pending Verification</span>
+          <div className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400 font-mono">
             {pendingCount}
           </div>
           <span className="text-[11px] text-slate-500 mt-1 block">Awaiting NIN completion</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Staff Governance</span>
-          <div className="text-sm font-bold mt-2 text-slate-700 dark:text-slate-300">
-            Read & Audit Only
-          </div>
-          <span className="text-[11px] text-slate-500 block">Super Admin reserves suspension</span>
         </div>
       </div>
 
@@ -144,11 +125,11 @@ export default function StaffMerchantsPage() {
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by business name, owner name, email, phone number, or 11-digit NIN..."
+            placeholder="Search by business name, owner name, email, phone, or NIN..."
             value={merchantSearch}
             onChange={(e) => setMerchantSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && loadMerchants()}
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full pl-9 pr-4 py-2 rounded-lg text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
           />
         </div>
 
@@ -156,7 +137,7 @@ export default function StaffMerchantsPage() {
           <select
             value={kycFilter}
             onChange={(e) => setKycFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
+            className="px-3 py-2 rounded-lg text-xs bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
           >
             <option value="ALL">All KYC Statuses</option>
             <option value="VERIFIED">Verified NIN Only</option>
@@ -165,7 +146,7 @@ export default function StaffMerchantsPage() {
 
           <button
             onClick={loadMerchants}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm shrink-0"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1.5 shrink-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMerchants ? 'animate-spin' : ''}`} />
             Search
@@ -173,26 +154,26 @@ export default function StaffMerchantsPage() {
         </div>
       </div>
 
-      {/* Merchants Table */}
-      <div className="overflow-x-auto rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
-              <th className="py-3 px-4 font-semibold">Merchant / Owner</th>
-              <th className="py-3 px-4 font-semibold">Primary Business</th>
-              <th className="py-3 px-4 font-semibold">Businesses</th>
-              <th className="py-3 px-4 font-semibold">NIN & Identity</th>
-              <th className="py-3 px-4 font-semibold">Main Balance</th>
-              <th className="py-3 px-4 font-semibold">Commission</th>
-              <th className="py-3 px-4 font-semibold">Member Since</th>
-              <th className="py-3 px-4 font-semibold text-right">Actions</th>
+              <th className="py-2.5 px-4 font-semibold">Owner</th>
+              <th className="py-2.5 px-4 font-semibold">Primary Business</th>
+              <th className="py-2.5 px-4 font-semibold">Businesses</th>
+              <th className="py-2.5 px-4 font-semibold">NIN Status</th>
+              <th className="py-2.5 px-4 font-semibold">Main Balance</th>
+              <th className="py-2.5 px-4 font-semibold">Commission</th>
+              <th className="py-2.5 px-4 font-semibold">Registered</th>
+              <th className="py-2.5 px-4 font-semibold text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {merchants.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-slate-500">
-                  {isLoadingMerchants ? 'Loading merchants...' : 'No merchants matched your search.'}
+                <td colSpan={8} className="py-8 text-center text-slate-500">
+                  {isLoadingMerchants ? 'Loading...' : 'No merchants found.'}
                 </td>
               </tr>
             ) : (
@@ -209,21 +190,9 @@ export default function StaffMerchantsPage() {
 
                 return (
                   <tr key={m.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition">
-                    {/* Owner Contact */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {fullName}
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                            m.ownerStatus === 'ACTIVE'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-red-500/10 text-red-600 dark:text-red-400'
-                          }`}
-                        >
-                          {m.ownerStatus || 'ACTIVE'}
-                        </span>
+                    <td className="py-2.5 px-4">
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        {fullName}
                       </div>
                       <div className="text-[11px] text-slate-500">{m.ownerEmail}</div>
                       {m.ownerPhone && (
@@ -231,54 +200,37 @@ export default function StaffMerchantsPage() {
                       )}
                     </td>
 
-                    {/* Primary Business */}
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900 dark:text-white">{m.name}</div>
+                    <td className="py-2.5 px-4">
+                      <div className="font-medium text-slate-900 dark:text-white">{m.name}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{m.slug}</div>
-                      {(m.state || m.country) && (
-                        <div className="text-[10px] text-slate-400">
-                          {[m.lga, m.state, m.country].filter(Boolean).join(', ')}
-                        </div>
-                      )}
                     </td>
 
-                    {/* Total Owned Businesses */}
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                         {totalBusinessesCount} {totalBusinessesCount === 1 ? 'Business' : 'Businesses'}
                       </span>
                     </td>
 
-                    {/* NIN & KYC */}
-                    <td className="py-3 px-4">
+                    <td className="py-2.5 px-4">
                       {m.kycStatus === 'VERIFIED' ? (
-                        <div className="space-y-0.5">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="w-3 h-3" /> NIN VERIFIED
-                          </span>
-                          {m.nin && (
-                            <div className="font-mono text-[10px] text-slate-600 dark:text-slate-300">
-                              NIN: ••••••{m.nin.slice(-4)}
-                            </div>
-                          )}
-                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          NIN Verified
+                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                          <AlertCircle className="w-3 h-3" /> PENDING NIN
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          Pending NIN
                         </span>
                       )}
                     </td>
 
-                    {/* Wallets */}
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                    <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white font-mono">
                       {m.wallets?.formattedMain || '₦0.00'}
                     </td>
-                    <td className="py-3 px-4 font-semibold text-emerald-600 dark:text-emerald-400">
+                    <td className="py-2.5 px-4 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                       {m.wallets?.formattedCommission || '₦0.00'}
                     </td>
 
-                    {/* Registered Date */}
-                    <td className="py-3 px-4 text-slate-500 text-[11px] whitespace-nowrap">
+                    <td className="py-2.5 px-4 text-slate-500 text-[11px] whitespace-nowrap">
                       {new Date(m.createdAt).toLocaleDateString('en-NG', {
                         day: '2-digit',
                         month: 'short',
@@ -286,13 +238,12 @@ export default function StaffMerchantsPage() {
                       })}
                     </td>
 
-                    {/* Action */}
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-2.5 px-4 text-right">
                       <button
                         onClick={() => setSelectedMerchant(m)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white transition"
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white transition"
                       >
-                        Inspect Profile
+                        Inspect
                       </button>
                     </td>
                   </tr>
@@ -328,11 +279,10 @@ export default function StaffMerchantsPage() {
         </div>
       )}
 
-      {/* COMPREHENSIVE MERCHANT & MULTI-BUSINESS INSPECTION DRAWER */}
+      {/* MERCHANT DETAILS MODAL */}
       {selectedMerchant && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            {/* Modal Close Button */}
+          <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedMerchant(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"
@@ -340,213 +290,110 @@ export default function StaffMerchantsPage() {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Modal Header */}
             <div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Merchant Identity & Business Audit
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Full user-submitted identity, National Identity (NIN) credentials, and associated businesses.
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Merchant Details
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Owner identity, verified NIN, and associated businesses.
               </p>
             </div>
 
-            {/* Staff Governance Notice */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-start gap-2.5 text-xs text-slate-600 dark:text-slate-400">
-              <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-              <span>
-                Staff operational console has read-only audit permissions. Account suspension and administrative modifications are restricted to Super Admin governance.
-              </span>
-            </div>
-
-            {/* SECTION 1: USER IDENTITY & CONTACT PROFILE */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-1 flex items-center gap-1.5">
-                <UserCheck className="w-3.5 h-3.5 text-blue-500" />
-                1. Owner Identity Profile
+            {/* SECTION 1: OWNER IDENTITY */}
+            <div className="space-y-2 text-xs">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-1">
+                Owner Profile
               </h4>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Full Legal Name</span>
-                  <span className="font-bold text-slate-900 dark:text-white text-sm">
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <span className="text-slate-500 block">Name:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">
                     {[selectedMerchant.ownerFirstName, selectedMerchant.ownerMiddleName, selectedMerchant.ownerLastName]
                       .filter(Boolean)
                       .join(' ') || 'N/A'}
                   </span>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Account Status</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        selectedMerchant.ownerStatus === 'ACTIVE'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
-                      }`}
-                    >
-                      {selectedMerchant.ownerStatus || 'ACTIVE'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">Role: MERCHANT</span>
-                  </div>
+                <div>
+                  <span className="text-slate-500 block">Account Status:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">
+                    {selectedMerchant.ownerStatus || 'ACTIVE'}
+                  </span>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Email Address</span>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                      {selectedMerchant.ownerEmail || 'N/A'}
-                    </span>
-                    {selectedMerchant.isEmailVerified && (
-                      <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 rounded bg-emerald-500/10 shrink-0">
-                        VERIFIED
-                      </span>
-                    )}
-                  </div>
+                <div>
+                  <span className="text-slate-500 block">Email:</span>
+                  <span className="text-slate-800 dark:text-slate-200">
+                    {selectedMerchant.ownerEmail || 'N/A'}
+                  </span>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Phone Number</span>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                      {selectedMerchant.ownerPhone || 'N/A'}
-                    </span>
-                    {selectedMerchant.isPhoneVerified && (
-                      <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 rounded bg-emerald-500/10 shrink-0">
-                        VERIFIED
-                      </span>
-                    )}
-                  </div>
+                <div>
+                  <span className="text-slate-500 block">Phone:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200">
+                    {selectedMerchant.ownerPhone || 'N/A'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* SECTION 2: NATIONAL IDENTITY (NIN) AUDIT */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-1 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                2. National Identity (NIN) Audit Record
+            {/* SECTION 2: NATIONAL IDENTITY (NIN) */}
+            <div className="space-y-2 text-xs">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-1">
+                National Identity (NIN)
               </h4>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80 md:col-span-2">
-                  <span className="text-[11px] text-slate-500 block">11-Digit National Identity Number (NIN)</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-base font-bold text-blue-600 dark:text-blue-400">
-                      {selectedMerchant.nin || 'Not Submitted'}
-                    </span>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <span className="text-slate-500 block">NIN:</span>
+                  <div className="flex items-center gap-1 font-mono font-bold text-blue-600 dark:text-blue-400">
+                    <span>{selectedMerchant.nin || 'Not submitted'}</span>
                     {selectedMerchant.nin && (
                       <button
-                        onClick={() => copyToClipboard(selectedMerchant.nin, 'modalNin')}
-                        className="px-2 py-1 rounded-md text-[10px] font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
+                        onClick={() => copyToClipboard(selectedMerchant.nin, 'nin')}
+                        className="text-slate-400 hover:text-slate-600"
                       >
-                        {copiedKey === 'modalNin' ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-500" /> Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" /> Copy NIN
-                          </>
-                        )}
+                        {copiedKey === 'nin' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       </button>
                     )}
                   </div>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">NIMC Status</span>
-                  <div className="mt-1">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        selectedMerchant.kycStatus === 'VERIFIED'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                      }`}
-                    >
-                      {selectedMerchant.kycStatus === 'VERIFIED' ? 'NIMC VERIFIED' : 'UNVERIFIED'}
-                    </span>
-                  </div>
+                <div>
+                  <span className="text-slate-500 block">Status:</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      selectedMerchant.kycStatus === 'VERIFIED'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {selectedMerchant.kycStatus === 'VERIFIED' ? 'Verified' : 'Pending'}
+                  </span>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Date of Birth (DOB)</span>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 block mt-1">
+                <div>
+                  <span className="text-slate-500 block">Date of Birth:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200">
                     {selectedMerchant.dob || 'N/A'}
                   </span>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Verification Provider</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-1">
-                    {selectedMerchant.kycRecord?.providerName || 'SEAMFIX / NIMC'}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/80">
-                  <span className="text-[11px] text-slate-500 block">Name Match Confidence</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400 block mt-1">
+                <div>
+                  <span className="text-slate-500 block">Match Score:</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-semibold">
                     {selectedMerchant.kycRecord?.matchScore
-                      ? `${selectedMerchant.kycRecord.matchScore}% Match`
+                      ? `${selectedMerchant.kycRecord.matchScore}%`
                       : selectedMerchant.kycStatus === 'VERIFIED'
-                        ? '100% Match'
+                        ? '100%'
                         : 'N/A'}
                   </span>
                 </div>
               </div>
-
-              {/* Extracted NIMC Raw Data (if available) */}
-              {selectedMerchant.ninData && Object.keys(selectedMerchant.ninData).length > 0 && (
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                    Extracted NIMC Verification Record:
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                    {selectedMerchant.ninData.firstname && (
-                      <div>
-                        <span className="text-slate-500 block">NIMC First Name:</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {selectedMerchant.ninData.firstname}
-                        </span>
-                      </div>
-                    )}
-                    {selectedMerchant.ninData.surname && (
-                      <div>
-                        <span className="text-slate-500 block">NIMC Surname:</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {selectedMerchant.ninData.surname}
-                        </span>
-                      </div>
-                    )}
-                    {selectedMerchant.ninData.gender && (
-                      <div>
-                        <span className="text-slate-500 block">Gender:</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {selectedMerchant.ninData.gender}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* SECTION 3: ALL BUSINESSES OWNED BY THIS USER */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-1">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-blue-500" />
-                  3. Registered Businesses Owned by Merchant ({selectedMerchant.ownerBusinesses?.length || 1})
+            {/* SECTION 3: ALL REGISTERED BUSINESSES */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300">
+                  Registered Businesses ({selectedMerchant.ownerBusinesses?.length || 1})
                 </h4>
-                <span className="text-[11px] text-slate-500">
-                  Multi-Tenant Portfolio
-                </span>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-2 pt-1">
                 {(selectedMerchant.ownerBusinesses && selectedMerchant.ownerBusinesses.length > 0
                   ? selectedMerchant.ownerBusinesses
                   : [
@@ -557,44 +404,29 @@ export default function StaffMerchantsPage() {
                         status: selectedMerchant.status,
                         state: selectedMerchant.state,
                         lga: selectedMerchant.lga,
-                        createdAt: selectedMerchant.createdAt,
                         wallets: selectedMerchant.wallets,
                       },
                     ]
                 ).map((biz: any, idx: number) => (
                   <div
                     key={biz.id || idx}
-                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
                   >
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 dark:text-white text-sm">
-                          {biz.name}
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                          {biz.slug}
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          {biz.status || 'ACTIVE'}
-                        </span>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        {biz.name}
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {[biz.lga, biz.state, biz.country].filter(Boolean).join(', ') || 'Nigeria'}
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        {biz.slug}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 dark:border-slate-800">
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">Main Wallet</span>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {biz.wallets?.formattedMain || '₦0.00'}
-                        </span>
+                    <div className="text-right">
+                      <div className="font-mono font-semibold text-slate-900 dark:text-white">
+                        {biz.wallets?.formattedMain || '₦0.00'}
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">Commission</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {biz.wallets?.formattedCommission || '₦0.00'}
-                        </span>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                        {biz.wallets?.formattedCommission || '₦0.00'} (Comm)
                       </div>
                     </div>
                   </div>
@@ -602,13 +434,12 @@ export default function StaffMerchantsPage() {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="pt-2">
               <button
                 onClick={() => setSelectedMerchant(null)}
-                className="w-full py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition"
+                className="w-full py-2 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
               >
-                Close Audit Inspection
+                Close
               </button>
             </div>
           </div>

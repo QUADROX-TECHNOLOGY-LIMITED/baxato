@@ -378,26 +378,30 @@ export class InterswitchProvider implements ProviderAdapter {
   }
 
   /**
-   * Re-query transaction status
+   * Re-query transaction status using Interswitch Quickteller v5 API.
+   * Supports querying by requestRef and falling back to paymentReference if provided.
    */
   public async requeryTransaction(
     requestReference: string,
-    _providerReference?: string,
+    providerReference?: string,
   ): Promise<TransactionStatusResult> {
     const token = await this.getAccessToken();
 
-    const res = await fetch(
-      `${this.config.baseUrl}/quicktellerservice/api/v5/Transactions?requestRef=${encodeURIComponent(requestReference)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          TerminalID: this.config.terminalId,
-        },
-      },
-    );
+    // 1. First attempt: Query with requestRef
+    let queryUrl = `${this.config.baseUrl}/quicktellerservice/api/v5/Transactions?requestRef=${encodeURIComponent(requestReference)}`;
+    if (providerReference) {
+      queryUrl += `&paymentReference=${encodeURIComponent(providerReference)}`;
+    }
 
-    const rawData = await safeParseResponse(res);
-    const data = (rawData || {}) as {
+    let res = await fetch(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        TerminalID: this.config.terminalId,
+      },
+    });
+
+    let rawData = await safeParseResponse(res);
+    let data = (rawData || {}) as {
       ResponseCode?: string;
       TransactionResponseCode?: string;
       ResponseDescription?: string;
@@ -407,6 +411,25 @@ export class InterswitchProvider implements ProviderAdapter {
       Status?: string;
       ResponseCodeGrouping?: string;
     };
+
+    // 2. If initial lookup returned 20010 (reference required) or no code and providerReference is available, query by paymentReference
+    if (
+      (data.ResponseCode === '20010' || !data.ResponseCode || data.ResponseCode === 'UNKNOWN') &&
+      providerReference &&
+      providerReference !== requestReference
+    ) {
+      const fallbackUrl = `${this.config.baseUrl}/quicktellerservice/api/v5/Transactions?paymentReference=${encodeURIComponent(providerReference)}`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          TerminalID: this.config.terminalId,
+        },
+      });
+      const fallbackData = await safeParseResponse(fallbackRes);
+      if (fallbackData && (fallbackData as any).ResponseCode) {
+        data = fallbackData as typeof data;
+      }
+    }
 
     const isSuccess = Boolean(
       data.ResponseCode === '90000' ||
@@ -418,7 +441,7 @@ export class InterswitchProvider implements ProviderAdapter {
     return {
       status: isSuccess ? TransactionStatus.SUCCESSFUL : TransactionStatus.FAILED,
       providerName: this.providerName,
-      providerReference: data.TransactionRef || _providerReference,
+      providerReference: data.TransactionRef || providerReference,
       requestReference,
       amountKobo: data.ApprovedAmount
         ? BigInt(data.ApprovedAmount)
