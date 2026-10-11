@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import BusinessSwitcher from './BusinessSwitcher';
-import { getStoredUser, clearSessionAndRedirect, type StoredUser } from '@/lib/auth-session';
+import { getStoredUser, getStoredBusiness, clearSessionAndRedirect, type StoredUser } from '@/lib/auth-session';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -62,6 +62,25 @@ export default function Header({
     if (typeof window !== 'undefined') return getStoredUser();
     return null;
   });
+
+  const [currentBiz, setCurrentBiz] = useState(() => {
+    if (typeof window !== 'undefined') return getStoredBusiness();
+    return null;
+  });
+
+  useEffect(() => {
+    const handleSwitched = (e: any) => {
+      const b = e?.detail?.business || getStoredBusiness();
+      if (b) setCurrentBiz(b);
+      const u = getStoredUser();
+      if (u) {
+        setStoredUser(u);
+        if (u.role) setActiveRole(u.role);
+      }
+    };
+    window.addEventListener('bx_business_switched', handleSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleSwitched);
+  }, []);
 
   useEffect(() => {
     if (userRole) {
@@ -111,7 +130,7 @@ export default function Header({
 
           {/* Business Workspace Switcher in Header (accessible directly on mobile & desktop) */}
           <div className="min-w-0 max-w-[130px] xs:max-w-[160px] sm:max-w-[220px] md:max-w-[260px]">
-            <BusinessSwitcher currentBusinessName={businessName} variant="header" />
+            <BusinessSwitcher currentBusinessName={currentBiz?.name || businessName} variant="header" />
           </div>
 
           {/* Quick Search */}

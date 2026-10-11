@@ -25,6 +25,7 @@ import { cableRoutes } from './routes/services/cable.js';
 import { electricityRoutes } from './routes/services/electricity.js';
 import { educationRoutes } from './routes/services/education.js';
 import { transactionRoutes } from './routes/transactions.js';
+import { analyticsRoutes } from './routes/analytics.js';
 import { teamRoutes, inviteOnboardingRoutes } from './routes/team.js';
 import { adminRoutes } from './routes/admin.js';
 
@@ -275,6 +276,8 @@ export function buildServer(): FastifyInstance {
   app.register(educationRoutes, { prefix: '/v1/services/education' });
   app.register(transactionRoutes, { prefix: '/transactions' });
   app.register(transactionRoutes, { prefix: '/v1/transactions' });
+  app.register(analyticsRoutes, { prefix: '/analytics' });
+  app.register(analyticsRoutes, { prefix: '/v1/analytics' });
   app.register(teamRoutes, { prefix: '/team' });
   app.register(inviteOnboardingRoutes, { prefix: '/invites' });
   app.register(adminRoutes, { prefix: '/admin' });

@@ -85,6 +85,25 @@ export default function Sidebar({
     }
   }, [userRole, merchantName]);
 
+  const [currentBiz, setCurrentBiz] = useState(() => {
+    if (typeof window !== 'undefined') return getStoredBusiness();
+    return null;
+  });
+
+  useEffect(() => {
+    const handleSwitched = (e: any) => {
+      const b = e?.detail?.business || getStoredBusiness();
+      if (b) setCurrentBiz(b);
+      const u = getStoredUser();
+      if (u) {
+        setStoredUser(u);
+        if (u.role) setActiveRole(u.role);
+      }
+    };
+    window.addEventListener('bx_business_switched', handleSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleSwitched);
+  }, []);
+
   // Close profile dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -108,10 +127,10 @@ export default function Sidebar({
   }, [merchantName, storedUser]);
 
   const displayBusiness = useMemo(() => {
+    if (currentBiz?.name) return currentBiz.name;
     if (businessName) return businessName;
-    const stored = typeof window !== 'undefined' ? getStoredBusiness() : null;
-    return stored?.name || 'Verified Merchant';
-  }, [businessName]);
+    return 'Verified Merchant';
+  }, [currentBiz, businessName]);
 
   const avatarInitial = (displayName?.charAt(0) || '•').toUpperCase();
 
