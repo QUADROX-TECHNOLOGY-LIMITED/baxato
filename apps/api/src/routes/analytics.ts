@@ -17,6 +17,7 @@ import {
   sql,
   gte,
   lte,
+  desc,
   like,
   not,
   or,
@@ -28,7 +29,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
    * GET /analytics/overview
    * Enterprise-grade, multi-dimensional analytics telemetry for the active business workspace.
    * Computes accurate KPIs, time-series curves, service share, channel split, carrier breakdown,
-   * error diagnostics, and 24-hour trading matrices directly from PostgreSQL.
+   * comprehensive failure diagnostics with pagination, and trading matrices directly from PostgreSQL.
    */
   fastify.get(
     '/overview',
@@ -45,11 +46,18 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         channel?: string;
         startDate?: string;
         endDate?: string;
+        failurePage?: string;
+        failureLimit?: string;
       };
 
       const timeframe = (query.timeframe || '30d').toLowerCase();
       const serviceFilter = query.serviceType && query.serviceType !== 'ALL' ? query.serviceType : null;
       const channelFilter = query.channel && query.channel !== 'ALL' ? query.channel.toUpperCase() : null;
+
+      // Failure pagination params
+      const failurePage = Math.max(1, parseInt(query.failurePage || '1', 10));
+      const failureLimit = Math.max(1, Math.min(50, parseInt(query.failureLimit || '10', 10)));
+      const failureOffset = (failurePage - 1) * failureLimit;
 
       // 1. Compute Exact Date Boundaries
       const now = new Date();
@@ -74,31 +82,34 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } else {
         switch (timeframe) {
-          case 'today': {
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          case 'today':
+          case '24h': {
+            // Rolling 24-hour window from now minus 24 hours
+            startDate = new Date(now.getTime() - 24 * 3600 * 1000);
             endDate = now;
-            prevStartDate = new Date(startDate.getTime() - 86400000);
-            prevEndDate = new Date(startDate.getTime());
+            prevStartDate = new Date(now.getTime() - 48 * 3600 * 1000);
+            prevEndDate = new Date(now.getTime() - 24 * 3600 * 1000);
             bucketFormat = 'hour';
             break;
           }
           case '7d': {
+            // Rolling 7 days
             startDate = new Date(now.getTime() - 7 * 86400000);
-            startDate.setHours(0, 0, 0, 0);
-            prevStartDate = new Date(startDate.getTime() - 7 * 86400000);
-            prevEndDate = new Date(startDate.getTime());
+            prevStartDate = new Date(now.getTime() - 14 * 86400000);
+            prevEndDate = new Date(now.getTime() - 7 * 86400000);
             bucketFormat = 'day';
             break;
           }
           case '90d': {
+            // Rolling 90 days
             startDate = new Date(now.getTime() - 90 * 86400000);
-            startDate.setHours(0, 0, 0, 0);
-            prevStartDate = new Date(startDate.getTime() - 90 * 86400000);
-            prevEndDate = new Date(startDate.getTime());
+            prevStartDate = new Date(now.getTime() - 180 * 86400000);
+            prevEndDate = new Date(now.getTime() - 90 * 86400000);
             bucketFormat = 'week';
             break;
           }
           case 'ytd': {
+            // Year to date
             startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
             prevStartDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
             prevEndDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
@@ -107,10 +118,10 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           }
           case '30d':
           default: {
+            // Rolling 30 days
             startDate = new Date(now.getTime() - 30 * 86400000);
-            startDate.setHours(0, 0, 0, 0);
-            prevStartDate = new Date(startDate.getTime() - 30 * 86400000);
-            prevEndDate = new Date(startDate.getTime());
+            prevStartDate = new Date(now.getTime() - 60 * 86400000);
+            prevEndDate = new Date(now.getTime() - 30 * 86400000);
             bucketFormat = 'day';
             break;
           }
@@ -151,6 +162,14 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       const currentPeriodWhere = buildConditions(startDate, endDate);
       const prevPeriodWhere = buildConditions(prevStartDate, prevEndDate);
 
+      const failureWhere = and(
+        eq(serviceTransactions.businessId, businessId),
+        eq(serviceTransactions.status, TransactionStatus.FAILED),
+        gte(serviceTransactions.createdAt, startDate),
+        lte(serviceTransactions.createdAt, endDate),
+        serviceFilter ? eq(serviceTransactions.serviceType, serviceFilter as ServiceType) : undefined,
+      );
+
       // 3. Execute Parallel SQL Queries
       const [
         [currentSummary],
@@ -159,6 +178,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         channelBreakdownRows,
         operatorBreakdownRows,
         failureReasonRows,
+        failedTxRows,
+        [failedTxCountRow],
         hourlyDensityRows,
         timelineRows,
         [commissionEarnedRow],
@@ -246,9 +267,9 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           .where(currentPeriodWhere)
           .groupBy(sql`1`, serviceTransactions.serviceType)
           .orderBy(sql`sum(${serviceTransactions.amount}) DESC`)
-          .limit(8),
+          .limit(10),
 
-        // 3.6 Failure Diagnostics & Error Reasons
+        // 3.6 All Failure Diagnostics Error Reasons (No hardcoded limit, showing all causes)
         db
           .select({
             reason: sql<string>`coalesce(nullif(trim(${serviceTransactions.errorMessage}), ''), 'Upstream Gateway Error')`,
@@ -256,20 +277,37 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
             lostVolume: sql<string>`coalesce(sum(${serviceTransactions.amount}), 0)::text`,
           })
           .from(serviceTransactions)
-          .where(
-            and(
-              eq(serviceTransactions.businessId, businessId),
-              eq(serviceTransactions.status, TransactionStatus.FAILED),
-              gte(serviceTransactions.createdAt, startDate),
-              lte(serviceTransactions.createdAt, endDate),
-              serviceFilter ? eq(serviceTransactions.serviceType, serviceFilter as ServiceType) : undefined,
-            ),
-          )
+          .where(failureWhere)
           .groupBy(sql`1`)
-          .orderBy(sql`count(*) DESC`)
-          .limit(6),
+          .orderBy(sql`count(*) DESC`),
 
-        // 3.7 Hourly Trading Density (24-hour cycle)
+        // 3.6b Paginated Failed Transaction Records
+        db
+          .select({
+            id: serviceTransactions.id,
+            requestReference: serviceTransactions.requestReference,
+            clientReference: serviceTransactions.clientReference,
+            serviceType: serviceTransactions.serviceType,
+            recipient: serviceTransactions.recipient,
+            amount: serviceTransactions.amount,
+            providerName: serviceTransactions.providerName,
+            errorMessage: serviceTransactions.errorMessage,
+            metadata: serviceTransactions.metadata,
+            createdAt: serviceTransactions.createdAt,
+          })
+          .from(serviceTransactions)
+          .where(failureWhere)
+          .orderBy(desc(serviceTransactions.createdAt))
+          .limit(failureLimit)
+          .offset(failureOffset),
+
+        // 3.6c Total Failed Count for accurate pagination controls
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(serviceTransactions)
+          .where(failureWhere),
+
+        // 3.7 Hourly Trading Density
         db
           .select({
             hour: sql<number>`extract(hour from ${serviceTransactions.createdAt})::int`,
@@ -415,17 +453,27 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       }> = [];
 
       if (bucketFormat === 'hour') {
-        for (let h = 0; h < 24; h++) {
-          const hourStr = h.toString().padStart(2, '0');
-          const label = `${hourStr}:00`;
-          // Match any bucket ending with HH:00:00
-          const match = timelineRows.find((r) => r.label === label);
+        // Continuous 24 rolling hours from 23 hours ago up to now
+        for (let i = 23; i >= 0; i--) {
+          const d = new Date(now.getTime() - i * 3600 * 1000);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const key = `${yyyy}-${mm}-${dd}T${hh}:00:00`;
+          const label = `${hh}:00`;
+
+          const match =
+            timelineMap.get(key) ||
+            timelineRows.find((r) => r.bucket.startsWith(`${yyyy}-${mm}-${dd}T${hh}`));
+
           const volKobo = match ? BigInt(match.volume) : 0n;
           const succVolKobo = match ? BigInt(match.successfulVolume) : 0n;
           const cnt = match ? match.count : 0;
           const succCnt = match ? match.successfulCount : 0;
+
           timeline.push({
-            bucket: label,
+            bucket: key,
             label,
             volumeNaira: koboToNaira(volKobo),
             successfulVolumeNaira: koboToNaira(succVolKobo),
@@ -568,7 +616,41 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         };
       });
 
-      // 9. Format Failure Diagnostics
+      // 9. Format Comprehensive Failure Diagnostics & Paginated Log
+      const totalFailedRecords = failedTxCountRow?.count || 0;
+      const paginatedFailures = {
+        transactions: failedTxRows.map((tx) => {
+          const kobo = BigInt(tx.amount);
+          const meta = tx.metadata as Record<string, any> | null;
+          const operator =
+            meta?.network ||
+            meta?.disco ||
+            meta?.cableProvider ||
+            meta?.examBody ||
+            tx.providerName;
+          return {
+            id: tx.id,
+            reference: tx.requestReference || tx.clientReference || tx.id,
+            clientReference: tx.clientReference,
+            serviceType: tx.serviceType,
+            recipient: tx.recipient,
+            amountKobo: tx.amount.toString(),
+            amountNaira: koboToNaira(kobo),
+            formattedAmount: formatNairaFromKobo(kobo),
+            providerName: tx.providerName,
+            operator: operator ? String(operator) : 'Biller',
+            errorMessage: tx.errorMessage || 'Upstream provider rejected transaction',
+            createdAt: tx.createdAt.toISOString(),
+          };
+        }),
+        pagination: {
+          page: failurePage,
+          pageSize: failureLimit,
+          totalCount: totalFailedRecords,
+          totalPages: Math.max(1, Math.ceil(totalFailedRecords / failureLimit)),
+        },
+      };
+
       const failureDiagnostics = {
         totalFailed: curFailedCount,
         failureRate: curTotalCount > 0 ? Number(((curFailedCount / curTotalCount) * 100).toFixed(1)) : 0,
@@ -583,6 +665,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
             percentage: curFailedCount > 0 ? Number(((r.count / curFailedCount) * 100).toFixed(1)) : 0,
           };
         }),
+        paginatedFailures,
         statusDistribution: {
           successful: curSuccCount,
           failed: curFailedCount,
@@ -591,7 +674,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         },
       };
 
-      // 10. Hourly Trading Activity Heatmap Matrix
+      // 10. Hourly Trading Activity Pattern Matrix
       const hourlyDensityMap = new Map<number, (typeof hourlyDensityRows)[0]>();
       for (const row of hourlyDensityRows) {
         hourlyDensityMap.set(row.hour, row);

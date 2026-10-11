@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   BarChart3,
   TrendingUp,
@@ -33,6 +34,10 @@ import {
   XCircle,
   AlertTriangle,
   Building,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  ListFilter,
   SlidersHorizontal,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
@@ -95,6 +100,21 @@ interface FailureReasonItem {
   lostVolumeNaira: number;
   formattedLostVolume: string;
   percentage: number;
+}
+
+interface FailedTransactionItem {
+  id: string;
+  reference: string;
+  clientReference?: string;
+  serviceType: string;
+  recipient: string;
+  amountKobo: string;
+  amountNaira: number;
+  formattedAmount: string;
+  providerName: string;
+  operator: string;
+  errorMessage: string;
+  createdAt: string;
 }
 
 interface HourlyDensityItem {
@@ -165,6 +185,15 @@ interface AnalyticsData {
     totalFailed: number;
     failureRate: number;
     topReasons: FailureReasonItem[];
+    paginatedFailures?: {
+      transactions: FailedTransactionItem[];
+      pagination: {
+        page: number;
+        pageSize: number;
+        totalCount: number;
+        totalPages: number;
+      };
+    };
     statusDistribution: {
       successful: number;
       failed: number;
@@ -173,6 +202,48 @@ interface AnalyticsData {
     };
   };
   hourlyDensity: HourlyDensityItem[];
+}
+
+/**
+ * Maps telecom networks, DISCO electricity providers, pay-TV billers,
+ * and exam bodies to their real logos in public/logos/
+ */
+function getOperatorLogo(operator: string): { logoUrl: string | null; bg: string } {
+  const norm = (operator || '').toUpperCase().trim();
+
+  // Telecom Carriers
+  if (norm.includes('MTN')) return { logoUrl: '/logos/telecom/mtn.svg', bg: 'bg-[#FFCC00]/10 border-amber-300 dark:border-amber-700/50' };
+  if (norm.includes('AIRTEL')) return { logoUrl: '/logos/telecom/airtel.svg', bg: 'bg-red-500/10 border-red-300 dark:border-red-900/50' };
+  if (norm.includes('GLO')) return { logoUrl: '/logos/telecom/glo.svg', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
+  if (norm.includes('9MOBILE') || norm.includes('ETISALAT')) return { logoUrl: '/logos/telecom/9mobile.svg', bg: 'bg-teal-500/10 border-teal-300 dark:border-teal-900/50' };
+
+  // Cable TV Providers
+  if (norm.includes('DSTV')) return { logoUrl: '/logos/cable/dstv.svg', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
+  if (norm.includes('GOTV')) return { logoUrl: '/logos/cable/gotv.png', bg: 'bg-yellow-500/10 border-yellow-300 dark:border-yellow-900/50' };
+  if (norm.includes('STARTIMES')) return { logoUrl: '/logos/cable/startimes.svg', bg: 'bg-purple-500/10 border-purple-300 dark:border-purple-900/50' };
+  if (norm.includes('SHOWMAX')) return { logoUrl: '/logos/cable/showmax.svg', bg: 'bg-rose-500/10 border-rose-300 dark:border-rose-900/50' };
+
+  // Electricity DISCOs
+  if (norm.includes('IKEDC') || norm.includes('IKEJA')) return { logoUrl: '/logos/electricity/ikedc.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
+  if (norm.includes('EKEDC') || norm.includes('EKO')) return { logoUrl: '/logos/electricity/ekedc.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
+  if (norm.includes('AEDC') || norm.includes('ABUJA')) return { logoUrl: '/logos/electricity/aedc.png', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
+  if (norm.includes('IBEDC') || norm.includes('IBADAN')) return { logoUrl: '/logos/electricity/ibedc.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
+  if (norm.includes('EEDC') || norm.includes('ENUGU')) return { logoUrl: '/logos/electricity/eedc.png', bg: 'bg-red-500/10 border-red-300 dark:border-red-900/50' };
+  if (norm.includes('PHED') || norm.includes('PORT')) return { logoUrl: '/logos/electricity/phed.png', bg: 'bg-purple-500/10 border-purple-300 dark:border-purple-900/50' };
+  if (norm.includes('BEDC') || norm.includes('BENIN')) return { logoUrl: '/logos/electricity/bedc.png', bg: 'bg-teal-500/10 border-teal-300 dark:border-teal-900/50' };
+  if (norm.includes('KEDCO') || norm.includes('KANO')) return { logoUrl: '/logos/electricity/kedco.png', bg: 'bg-orange-500/10 border-orange-300 dark:border-orange-900/50' };
+  if (norm.includes('KAEDCO') || norm.includes('KADUNA')) return { logoUrl: '/logos/electricity/kaedco.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
+  if (norm.includes('JED') || norm.includes('JOS')) return { logoUrl: '/logos/electricity/jed.png', bg: 'bg-cyan-500/10 border-cyan-300 dark:border-cyan-900/50' };
+  if (norm.includes('YEDC') || norm.includes('YOLA')) return { logoUrl: '/logos/electricity/yedc.png', bg: 'bg-indigo-500/10 border-indigo-300 dark:border-indigo-900/50' };
+  if (norm.includes('APLE') || norm.includes('ABA')) return { logoUrl: '/logos/electricity/aple.png', bg: 'bg-lime-500/10 border-lime-300 dark:border-lime-900/50' };
+
+  // Education Bodies
+  if (norm.includes('WAEC')) return { logoUrl: '/logos/education/waec.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
+  if (norm.includes('JAMB')) return { logoUrl: '/logos/education/jamb.png', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
+  if (norm.includes('NECO')) return { logoUrl: '/logos/education/neco.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
+  if (norm.includes('NABTEB')) return { logoUrl: '/logos/education/nabteb.png', bg: 'bg-rose-500/10 border-rose-300 dark:border-rose-900/50' };
+
+  return { logoUrl: null, bg: 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700' };
 }
 
 export default function AnalyticsPage() {
@@ -184,10 +255,18 @@ export default function AnalyticsPage() {
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
   const [hoveredDonutIndex, setHoveredDonutIndex] = useState<number | null>(null);
 
+  // Failure Diagnostics view tab & pagination
+  const [failureTab, setFailureTab] = useState<'reasons' | 'transactions'>('reasons');
+  const [failurePage, setFailurePage] = useState<number>(1);
+
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isFetchingBackground, setIsFetchingBackground] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // SWR In-Memory Cache to make timeframe switching instant (0ms response)
+  const cacheRef = useRef<Map<string, AnalyticsData>>(new Map());
 
   const [businessName, setBusinessName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -208,8 +287,8 @@ export default function AnalyticsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
 
-  // Fetch real analytics telemetry
-  const fetchAnalytics = useCallback(async (customBizId?: string) => {
+  // Fetch real analytics telemetry with in-memory caching
+  const fetchAnalytics = useCallback(async (customBizId?: string, targetFailurePage: number = 1) => {
     const token = getStoredAuthToken();
     if (!token) {
       clearSessionAndRedirect('expired');
@@ -217,18 +296,30 @@ export default function AnalyticsPage() {
     }
 
     const storedBiz = getStoredBusiness();
-    const activeBizId = customBizId || storedBiz?.id;
+    const activeBizId = customBizId || storedBiz?.id || 'biz';
+    const cacheKey = `${activeBizId}_${timeframe}_${serviceFilter}_${channelFilter}_${targetFailurePage}`;
+
+    // SWR: Check cache first for instantaneous visual update
+    if (cacheRef.current.has(cacheKey)) {
+      setAnalyticsData(cacheRef.current.get(cacheKey)!);
+      setIsLoading(false);
+      setIsFetchingBackground(true);
+    } else {
+      setIsFetchingBackground(true);
+    }
 
     try {
       const params = new URLSearchParams();
       params.set('timeframe', timeframe);
       if (serviceFilter !== 'ALL') params.set('serviceType', serviceFilter);
       if (channelFilter !== 'ALL') params.set('channel', channelFilter);
+      params.set('failurePage', targetFailurePage.toString());
+      params.set('failureLimit', '10');
 
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
       };
-      if (activeBizId) {
+      if (activeBizId && activeBizId !== 'biz') {
         headers['x-business-id'] = activeBizId;
       }
 
@@ -237,6 +328,7 @@ export default function AnalyticsPage() {
 
       if (res.ok && json?.success && json.data) {
         setAnalyticsData(json.data);
+        cacheRef.current.set(cacheKey, json.data);
       } else {
         console.warn('Analytics fetch error:', json?.error);
       }
@@ -244,6 +336,7 @@ export default function AnalyticsPage() {
       console.error('Failed to load analytics:', err);
     } finally {
       setIsLoading(false);
+      setIsFetchingBackground(false);
       setIsRefreshing(false);
     }
   }, [timeframe, serviceFilter, channelFilter]);
@@ -270,8 +363,8 @@ export default function AnalyticsPage() {
       }
     } catch {}
 
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+    fetchAnalytics(undefined, failurePage);
+  }, [fetchAnalytics, failurePage]);
 
   // Reactive Workspace Switcher listener (Zero-Reload)
   useEffect(() => {
@@ -279,8 +372,11 @@ export default function AnalyticsPage() {
       const biz = e.detail?.business;
       if (biz?.name) setBusinessName(biz.name);
       if (biz?.role) setUserRole(biz.role);
+      // Clear cache on workspace switch so fresh data loads
+      cacheRef.current.clear();
       setIsLoading(true);
-      fetchAnalytics(biz?.id);
+      setFailurePage(1);
+      fetchAnalytics(biz?.id, 1);
     };
 
     window.addEventListener('bx_business_switched', handleBusinessSwitched);
@@ -289,7 +385,8 @@ export default function AnalyticsPage() {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchAnalytics();
+    cacheRef.current.clear();
+    fetchAnalytics(undefined, failurePage);
     showToast('Analytics refreshed successfully');
   };
 
@@ -302,33 +399,50 @@ export default function AnalyticsPage() {
     return `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // Human-readable timeframe label
+  const timeframeLabel = useMemo(() => {
+    switch (timeframe) {
+      case 'today':
+        return 'Last 24 Hours';
+      case '7d':
+        return 'Last 7 Days';
+      case '90d':
+        return 'Last 90 Days';
+      case 'ytd':
+        return 'Year to Date';
+      case '30d':
+      default:
+        return 'Last 30 Days';
+    }
+  }, [timeframe]);
+
   // Export Analytics to CSV
   const handleExportCSV = () => {
     if (!analyticsData) return;
 
-    const summary = analyticsData.summary;
+    const sum = analyticsData.summary;
     const csvRows: (string | number)[][] = [
       ['BAXATO MERCHANT ANALYTICS REPORT'],
       ['Workspace', businessName],
-      ['Timeframe', timeframe.toUpperCase()],
+      ['Timeframe', timeframeLabel],
       ['Date Range', `${analyticsData.startDate} to ${analyticsData.endDate}`],
       ['Generated At', new Date().toISOString()],
       [],
       ['EXECUTIVE SUMMARY KPI'],
       ['Metric', 'Value'],
-      ['Gross Vended Volume (NGN)', summary.totalVolumeNaira.toFixed(2)],
-      ['Successful Volume (NGN)', summary.successfulVolumeNaira.toFixed(2)],
-      ['Total Transactions', summary.totalCount],
-      ['Successful Transactions', summary.successfulCount],
-      ['Failed Transactions', summary.failedCount],
-      ['Pending Transactions', summary.pendingCount],
-      ['Reversed Transactions', summary.reversedCount],
-      ['Success Rate (%)', `${summary.successRate}%`],
-      ['Volume Growth vs Prior Period (%)', `${summary.volumeGrowthRate}%`],
-      ['Count Growth vs Prior Period (%)', `${summary.countGrowthRate}%`],
-      ['Average Order Value (NGN)', summary.avgTicketNaira.toFixed(2)],
-      ['Merchant Discount / Margin (NGN)', summary.totalDiscountNaira.toFixed(2)],
-      ['Commission Wallet Earned (NGN)', summary.commissionEarnedNaira.toFixed(2)],
+      ['Gross Vended Volume (NGN)', sum.totalVolumeNaira.toFixed(2)],
+      ['Successful Volume (NGN)', sum.successfulVolumeNaira.toFixed(2)],
+      ['Total Transactions', sum.totalCount],
+      ['Successful Transactions', sum.successfulCount],
+      ['Failed Transactions', sum.failedCount],
+      ['Pending Transactions', sum.pendingCount],
+      ['Reversed Transactions', sum.reversedCount],
+      ['Success Rate (%)', `${sum.successRate}%`],
+      ['Volume Growth vs Prior Period (%)', `${sum.volumeGrowthRate}%`],
+      ['Count Growth vs Prior Period (%)', `${sum.countGrowthRate}%`],
+      ['Average Order Value (NGN)', sum.avgTicketNaira.toFixed(2)],
+      ['Merchant Discount / Margin (NGN)', sum.totalDiscountNaira.toFixed(2)],
+      ['Commission Wallet Earned (NGN)', sum.commissionEarnedNaira.toFixed(2)],
       [],
       ['PRODUCT / SERVICE PERFORMANCE'],
       ['Service Category', 'Volume (NGN)', 'Volume Share (%)', 'Count', 'Success Rate (%)', 'Margin (NGN)'],
@@ -507,6 +621,11 @@ export default function AnalyticsPage() {
   const summary = analyticsData?.summary;
   const isZeroTxn = (summary?.totalCount || 0) === 0;
 
+  // Paginated Failures Data
+  const paginatedFailures = analyticsData?.failureDiagnostics?.paginatedFailures;
+  const failurePagination = paginatedFailures?.pagination || { page: 1, pageSize: 10, totalCount: 0, totalPages: 1 };
+  const failedTransactions = paginatedFailures?.transactions || [];
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       {/* Toast Notification */}
@@ -537,7 +656,7 @@ export default function AnalyticsPage() {
           businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
-          isRefreshing={isRefreshing}
+          isRefreshing={isRefreshing || isFetchingBackground}
           onRefresh={handleRefresh}
         />
 
@@ -548,6 +667,29 @@ export default function AnalyticsPage() {
             userRole={userRole}
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
+
+          {/* Navigation Breadcrumb & Back to Dashboard Button */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#126BEB] dark:hover:text-[#38BDF8] hover:border-[#126BEB]/40 shadow-xs transition-all font-semibold"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Dashboard</span>
+              </Link>
+              <span className="text-slate-300 dark:text-slate-700">/</span>
+              <span className="text-slate-800 dark:text-slate-200 font-bold">Analytics & Intelligence</span>
+            </div>
+
+            {/* In-flight SWR subtle indicator */}
+            {isFetchingBackground && !isLoading && (
+              <div className="inline-flex items-center gap-1.5 text-[11px] text-[#126BEB] dark:text-[#38BDF8] font-semibold animate-pulse">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Updating live telemetry...</span>
+              </div>
+            )}
+          </div>
 
           {/* Top Page Control Header */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -582,7 +724,12 @@ export default function AnalyticsPage() {
                 ).map((item) => (
                   <button
                     key={item.key}
-                    onClick={() => setTimeframe(item.key)}
+                    onClick={() => {
+                      if (timeframe !== item.key) {
+                        setTimeframe(item.key);
+                        setFailurePage(1);
+                      }
+                    }}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
                       timeframe === item.key
                         ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
@@ -598,7 +745,10 @@ export default function AnalyticsPage() {
               <div className="relative">
                 <select
                   value={serviceFilter}
-                  onChange={(e) => setServiceFilter(e.target.value as ServiceFilter)}
+                  onChange={(e) => {
+                    setServiceFilter(e.target.value as ServiceFilter);
+                    setFailurePage(1);
+                  }}
                   aria-label="Filter analytics by service type"
                   className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#126BEB]/30 cursor-pointer"
                 >
@@ -615,7 +765,10 @@ export default function AnalyticsPage() {
               <div className="relative">
                 <select
                   value={channelFilter}
-                  onChange={(e) => setChannelFilter(e.target.value as ChannelFilter)}
+                  onChange={(e) => {
+                    setChannelFilter(e.target.value as ChannelFilter);
+                    setFailurePage(1);
+                  }}
                   aria-label="Filter analytics by channel"
                   className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#126BEB]/30 cursor-pointer"
                 >
@@ -628,11 +781,11 @@ export default function AnalyticsPage() {
               {/* Refresh Button */}
               <button
                 onClick={handleRefresh}
-                disabled={isRefreshing}
+                disabled={isRefreshing || isFetchingBackground}
                 className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
                 title="Refresh real metrics"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isFetchingBackground ? 'animate-spin text-[#126BEB]' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
 
@@ -792,7 +945,7 @@ export default function AnalyticsPage() {
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <span>Vending Velocity & Trajectory</span>
                   <span className="text-xs font-normal text-slate-400">
-                    • {timeframe.toUpperCase()} Window
+                    • {timeframeLabel} Window
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1255,7 +1408,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Section 3: Channel Integration & Carrier Distribution */}
+          {/* Section 3: Channel Integration & Carrier Distribution with Real Brand Logos */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Integration Channels (API vs Console) (col-span-5) */}
             <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-5">
@@ -1350,7 +1503,7 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Carrier / Operator Breakdown (col-span-7) */}
+            {/* Carrier / Operator Breakdown with Real Logos (col-span-7) */}
             <div className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1368,64 +1521,80 @@ export default function AnalyticsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {analyticsData?.topOperators.map((op, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/50 dark:bg-[#071120]/40 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center shrink-0">
-                          {op.operator.slice(0, 3).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
-                            {op.operator}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {op.serviceType} • {op.count} vends
-                          </span>
-                        </div>
-                      </div>
+                  {analyticsData?.topOperators.map((op, idx) => {
+                    const { logoUrl, bg } = getOperatorLogo(op.operator);
 
-                      <div className="text-right shrink-0">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                          {op.formattedVolume}
-                        </span>
-                        <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                          <span className="font-bold text-[#126BEB] dark:text-[#38BDF8]">
-                            {op.volumeShare}%
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/50 dark:bg-[#071120]/40 flex items-center justify-between gap-3 hover:bg-slate-100/60 dark:hover:bg-[#091529] transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Official Carrier / Biller Logo */}
+                          <div className={`w-10 h-10 rounded-xl ${bg} border p-1.5 flex items-center justify-center shrink-0 shadow-xs`}>
+                            {logoUrl ? (
+                              <img
+                                src={logoUrl}
+                                alt={op.operator}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <span className="font-black text-xs text-slate-700 dark:text-slate-300">
+                                {op.operator.slice(0, 3).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                              {op.operator}
+                            </span>
+                            <span className="text-[10.5px] text-slate-400">
+                              {op.serviceType} • {op.count} vends
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            {op.formattedVolume}
                           </span>
-                          <span>•</span>
-                          <span
-                            className={`font-semibold ${
-                              op.successRate >= 90
-                                ? 'text-emerald-500'
-                                : op.successRate >= 60
-                                ? 'text-amber-500'
-                                : 'text-rose-500'
-                            }`}
-                          >
-                            {op.successRate}% Success
-                          </span>
+                          <div className="flex items-center justify-end gap-1.5 text-[10px]">
+                            <span className="font-bold text-[#126BEB] dark:text-[#38BDF8]">
+                              {op.volumeShare}%
+                            </span>
+                            <span>•</span>
+                            <span
+                              className={`font-semibold ${
+                                op.successRate >= 90
+                                  ? 'text-emerald-500'
+                                  : op.successRate >= 60
+                                  ? 'text-amber-500'
+                                  : 'text-rose-500'
+                              }`}
+                            >
+                              {op.successRate}% Success
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Section 4: System Health & Failure Diagnostics */}
+          {/* Section 4: Comprehensive Transaction Health & Failure Diagnostics with Pagination */}
           <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-[#126BEB]" />
                   <span>Transaction Health & Failure Diagnostics</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Granular root-cause analysis of upstream biller and gateway rejections.
+                  Granular root-cause analysis and itemized failure records for the <span className="font-semibold text-slate-800 dark:text-slate-200">{timeframeLabel}</span> window.
                 </p>
               </div>
 
@@ -1454,64 +1623,224 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Top Failure Reasons Table */}
-            {analyticsData?.failureDiagnostics?.topReasons.length === 0 ? (
-              <div className="p-6 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-center">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                  Zero Upstream Failures Recorded
-                </h4>
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  All transactions during this period fulfilled with 100% gateway success.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                      <th className="py-2.5 px-3">Failure Reason / Provider Response</th>
-                      <th className="py-2.5 px-3">Occurrences</th>
-                      <th className="py-2.5 px-3">Unfulfilled Volume</th>
-                      <th className="py-2.5 px-3 text-right">% of Failures</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {analyticsData?.failureDiagnostics.topReasons.map((reason, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50 transition-colors">
-                        <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                            <span className="truncate max-w-md">{reason.reason}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 font-bold text-slate-700 dark:text-slate-300">
-                          {reason.count}
-                        </td>
-                        <td className="py-3 px-3 font-semibold text-rose-600 dark:text-rose-400">
-                          {reason.formattedLostVolume}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-400">
-                          {reason.percentage}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Diagnostic View Tabs: Root Cause Aggregation vs Itemized Log with Pagination */}
+            <div className="flex items-center gap-2 pt-2 border-b border-slate-100 dark:border-slate-800/80">
+              <button
+                onClick={() => setFailureTab('reasons')}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                  failureTab === 'reasons'
+                    ? 'border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Categorized Root Causes</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                  {analyticsData?.failureDiagnostics?.topReasons.length || 0}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setFailureTab('transactions')}
+                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                  failureTab === 'transactions'
+                    ? 'border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Failed Transactions Log</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                  {failurePagination.totalCount}
+                </span>
+              </button>
+            </div>
+
+            {/* Tab 1: Root Cause Reasons Table */}
+            {failureTab === 'reasons' && (
+              <>
+                {analyticsData?.failureDiagnostics?.topReasons.length === 0 ? (
+                  <div className="p-6 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                    <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                      Zero Upstream Failures Recorded
+                    </h4>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      All transactions during the {timeframeLabel} window fulfilled with 100% gateway success.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                          <th className="py-2.5 px-3">Failure Reason / Provider Response</th>
+                          <th className="py-2.5 px-3">Occurrences</th>
+                          <th className="py-2.5 px-3">Unfulfilled Volume</th>
+                          <th className="py-2.5 px-3 text-right">% of Failures</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                        {analyticsData?.failureDiagnostics.topReasons.map((reason, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50 transition-colors">
+                            <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                <span className="truncate max-w-lg">{reason.reason}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 font-bold text-slate-700 dark:text-slate-300">
+                              {reason.count}
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-rose-600 dark:text-rose-400">
+                              {reason.formattedLostVolume}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-400">
+                              {reason.percentage}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Tab 2: Paginated Individual Failed Transactions Log */}
+            {failureTab === 'transactions' && (
+              <div className="space-y-4">
+                {failedTransactions.length === 0 ? (
+                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-[#071120] text-center text-xs text-slate-400">
+                    No failed transactions found for this timeframe.
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                            <th className="py-2.5 px-3">Reference</th>
+                            <th className="py-2.5 px-3">Service / Operator</th>
+                            <th className="py-2.5 px-3">Recipient</th>
+                            <th className="py-2.5 px-3">Amount</th>
+                            <th className="py-2.5 px-3">Failure Reason</th>
+                            <th className="py-2.5 px-3 text-right">Date & Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                          {failedTransactions.map((tx) => {
+                            const { logoUrl, bg } = getOperatorLogo(tx.operator);
+
+                            return (
+                              <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50 transition-colors">
+                                <td className="py-3 px-3 font-mono font-bold text-slate-900 dark:text-slate-100">
+                                  {tx.reference}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 rounded-lg ${bg} border p-0.5 flex items-center justify-center shrink-0`}>
+                                      {logoUrl ? (
+                                        <img src={logoUrl} alt={tx.operator} className="w-full h-full object-contain" />
+                                      ) : (
+                                        <span className="text-[9px] font-black">{tx.operator.slice(0, 2)}</span>
+                                      )}
+                                    </div>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                      {tx.serviceType}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
+                                  {tx.recipient}
+                                </td>
+                                <td className="py-3 px-3 font-bold text-rose-600 dark:text-rose-400">
+                                  {tx.formattedAmount}
+                                </td>
+                                <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-xs truncate" title={tx.errorMessage}>
+                                  {tx.errorMessage}
+                                </td>
+                                <td className="py-3 px-3 text-right text-[11px] text-slate-400 whitespace-nowrap">
+                                  {new Date(tx.createdAt).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Bar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
+                      <div>
+                        Showing page <span className="font-bold text-slate-800 dark:text-slate-200">{failurePagination.page}</span> of{' '}
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{failurePagination.totalPages}</span> ({failurePagination.totalCount} total failed vends)
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (failurePage > 1) {
+                              const p = failurePage - 1;
+                              setFailurePage(p);
+                              fetchAnalytics(undefined, p);
+                            }
+                          }}
+                          disabled={failurePage <= 1 || isFetchingBackground}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <span>Previous</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (failurePage < failurePagination.totalPages) {
+                              const p = failurePage + 1;
+                              setFailurePage(p);
+                              fetchAnalytics(undefined, p);
+                            }
+                          }}
+                          disabled={failurePage >= failurePagination.totalPages || isFetchingBackground}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
+                        >
+                          <span>Next</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
 
-          {/* Section 5: 24-Hour Trading Velocity Matrix (Heatmap) */}
+          {/* Section 5: Hourly Trading Activity Pattern Matrix (Clearly labeled for clarity) */}
           <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#126BEB]" />
-                <span>24-Hour Peak Trading Density (WAT)</span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Hourly transaction frequency showing your customers' peak purchasing windows throughout the day.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#126BEB]" />
+                  <span>
+                    {timeframe === 'today'
+                      ? "Today's 24-Hour Trading Velocity"
+                      : `Hourly Activity Pattern (${timeframeLabel} Aggregate)`}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {timeframe === 'today'
+                    ? 'Disbursement throughput across each hour of today in West Africa Time (WAT).'
+                    : `Aggregated distribution by time of day (00:00 - 23:00 WAT) revealing your customers' prime purchasing hours across the ${timeframeLabel} window.`}
+                </p>
+              </div>
+
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] dark:text-[#38BDF8] text-xs font-bold border border-blue-200 dark:border-blue-900/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#126BEB] animate-pulse" />
+                <span>WAT Timezone (UTC+1)</span>
+              </div>
             </div>
 
             {/* 24-Column Density Matrix */}
@@ -1548,7 +1877,7 @@ export default function AnalyticsPage() {
                     {/* Hover Floating Tooltip */}
                     <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute bottom-full mb-1 z-30 px-2.5 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[10px] whitespace-nowrap shadow-lg transition-opacity duration-150">
                       <div className="font-bold">{slot.label} WAT</div>
-                      <div>{slot.count} transactions</div>
+                      <div>{slot.count} transactions ({slot.percentage}% of window)</div>
                       <div className="text-[#38BDF8] dark:text-[#126BEB] font-bold">
                         {slot.formattedVolume}
                       </div>
@@ -1559,7 +1888,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Section 6: Live Ledger Deep Inspection Banner */}
+          {/* Section 6: Live Ledger Deep Inspection Quick Link */}
           <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/80 dark:from-[#091528] dark:via-[#070D18] dark:to-[#0B1528] border border-blue-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
