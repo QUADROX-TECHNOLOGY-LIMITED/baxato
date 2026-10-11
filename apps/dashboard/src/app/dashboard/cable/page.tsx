@@ -22,6 +22,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import AccessRestricted from '@/components/dashboard/AccessRestricted';
 import CableReceiptModal, {
   CableReceiptData,
 } from '@/components/dashboard/CableReceiptModal';
@@ -274,6 +275,7 @@ export default function CableVendingPage() {
     return '';
   });
   const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
 
@@ -379,6 +381,8 @@ export default function CableVendingPage() {
   useEffect(() => {
     const user = getStoredUser();
     const biz = getStoredBusiness();
+    if (biz?.role) setUserRole(biz.role);
+    else if (user?.role) setUserRole(user.role);
     if (user?.firstName) setMerchantName(user.firstName);
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     else setKycStatus('UNVERIFIED');
@@ -386,7 +390,23 @@ export default function CableVendingPage() {
 
     loadWallets();
     loadBouquets();
+
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
+
+  const canExecuteServices =
+    userRole === 'BUSINESS_OWNER' ||
+    userRole === 'BUSINESS_ADMIN' ||
+    userRole === 'DEVELOPER' ||
+    userRole === 'SUPPORT';
 
   // Filtered Operators for Catalog
   const filteredOperators = useMemo(() => {
@@ -657,10 +677,14 @@ export default function CableVendingPage() {
         />
 
         <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-5">
-          <KycBanner
-            kycStatus={kycStatus}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
+          {!canExecuteServices ? (
+            <AccessRestricted description="Cable TV subscription and bill payments are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+          ) : (
+            <>
+              <KycBanner
+                kycStatus={kycStatus}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
           {/* ======================================================== */}
           {/* VIEW 1: OPERATOR CATALOG (Displayed when no provider selected) */}
@@ -1065,7 +1089,9 @@ export default function CableVendingPage() {
               </div>
             </div>
           )}
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* CONFIRMATION MODAL */}

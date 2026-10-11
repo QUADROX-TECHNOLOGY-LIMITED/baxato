@@ -149,30 +149,53 @@ export default function DeveloperKeysPage() {
       return;
     }
 
+    let role = 'BUSINESS_OWNER';
     try {
       const storedUser = getStoredUser();
       const storedBiz = getStoredBusiness();
 
-      if (storedUser) {
-        if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
-        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
+      if (storedBiz?.role) {
+        role = storedBiz.role;
+        setUserRole(storedBiz.role);
+      } else if (storedUser?.role) {
+        role = storedUser.role;
+        setUserRole(storedUser.role);
       }
+      if (storedUser?.firstName) setMerchantName(storedUser.firstName);
+      if (storedUser?.kycStatus) setKycStatus(storedUser.kycStatus);
       if (storedBiz?.name) {
         setBusinessName(storedBiz.name);
       }
     } catch {}
 
-    loadKeys();
-    loadWebhookConfig();
+    const isDevRole =
+      role === 'BUSINESS_OWNER' || role === 'BUSINESS_ADMIN' || role === 'DEVELOPER';
+
+    if (isDevRole) {
+      loadKeys();
+      loadWebhookConfig();
+    } else {
+      setIsLoadingKeys(false);
+    }
 
     const handleBizSwitched = () => {
+      let switchedRole = 'BUSINESS_OWNER';
       try {
         const b = getStoredBusiness();
         if (b?.name) setBusinessName(b.name);
+        if (b?.role) {
+          switchedRole = b.role;
+          setUserRole(b.role);
+        }
       } catch {}
-      loadKeys();
-      loadWebhookConfig();
+      if (
+        switchedRole === 'BUSINESS_OWNER' ||
+        switchedRole === 'BUSINESS_ADMIN' ||
+        switchedRole === 'DEVELOPER'
+      ) {
+        loadKeys();
+        loadWebhookConfig();
+      }
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
@@ -668,57 +691,68 @@ export default function DeveloperKeysPage() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-6">
-          {/* Identity Verification Warning Banner (if applicable) */}
-          <KycBanner
-            kycStatus={kycStatus}
-            userRole={userRole}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
-
-          {/* Navigation & Header */}
-          <div className="space-y-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Dashboard</span>
-            </Link>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                  API Keys &amp; Webhook Setup
+          {!canManageKeys ? (
+            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-xs mt-12">
+              <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Access Restricted
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                  Manage your sandbox and live credentials, and configure dedicated webhook endpoints for each environment.
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Developer API keys and credential management are restricted to Workspace Owners, Administrators, and Developers.
                 </p>
               </div>
-
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors self-start sm:self-auto"
-                title="Refresh settings"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Restricted Role Alert */}
-          {!canManageKeys && (
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
-              <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Restricted Permissions</p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                  Your current role (<strong>{userRole}</strong>) has read-only access. Only Business Owners, Administrators, and Developers can modify credentials or webhooks.
-                </p>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#126BEB] text-white font-medium text-xs sm:text-sm hover:bg-[#0B5CC7] transition-colors"
+                >
+                  Return to Dashboard
+                </Link>
               </div>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Identity Verification Warning Banner (if applicable) */}
+              <KycBanner
+                kycStatus={kycStatus}
+                userRole={userRole}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
+
+              {/* Navigation & Header */}
+              <div className="space-y-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Dashboard</span>
+                </Link>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                      API Keys &amp; Webhook Setup
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                      Manage your sandbox and live credentials, and configure dedicated webhook endpoints for each environment.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors self-start sm:self-auto"
+                    title="Refresh settings"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`} />
+                    <span className="hidden sm:inline">Refresh</span>
+                  </button>
+                </div>
+              </div>
 
           {/* ========================================================================= */}
           {/* SECTION 1: SANDBOX ENVIRONMENT (TEST MODE)                                */}
@@ -1400,7 +1434,9 @@ export default function DeveloperKeysPage() {
               <ExternalLink className="w-3.5 h-3.5" />
             </Link>
           </div>
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* ========================================================================= */}

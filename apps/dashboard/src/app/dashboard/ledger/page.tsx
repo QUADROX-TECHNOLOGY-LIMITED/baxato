@@ -103,6 +103,7 @@ function LedgerContent() {
     return '';
   });
   const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -127,10 +128,15 @@ function LedgerContent() {
   useEffect(() => {
     const user = getStoredUser();
     const biz = getStoredBusiness();
+    if (biz?.role) setUserRole(biz.role);
+    else if (user?.role) setUserRole(user.role);
     if (user?.firstName) setMerchantName(user.firstName);
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     if (biz?.name) setBusinessName(biz.name);
   }, []);
+
+  const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
+  const canExportReports = isOwnerOrAdmin || userRole === 'FINANCE';
 
   // Update selectedService when URL changes
   useEffect(() => {
@@ -405,16 +411,18 @@ function LedgerContent() {
             </Link>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                disabled={isExporting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
-                title="Export transactions as CSV / Excel spreadsheet"
-              >
-                <Download className={`w-3.5 h-3.5 text-emerald-500 ${isExporting ? 'animate-bounce' : ''}`} />
-                <span>{isExporting ? 'Exporting...' : 'Export Excel / CSV'}</span>
-              </button>
+              {canExportReports && (
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  disabled={isExporting}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
+                  title="Export transactions as CSV / Excel spreadsheet"
+                >
+                  <Download className={`w-3.5 h-3.5 text-emerald-500 ${isExporting ? 'animate-bounce' : ''}`} />
+                  <span>{isExporting ? 'Exporting...' : 'Export Excel / CSV'}</span>
+                </button>
+              )}
 
               <button
                 type="button"

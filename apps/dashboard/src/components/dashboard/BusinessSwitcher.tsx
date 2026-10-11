@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import {
   getStoredAuthToken,
+  getStoredUser,
   getStoredBusiness,
   setActiveBusiness,
   type StoredBusiness,
@@ -186,8 +187,10 @@ export default function BusinessSwitcher({
   };
 
   const displayName = activeBiz?.name || currentBusinessName || '';
-  const count = businesses.length || 1;
-  const canAddMore = count < 3;
+  const currentUser = typeof window !== 'undefined' ? getStoredUser() : null;
+  const isOwnerAccount = currentUser?.role === 'BUSINESS_OWNER' || businesses.some((b) => b.isOwner);
+  const ownedCount = businesses.filter((b) => b.isOwner).length;
+  const canAddMore = isOwnerAccount && ownedCount < 3;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -271,9 +274,15 @@ export default function BusinessSwitcher({
             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
               Workspaces
             </span>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60">
-              {count}/3 Used
-            </span>
+            {isOwnerAccount ? (
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60">
+                {ownedCount}/3 Used
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                {businesses.length} {businesses.length === 1 ? 'Workspace' : 'Workspaces'}
+              </span>
+            )}
           </div>
 
           {/* List of Businesses */}
@@ -347,26 +356,28 @@ export default function BusinessSwitcher({
             )}
           </div>
 
-          {/* Bottom Action: Add New Workspace */}
-          <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#080E1A]/60">
-            {canAddMore ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  setIsCreateModalOpen(true);
-                }}
-                className="w-full py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Business Workspace</span>
-              </button>
-            ) : (
-              <div className="py-1 px-2 text-center text-[10px] text-slate-400 font-medium">
-                Maximum 3 businesses reached
-              </div>
-            )}
-          </div>
+          {/* Bottom Action: Add New Workspace (Only visible to business owners) */}
+          {isOwnerAccount && (
+            <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#080E1A]/60">
+              {canAddMore ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="w-full py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Business Workspace</span>
+                </button>
+              ) : (
+                <div className="py-1 px-2 text-center text-[10px] text-slate-400 font-medium">
+                  Maximum 3 businesses reached
+                </div>
+              )}
+            </div>
+          )}
         </div>
         </>
       )}
@@ -375,7 +386,7 @@ export default function BusinessSwitcher({
       <CreateBusinessModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        currentCount={count}
+        currentCount={ownedCount}
         onSuccess={(newBiz) => {
           loadBusinesses();
         }}

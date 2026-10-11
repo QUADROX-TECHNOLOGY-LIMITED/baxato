@@ -354,7 +354,8 @@ export default function AnalyticsPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
-        if (storedUser.role) setUserRole(storedUser.role);
+        if (storedBiz?.role) setUserRole(storedBiz.role);
+        else if (storedUser.role) setUserRole(storedUser.role);
         if (storedUser.firstName) setMerchantName(storedUser.firstName);
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
       }
@@ -398,6 +399,9 @@ export default function AnalyticsPage() {
   const formatNaira = (val: number) => {
     return `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+
+  const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
+  const canExportReports = isOwnerOrAdmin || userRole === 'FINANCE';
 
   // Human-readable timeframe label
   const timeframeLabel = useMemo(() => {
@@ -790,14 +794,16 @@ export default function AnalyticsPage() {
               </button>
 
               {/* Export CSV Button */}
-              <button
-                onClick={handleExportCSV}
-                disabled={isLoading || isZeroTxn}
-                className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export CSV</span>
-              </button>
+              {canExportReports && (
+                <button
+                  onClick={handleExportCSV}
+                  disabled={isLoading || isZeroTxn}
+                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+              )}
             </div>
           </div>
 

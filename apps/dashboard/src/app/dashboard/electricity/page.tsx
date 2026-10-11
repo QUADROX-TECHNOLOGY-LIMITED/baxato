@@ -21,6 +21,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import AccessRestricted from '@/components/dashboard/AccessRestricted';
 import ElectricityReceiptModal, {
   ElectricityReceiptData,
 } from '@/components/dashboard/ElectricityReceiptModal';
@@ -377,6 +378,7 @@ export default function ElectricityPage() {
     return '';
   });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -457,6 +459,8 @@ export default function ElectricityPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
+        if (storedBiz?.role) setUserRole(storedBiz.role);
+        else if (storedUser.role) setUserRole(storedUser.role);
         if (storedUser.firstName) setMerchantName(storedUser.firstName);
         if (storedUser.phone) setCustomerPhone(storedUser.phone);
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
@@ -467,6 +471,15 @@ export default function ElectricityPage() {
 
       if (storedBiz?.name) setBusinessName(storedBiz.name);
     } catch {}
+
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
 
     loadWallets();
 
@@ -506,6 +519,7 @@ export default function ElectricityPage() {
     } catch {}
 
     return () => {
+      window.removeEventListener('bx_business_switched', handleBizSwitched);
       if (autoVerifyTimeoutRef.current) {
         clearTimeout(autoVerifyTimeoutRef.current);
       }
@@ -514,6 +528,12 @@ export default function ElectricityPage() {
       }
     };
   }, []);
+
+  const canExecuteServices =
+    userRole === 'BUSINESS_OWNER' ||
+    userRole === 'BUSINESS_ADMIN' ||
+    userRole === 'DEVELOPER' ||
+    userRole === 'SUPPORT';
 
   const handleRefreshBalance = async () => {
     setIsRefreshing(true);
@@ -943,11 +963,15 @@ export default function ElectricityPage() {
         />
 
         <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-4">
-          {/* Identity Verification Warning Banner */}
-          <KycBanner
-            kycStatus={kycStatus}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
+          {!canExecuteServices ? (
+            <AccessRestricted description="Electricity bill payments and prepaid token vending are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+          ) : (
+            <>
+              {/* Identity Verification Warning Banner */}
+              <KycBanner
+                kycStatus={kycStatus}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
           {/* ======================================================== */}
           {/* VIEW 1: ALL BILLERS CATALOG (Displayed when no DISCO is selected) */}
@@ -1493,7 +1517,9 @@ export default function ElectricityPage() {
               </div>
             </div>
           )}
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* CONFIRMATION SUMMARY MODAL */}

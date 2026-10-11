@@ -33,6 +33,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import AccessRestricted from '@/components/dashboard/AccessRestricted';
 import ExamPinReceiptModal, {
   ExamPinReceiptData,
 } from '@/components/dashboard/ExamPinReceiptModal';
@@ -323,6 +324,7 @@ export default function EducationPage() {
     return '';
   });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -414,6 +416,8 @@ export default function EducationPage() {
   useEffect(() => {
     const user = getStoredUser();
     const biz = getStoredBusiness();
+    if (biz?.role) setUserRole(biz.role);
+    else if (user?.role) setUserRole(user.role);
     if (user?.firstName) setMerchantName(user.firstName);
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     else setKycStatus('UNVERIFIED');
@@ -421,7 +425,23 @@ export default function EducationPage() {
 
     loadWallets();
     loadPackages();
+
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
+
+  const canExecuteServices =
+    userRole === 'BUSINESS_OWNER' ||
+    userRole === 'BUSINESS_ADMIN' ||
+    userRole === 'DEVELOPER' ||
+    userRole === 'SUPPORT';
 
   // Active Selected Package
   const currentPackage = useMemo(() => {
@@ -691,11 +711,15 @@ export default function EducationPage() {
         />
 
         <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-6">
-          {/* KYC Banner */}
-          <KycBanner
-            kycStatus={kycStatus}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
+          {!canExecuteServices ? (
+            <AccessRestricted description="Exam PIN vending is restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+          ) : (
+            <>
+              {/* KYC Banner */}
+              <KycBanner
+                kycStatus={kycStatus}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
           {/* Navigation Action: Back to Dashboard & Exam PIN History */}
           <div className="flex items-center justify-between">
@@ -1133,9 +1157,9 @@ export default function EducationPage() {
               </form>
             </div>
           </div>
-
-
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* CONFIRMATION MODAL */}

@@ -13,6 +13,7 @@ import {
   Eye,
   Check,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -66,6 +67,11 @@ export default function WebhookEventsPage() {
   const [selectedDelivery, setSelectedDelivery] = useState<WebhookDeliveryLog | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUCCESSFUL' | 'FAILED'>('ALL');
 
+  const canAccessWebhooks =
+    userRole === 'BUSINESS_OWNER' ||
+    userRole === 'BUSINESS_ADMIN' ||
+    userRole === 'DEVELOPER';
+
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
@@ -73,21 +79,55 @@ export default function WebhookEventsPage() {
       return;
     }
 
+    let role = 'BUSINESS_OWNER';
     try {
       const storedUser = getStoredUser();
       const storedBiz = getStoredBusiness();
 
-      if (storedUser) {
-        if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
-        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
+      if (storedBiz?.role) {
+        role = storedBiz.role;
+        setUserRole(storedBiz.role);
+      } else if (storedUser?.role) {
+        role = storedUser.role;
+        setUserRole(storedUser.role);
       }
+      if (storedUser?.firstName) setMerchantName(storedUser.firstName);
+      if (storedUser?.kycStatus) setKycStatus(storedUser.kycStatus);
       if (storedBiz?.name) {
         setBusinessName(storedBiz.name);
       }
     } catch {}
 
-    loadDeliveries();
+    const isDevRole =
+      role === 'BUSINESS_OWNER' || role === 'BUSINESS_ADMIN' || role === 'DEVELOPER';
+
+    if (isDevRole) {
+      loadDeliveries();
+    } else {
+      setIsLoading(false);
+    }
+
+    const handleBizSwitched = () => {
+      let switchedRole = 'BUSINESS_OWNER';
+      try {
+        const b = getStoredBusiness();
+        if (b?.name) setBusinessName(b.name);
+        if (b?.role) {
+          switchedRole = b.role;
+          setUserRole(b.role);
+        }
+      } catch {}
+      if (
+        switchedRole === 'BUSINESS_OWNER' ||
+        switchedRole === 'BUSINESS_ADMIN' ||
+        switchedRole === 'DEVELOPER'
+      ) {
+        loadDeliveries();
+      }
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
 
   const getAuthHeaders = () => {
@@ -193,11 +233,35 @@ export default function WebhookEventsPage() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-6">
-          <KycBanner
-            kycStatus={kycStatus}
-            userRole={userRole}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
+          {!canAccessWebhooks ? (
+            <div className="bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-xs mt-12">
+              <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Access Restricted
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Webhook configuration and event logs are restricted to Workspace Owners, Administrators, and Developers.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-[#126BEB] text-white font-medium text-xs sm:text-sm hover:bg-[#0B5CC7] transition-colors"
+                >
+                  Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              <KycBanner
+                kycStatus={kycStatus}
+                userRole={userRole}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
           {/* Navigation & Header */}
           <div className="space-y-2">
@@ -338,7 +402,9 @@ export default function WebhookEventsPage() {
               </div>
             )}
           </div>
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* Payload Viewer Modal */}

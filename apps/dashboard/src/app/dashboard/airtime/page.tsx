@@ -19,6 +19,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import AccessRestricted from '@/components/dashboard/AccessRestricted';
 import TransactionReceiptModal, {
   TransactionReceiptData,
 } from '@/components/dashboard/TransactionReceiptModal';
@@ -100,6 +101,7 @@ export default function AirtimeVendingPage() {
     return '';
   });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -164,6 +166,8 @@ export default function AirtimeVendingPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
+        if (storedBiz?.role) setUserRole(storedBiz.role);
+        else if (storedUser.role) setUserRole(storedUser.role);
         if (storedUser.firstName) setMerchantName(storedUser.firstName);
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
         else setKycStatus('UNVERIFIED');
@@ -175,6 +179,15 @@ export default function AirtimeVendingPage() {
         setBusinessName(storedBiz.name);
       }
     } catch {}
+
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
 
     loadWallets();
 
@@ -197,7 +210,14 @@ export default function AirtimeVendingPage() {
       } catch {}
     };
     loadNetworksCatalog();
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
+
+  const canExecuteServices =
+    userRole === 'BUSINESS_OWNER' ||
+    userRole === 'BUSINESS_ADMIN' ||
+    userRole === 'DEVELOPER' ||
+    userRole === 'SUPPORT';
 
   const isVerified = kycStatus === 'VERIFIED';
 
@@ -378,11 +398,16 @@ export default function AirtimeVendingPage() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-5">
-          {/* Identity Verification Warning Banner */}
-          <KycBanner
-            kycStatus={kycStatus}
-            onOpenKycModal={() => setIsKycModalOpen(true)}
-          />
+          {!canExecuteServices ? (
+            <AccessRestricted description="Airtime recharge and utility vending are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+          ) : (
+            <>
+              {/* Identity Verification Warning Banner */}
+              <KycBanner
+                kycStatus={kycStatus}
+                userRole={userRole}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
           {/* Navigation Action: Back to Dashboard & Airtime History */}
           <div className="flex items-center justify-between">
@@ -564,7 +589,9 @@ export default function AirtimeVendingPage() {
               </form>
             </div>
           </div>
-        </main>
+        </>
+      )}
+    </main>
       </div>
 
       {/* Clean Unified Confirmation Modal */}
