@@ -126,7 +126,11 @@ export default function DashboardOverviewPage() {
       const storedBiz = getStoredBusiness();
 
       if (storedUser) {
-        if (storedUser.role === 'STAFF' || storedUser.role === 'SUPER_ADMIN') {
+        if (storedUser.role === 'SUPER_ADMIN') {
+          router.replace('/admin');
+          return;
+        }
+        if (storedUser.role === 'STAFF') {
           router.replace('/staff/overview');
           return;
         }

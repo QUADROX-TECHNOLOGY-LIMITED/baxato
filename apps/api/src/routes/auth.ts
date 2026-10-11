@@ -431,6 +431,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Invalid email or password.');
     }
 
+    // STRICT ISOLATION & ZERO INFORMATION LEAKAGE:
+    // Staff and Platform Administrator accounts do not exist in the merchant domain.
+    // Disclosing their existence, role, status, or portal endpoints is strictly forbidden.
+    if (user.role === 'STAFF' || user.role === 'SUPER_ADMIN') {
+      throw new AuthenticationError('Invalid email or password.');
+    }
+
     if (user.status !== 'ACTIVE') {
       throw new AuthenticationError(`Your account is ${user.status}. Please contact support.`);
     }
@@ -720,6 +727,166 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           },
           token,
           message: 'Staff authentication successful. Welcome to Baxato Operations Console.',
+        },
+        request.id,
+      ),
+    );
+  });
+
+  /**
+   * POST /auth/admin/login
+   * Dedicated secure authentication endpoint exclusively for Super Admin (Platform Owner).
+   * Strictly enforces SUPER_ADMIN role and compulsory 2FA.
+   */
+  fastify.post('/admin/login', async (request, reply) => {
+    const parseResult = staffLoginSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      throw new ValidationError(
+        parseResult.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+
+    const { email, password, twoFactorCode } = parseResult.data;
+    const cleanEmail = email.toLowerCase().trim();
+
+    // STRICT CHECK: Reject non-@baxato.com emails immediately without touching the database
+    if (!cleanEmail.endsWith('@baxato.com')) {
+      throw new AuthenticationError('Super Admin login requires an official @baxato.com email address.');
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, cleanEmail))
+      .limit(1);
+
+    if (!user || !user.passwordHash) {
+      throw new AuthenticationError('Invalid email or password.');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      throw new AuthenticationError('Invalid email or password.');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new AuthenticationError(`Account status is ${user.status}. Please contact platform owner.`);
+    }
+
+    // STRICT SUPER ADMIN ROLE ENFORCEMENT
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new AuthenticationError('Access denied: Platform Super Admin accounts only.');
+    }
+
+    // MANDATORY 2FA ENFORCEMENT FOR SUPER ADMIN
+    if (!user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { userId: user.id, email: user.email, role: user.role, purpose: 'ADMIN_2FA_SETUP' },
+        env.JWT_SECRET,
+        { expiresIn: '15m' },
+      );
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactorSetup: true,
+            tempToken,
+            email: user.email,
+            firstName: user.firstName,
+            message: 'Two-Factor Authentication is mandatory for Super Admin accounts.',
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Case 2: 2FA is already enabled - require verification code
+    const code = twoFactorCode?.trim();
+    if (!code) {
+      if (user.twoFactorMethod === 'EMAIL') {
+        await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+        const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+        if (env.NODE_ENV !== 'production') {
+          request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Admin Login 2FA Email OTP dispatched');
+        }
+      }
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactor: true,
+            twoFactorMethod: user.twoFactorMethod || 'EMAIL',
+            email: user.email,
+            message:
+              user.twoFactorMethod === 'TOTP'
+                ? 'Enter the 6-digit code from your authenticator app.'
+                : `Enter the 6-digit verification code sent to ${user.email}.`,
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Verify 2FA code
+    let is2FaValid = false;
+    if (user.twoFactorMethod === 'TOTP') {
+      if (user.twoFactorSecret) {
+        is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
+      }
+      if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
+        const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+        const backupList = user.twoFactorBackupCodes as string[];
+        const matchIdx = backupList.indexOf(codeHash);
+        if (matchIdx !== -1) {
+          is2FaValid = true;
+          const remaining = backupList.filter((_, idx) => idx !== matchIdx);
+          await db
+            .update(users)
+            .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
+      }
+    } else {
+      const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+      is2FaValid = emailVerify.valid;
+    }
+
+    if (!is2FaValid) {
+      throw new ValidationError('Invalid or expired two-factor authentication code.');
+    }
+
+    // Issue super admin session token
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      kycStatus: user.kycStatus as KycStatus,
+    });
+
+    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    await auditService.log({
+      userId: user.id,
+      action: 'ADMIN_LOGIN_SUCCESS',
+      resourceType: 'USER',
+      resourceId: user.id,
+      ipAddress: clientIp,
+      userAgent: (request.headers['user-agent'] as string) || undefined,
+      changes: { email: user.email, role: user.role },
+    });
+
+    return reply.status(200).send(
+      createSuccessResponse(
+        {
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            kycStatus: user.kycStatus,
+          },
+          token,
+          message: 'Super Admin authentication successful. Welcome to Baxato Master Command Console.',
         },
         request.id,
       ),

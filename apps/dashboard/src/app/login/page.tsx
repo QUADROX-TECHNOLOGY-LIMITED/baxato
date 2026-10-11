@@ -288,10 +288,8 @@ export default function LoginPage() {
       console.warn('Clerk session sync skipped (backend authenticated):', clerkErr);
     }
 
-    // Route platform staff and super admin directly to /staff/overview, merchants to /dashboard
-    const userRole = loginData?.user?.role;
-    const targetUrl =
-      userRole === 'STAFF' || userRole === 'SUPER_ADMIN' ? '/staff/overview' : '/dashboard';
+    // Standard merchant login routes strictly to merchant dashboard
+    const targetUrl = '/dashboard';
 
     // Hard navigation to ensure fresh session state across entire app and prevent lingering on login
     if (typeof window !== 'undefined') {

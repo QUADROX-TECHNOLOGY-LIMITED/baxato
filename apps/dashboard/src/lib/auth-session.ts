@@ -99,10 +99,15 @@ export function clearSessionAndRedirect(reason: 'expired' | 'unauthorized' | 'lo
     localStorage.removeItem('bx_business');
   } catch {}
 
-  const isStaffPath = window.location.pathname.startsWith('/staff') || window.location.pathname.startsWith('/admin');
-  const loginPath = isStaffPath ? '/staff/login' : '/login';
+  const isAdminPath = window.location.pathname.startsWith('/admin');
+  const isStaffPath = window.location.pathname.startsWith('/staff');
+  const loginPath = isAdminPath ? '/admin/login' : isStaffPath ? '/staff/login' : '/login';
   const target = reason === 'logout' ? loginPath : `${loginPath}?expired=true`;
-  if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/staff/login')) {
+  if (
+    !window.location.pathname.startsWith('/login') &&
+    !window.location.pathname.startsWith('/staff/login') &&
+    !window.location.pathname.startsWith('/admin/login')
+  ) {
     window.location.href = target;
   }
 }
