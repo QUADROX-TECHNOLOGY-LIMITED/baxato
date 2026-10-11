@@ -16,6 +16,7 @@ import {
   Receipt,
   RotateCw,
 } from 'lucide-react';
+import { printElectricityReceipt } from '@/lib/receipt-printer';
 
 export interface ElectricityReceiptData {
   transactionId: string;
@@ -227,7 +228,9 @@ export default function ElectricityReceiptModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (currentReceipt) {
+      printElectricityReceipt(currentReceipt);
+    }
   };
 
   return (

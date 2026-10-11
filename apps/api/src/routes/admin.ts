@@ -9,6 +9,7 @@ import {
   koboToNaira,
   formatNairaFromKobo,
   type ApiPagination,
+  UserRole,
 } from '@baxato/common';
 import {
   db,
@@ -24,6 +25,7 @@ import {
   gte,
   ilike,
   sql,
+  inArray,
 } from '@baxato/database';
 import { requirePlatformStaff } from '../plugins/auth.plugin.js';
 import {
@@ -457,180 +459,160 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
     const offset = (page - 1) * limit;
 
-    const conditions: any[] = [];
+    // Filter merchants: users who have role BUSINESS_OWNER or who own businesses
+    const baseMerchantCondition = or(
+      eq(users.role, UserRole.BUSINESS_OWNER),
+      sql`${users.id} IN (SELECT DISTINCT owner_id FROM businesses)`
+    );
+
+    const conditions: any[] = [baseMerchantCondition];
+
     if (query.search && query.search.trim()) {
       const term = `%${query.search.trim()}%`;
-      const matchedUsers = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(
-          or(
-            ilike(users.email, term),
-            ilike(users.phoneNumber, term),
-            ilike(users.nin, term),
-            ilike(users.firstName, term),
-            ilike(users.lastName, term),
-          ),
-        );
-      const matchedUserIds = matchedUsers.map((u) => u.id);
+      // Find businesses matching term by name or slug
+      const matchedBiz = await db
+        .select({ ownerId: businesses.ownerId })
+        .from(businesses)
+        .where(or(ilike(businesses.name, term), ilike(businesses.slug, term)));
+      const bizOwnerIds = Array.from(new Set(matchedBiz.map((b) => b.ownerId).filter(Boolean)));
 
-      if (matchedUserIds.length > 0) {
-        conditions.push(
-          or(
-            ilike(businesses.name, term),
-            ilike(businesses.slug, term),
-            sql`${businesses.ownerId} IN ${matchedUserIds}`,
-          ),
-        );
-      } else {
-        conditions.push(
-          or(
-            ilike(businesses.name, term),
-            ilike(businesses.slug, term),
-          ),
-        );
+      const searchOrs: any[] = [
+        ilike(users.email, term),
+        ilike(users.phoneNumber, term),
+        ilike(users.nin, term),
+        ilike(users.firstName, term),
+        ilike(users.lastName, term),
+      ];
+      if (bizOwnerIds.length > 0) {
+        searchOrs.push(inArray(users.id, bizOwnerIds));
       }
+      conditions.push(or(...searchOrs));
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const whereClause = and(...conditions);
 
-    const [bizRows, countResult] = await Promise.all([
+    const [userRows, countResult] = await Promise.all([
       db
-        .select()
-        .from(businesses)
+        .select({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          middleName: users.middleName,
+          phoneNumber: users.phoneNumber,
+          role: users.role,
+          status: users.status,
+          isEmailVerified: users.isEmailVerified,
+          isPhoneVerified: users.isPhoneVerified,
+          kycStatus: users.kycStatus,
+          nin: users.nin,
+          dob: users.dob,
+          ninData: users.ninData,
+          avatarUrl: users.avatarUrl,
+          createdAt: users.createdAt,
+        })
+        .from(users)
         .where(whereClause)
-        .orderBy(desc(businesses.createdAt))
+        .orderBy(desc(users.createdAt))
         .limit(limit)
         .offset(offset),
       db
         .select({ count: sql<number>`count(*)` })
-        .from(businesses)
+        .from(users)
         .where(whereClause),
     ]);
 
-    const totalCount = Number(countResult[0]?.count || bizRows.length);
+    const totalCount = Number(countResult[0]?.count || userRows.length);
 
-    // Fetch owner user, all associated businesses, and wallets for each merchant
+    // Fetch all owned businesses, wallets, and KYC records for each unique merchant owner
     const merchantsWithWallets = await Promise.all(
-      bizRows.map(async (b) => {
-        let ownerUser: any = null;
-        let ownerBusinesses: any[] = [];
-        let kycRecord: any = null;
+      userRows.map(async (u) => {
+        // Fetch all businesses owned by this merchant user
+        const allUserBiz = await db
+          .select()
+          .from(businesses)
+          .where(eq(businesses.ownerId, u.id))
+          .orderBy(desc(businesses.createdAt));
 
-        if (b.ownerId) {
-          const [owner] = await db
-            .select({
-              id: users.id,
-              email: users.email,
-              firstName: users.firstName,
-              lastName: users.lastName,
-              middleName: users.middleName,
-              phoneNumber: users.phoneNumber,
-              role: users.role,
-              status: users.status,
-              isEmailVerified: users.isEmailVerified,
-              isPhoneVerified: users.isPhoneVerified,
-              kycStatus: users.kycStatus,
-              nin: users.nin,
-              dob: users.dob,
-              ninData: users.ninData,
-              avatarUrl: users.avatarUrl,
-              createdAt: users.createdAt,
-            })
-            .from(users)
-            .where(eq(users.id, b.ownerId))
-            .limit(1);
+        let totalMainKobo = 0n;
+        let totalCommissionKobo = 0n;
 
-          ownerUser = owner;
+        const ownerBusinesses = await Promise.all(
+          allUserBiz.map(async (ub) => {
+            const ubWallets = await db
+              .select({
+                id: wallets.id,
+                type: wallets.type,
+                balance: wallets.balance,
+              })
+              .from(wallets)
+              .where(eq(wallets.businessId, ub.id));
 
-          // Fetch all businesses owned by this merchant user
-          const allUserBiz = await db
-            .select()
-            .from(businesses)
-            .where(eq(businesses.ownerId, b.ownerId));
+            const ubMain = ubWallets.find((w) => w.type === 'MAIN');
+            const ubComm = ubWallets.find((w) => w.type === 'COMMISSION');
 
-          ownerBusinesses = await Promise.all(
-            allUserBiz.map(async (ub) => {
-              const ubWallets = await db
-                .select({
-                  id: wallets.id,
-                  type: wallets.type,
-                  balance: wallets.balance,
-                })
-                .from(wallets)
-                .where(eq(wallets.businessId, ub.id));
+            const mainKobo = ubMain ? BigInt(ubMain.balance.toString()) : 0n;
+            const commKobo = ubComm ? BigInt(ubComm.balance.toString()) : 0n;
 
-              const ubMain = ubWallets.find((w) => w.type === 'MAIN');
-              const ubComm = ubWallets.find((w) => w.type === 'COMMISSION');
+            totalMainKobo += mainKobo;
+            totalCommissionKobo += commKobo;
 
-              return {
-                id: ub.id,
-                name: ub.name,
-                slug: ub.slug,
-                status: ub.status,
-                country: ub.country,
-                state: ub.state,
-                lga: ub.lga,
-                createdAt: ub.createdAt,
-                wallets: {
-                  mainBalanceKobo: ubMain ? ubMain.balance.toString() : '0',
-                  mainBalanceNaira: ubMain ? koboToNaira(ubMain.balance) : 0,
-                  formattedMain: ubMain ? formatNairaFromKobo(ubMain.balance) : '₦0.00',
-                  commissionBalanceKobo: ubComm ? ubComm.balance.toString() : '0',
-                  commissionBalanceNaira: ubComm ? koboToNaira(ubComm.balance) : 0,
-                  formattedCommission: ubComm ? formatNairaFromKobo(ubComm.balance) : '₦0.00',
-                },
-              };
-            }),
-          );
+            return {
+              id: ub.id,
+              name: ub.name,
+              slug: ub.slug,
+              status: ub.status,
+              country: ub.country,
+              state: ub.state,
+              lga: ub.lga,
+              createdAt: ub.createdAt,
+              wallets: {
+                mainBalanceKobo: mainKobo.toString(),
+                mainBalanceNaira: koboToNaira(Number(mainKobo)),
+                formattedMain: formatNairaFromKobo(Number(mainKobo)),
+                commissionBalanceKobo: commKobo.toString(),
+                commissionBalanceNaira: koboToNaira(Number(commKobo)),
+                formattedCommission: formatNairaFromKobo(Number(commKobo)),
+              },
+            };
+          }),
+        );
 
-          // Fetch latest KYC verification record
-          const [kRecord] = await db
-            .select()
-            .from(kycVerifications)
-            .where(eq(kycVerifications.userId, b.ownerId))
-            .orderBy(desc(kycVerifications.createdAt))
-            .limit(1);
+        // Fetch latest KYC verification record
+        const [kycRecord] = await db
+          .select()
+          .from(kycVerifications)
+          .where(eq(kycVerifications.userId, u.id))
+          .orderBy(desc(kycVerifications.createdAt))
+          .limit(1);
 
-          kycRecord = kRecord || null;
-        }
-
-        const bizWallets = await db
-          .select({
-            id: wallets.id,
-            type: wallets.type,
-            balance: wallets.balance,
-          })
-          .from(wallets)
-          .where(eq(wallets.businessId, b.id));
-
-        const main = bizWallets.find((w) => w.type === 'MAIN');
-        const comm = bizWallets.find((w) => w.type === 'COMMISSION');
+        const primaryBiz = ownerBusinesses[0] || null;
 
         return {
-          id: b.id,
-          name: b.name,
-          slug: b.slug,
-          status: b.status,
-          country: b.country,
-          state: b.state,
-          lga: b.lga,
-          createdAt: b.createdAt,
-          ownerId: b.ownerId,
-          ownerEmail: ownerUser?.email || '',
-          ownerFirstName: ownerUser?.firstName || '',
-          ownerLastName: ownerUser?.lastName || '',
-          ownerMiddleName: ownerUser?.middleName || '',
-          ownerPhone: ownerUser?.phoneNumber || '',
-          ownerStatus: ownerUser?.status || 'ACTIVE',
-          ownerCreatedAt: ownerUser?.createdAt || b.createdAt,
-          isEmailVerified: ownerUser?.isEmailVerified || false,
-          isPhoneVerified: ownerUser?.isPhoneVerified || false,
-          kycStatus: ownerUser?.kycStatus || 'UNVERIFIED',
-          nin: kycRecord?.nin || ownerUser?.nin || '',
-          dob: kycRecord?.dob || ownerUser?.dob || '',
-          ninData: ownerUser?.ninData || {},
-          avatarUrl: ownerUser?.avatarUrl || null,
+          id: u.id,
+          businessId: primaryBiz?.id || null,
+          name: primaryBiz?.name || `${u.firstName} ${u.lastName}`.trim(),
+          slug: primaryBiz?.slug || '',
+          status: primaryBiz?.status || u.status || 'ACTIVE',
+          country: primaryBiz?.country || 'NG',
+          state: primaryBiz?.state || 'Lagos',
+          lga: primaryBiz?.lga || '',
+          createdAt: u.createdAt,
+          ownerId: u.id,
+          ownerEmail: u.email,
+          ownerFirstName: u.firstName,
+          ownerLastName: u.lastName,
+          ownerMiddleName: u.middleName || '',
+          ownerPhone: u.phoneNumber || '',
+          ownerStatus: u.status || 'ACTIVE',
+          ownerCreatedAt: u.createdAt,
+          isEmailVerified: u.isEmailVerified,
+          isPhoneVerified: u.isPhoneVerified,
+          kycStatus: u.kycStatus || 'UNVERIFIED',
+          nin: kycRecord?.nin || u.nin || '',
+          dob: kycRecord?.dob || u.dob || '',
+          ninData: u.ninData || {},
+          avatarUrl: u.avatarUrl || null,
           kycRecord: kycRecord
             ? {
                 nin: kycRecord.nin,
@@ -644,14 +626,15 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
                 rawResponse: kycRecord.rawResponse,
               }
             : null,
+          primaryBusiness: primaryBiz,
           ownerBusinesses,
           wallets: {
-            mainBalanceKobo: main ? main.balance.toString() : '0',
-            mainBalanceNaira: main ? koboToNaira(main.balance) : 0,
-            formattedMain: main ? formatNairaFromKobo(main.balance) : '₦0.00',
-            commissionBalanceKobo: comm ? comm.balance.toString() : '0',
-            commissionBalanceNaira: comm ? koboToNaira(comm.balance) : 0,
-            formattedCommission: comm ? formatNairaFromKobo(comm.balance) : '₦0.00',
+            mainBalanceKobo: totalMainKobo.toString(),
+            mainBalanceNaira: koboToNaira(Number(totalMainKobo)),
+            formattedMain: formatNairaFromKobo(Number(totalMainKobo)),
+            commissionBalanceKobo: totalCommissionKobo.toString(),
+            commissionBalanceNaira: koboToNaira(Number(totalCommissionKobo)),
+            formattedCommission: formatNairaFromKobo(Number(totalCommissionKobo)),
           },
         };
       }),
@@ -673,111 +656,180 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /admin/merchants/:id
-   * Single merchant detailed view.
+   * Single merchant detailed view (supports user ID or business ID).
    */
   fastify.get('/merchants/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const [biz] = await db
+    let merchantUser = await db
       .select()
-      .from(businesses)
-      .where(eq(businesses.id, id))
-      .limit(1);
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+      .then((r) => r[0]);
 
-    if (!biz) {
-      throw new NotFoundError(`Merchant '${id}'`);
-    }
+    let bizRows: any[] = [];
 
-    let ownerEmail = '';
-    let ownerFirstName = '';
-    let ownerLastName = '';
-    let ownerPhone = '';
-    let kycStatus = 'UNVERIFIED';
-    let nin = '';
-    let dob = '';
-    let avatarUrl: string | null = null;
-
-    if (biz.ownerId) {
-      const [owner] = await db
-        .select({
-          email: users.email,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          phoneNumber: users.phoneNumber,
-          kycStatus: users.kycStatus,
-          nin: users.nin,
-          dob: users.dob,
-          avatarUrl: users.avatarUrl,
-        })
-        .from(users)
-        .where(eq(users.id, biz.ownerId))
+    if (merchantUser) {
+      bizRows = await db
+        .select()
+        .from(businesses)
+        .where(eq(businesses.ownerId, merchantUser.id))
+        .orderBy(desc(businesses.createdAt));
+    } else {
+      const [singleBiz] = await db
+        .select()
+        .from(businesses)
+        .where(eq(businesses.id, id))
         .limit(1);
 
-      if (owner) {
-        ownerEmail = owner.email;
-        ownerFirstName = owner.firstName;
-        ownerLastName = owner.lastName;
-        ownerPhone = owner.phoneNumber || '';
-        kycStatus = owner.kycStatus;
-        nin = owner.nin || '';
-        dob = owner.dob || '';
-        avatarUrl = owner.avatarUrl;
+      if (!singleBiz) {
+        throw new NotFoundError(`Merchant '${id}'`);
+      }
+
+      if (singleBiz.ownerId) {
+        merchantUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, singleBiz.ownerId))
+          .limit(1)
+          .then((r) => r[0]);
+
+        bizRows = await db
+          .select()
+          .from(businesses)
+          .where(eq(businesses.ownerId, singleBiz.ownerId))
+          .orderBy(desc(businesses.createdAt));
+      } else {
+        bizRows = [singleBiz];
       }
     }
 
-    const bizWallets = await db
-      .select()
-      .from(wallets)
-      .where(eq(wallets.businessId, id));
+    if (!merchantUser && bizRows.length === 0) {
+      throw new NotFoundError(`Merchant '${id}'`);
+    }
 
-    const main = bizWallets.find((w) => w.type === 'MAIN');
-    const comm = bizWallets.find((w) => w.type === 'COMMISSION');
+    const primaryBiz = bizRows[0] || null;
 
-    // Recent 10 transactions
-    const recentTx = await db
-      .select({
-        id: serviceTransactions.id,
-        serviceType: serviceTransactions.serviceType,
-        amount: serviceTransactions.amount,
-        status: serviceTransactions.status,
-        recipient: serviceTransactions.recipient,
-        clientReference: serviceTransactions.clientReference,
-        createdAt: serviceTransactions.createdAt,
-      })
-      .from(serviceTransactions)
-      .where(eq(serviceTransactions.businessId, id))
-      .orderBy(desc(serviceTransactions.createdAt))
-      .limit(10);
+    let totalMainKobo = 0n;
+    let totalCommissionKobo = 0n;
+
+    const ownerBusinesses = await Promise.all(
+      bizRows.map(async (b) => {
+        const bWallets = await db
+          .select({
+            id: wallets.id,
+            type: wallets.type,
+            balance: wallets.balance,
+          })
+          .from(wallets)
+          .where(eq(wallets.businessId, b.id));
+
+        const main = bWallets.find((w) => w.type === 'MAIN');
+        const comm = bWallets.find((w) => w.type === 'COMMISSION');
+
+        const mainKobo = main ? BigInt(main.balance.toString()) : 0n;
+        const commKobo = comm ? BigInt(comm.balance.toString()) : 0n;
+
+        totalMainKobo += mainKobo;
+        totalCommissionKobo += commKobo;
+
+        return {
+          id: b.id,
+          name: b.name,
+          slug: b.slug,
+          status: b.status,
+          country: b.country,
+          state: b.state,
+          lga: b.lga,
+          createdAt: b.createdAt,
+          wallets: {
+            mainBalanceKobo: mainKobo.toString(),
+            mainBalanceNaira: koboToNaira(Number(mainKobo)),
+            formattedMain: formatNairaFromKobo(Number(mainKobo)),
+            commissionBalanceKobo: commKobo.toString(),
+            commissionBalanceNaira: koboToNaira(Number(commKobo)),
+            formattedCommission: formatNairaFromKobo(Number(commKobo)),
+          },
+        };
+      }),
+    );
+
+    const [kycRecord] = merchantUser
+      ? await db
+          .select()
+          .from(kycVerifications)
+          .where(eq(kycVerifications.userId, merchantUser.id))
+          .orderBy(desc(kycVerifications.createdAt))
+          .limit(1)
+      : [null];
+
+    // Fetch recent 10 transactions across primary business if available
+    let recentTx: any[] = [];
+    if (primaryBiz) {
+      recentTx = await db
+        .select({
+          id: serviceTransactions.id,
+          serviceType: serviceTransactions.serviceType,
+          amount: serviceTransactions.amount,
+          status: serviceTransactions.status,
+          recipient: serviceTransactions.recipient,
+          clientReference: serviceTransactions.clientReference,
+          createdAt: serviceTransactions.createdAt,
+        })
+        .from(serviceTransactions)
+        .where(eq(serviceTransactions.businessId, primaryBiz.id))
+        .orderBy(desc(serviceTransactions.createdAt))
+        .limit(10);
+    }
 
     return reply.status(200).send(
       createSuccessResponse(
         {
-          ...biz,
-          ownerEmail,
-          ownerFirstName,
-          ownerLastName,
-          ownerPhone,
-          kycStatus,
-          nin,
-          dob,
-          avatarUrl,
+          id: merchantUser?.id || primaryBiz?.id,
+          businessId: primaryBiz?.id || null,
+          name: primaryBiz?.name || `${merchantUser?.firstName} ${merchantUser?.lastName}`.trim(),
+          slug: primaryBiz?.slug || '',
+          status: primaryBiz?.status || merchantUser?.status || 'ACTIVE',
+          country: primaryBiz?.country || 'NG',
+          state: primaryBiz?.state || 'Lagos',
+          lga: primaryBiz?.lga || '',
+          createdAt: merchantUser?.createdAt || primaryBiz?.createdAt,
+          ownerId: merchantUser?.id || primaryBiz?.ownerId,
+          ownerEmail: merchantUser?.email || '',
+          ownerFirstName: merchantUser?.firstName || '',
+          ownerLastName: merchantUser?.lastName || '',
+          ownerMiddleName: merchantUser?.middleName || '',
+          ownerPhone: merchantUser?.phoneNumber || '',
+          ownerStatus: merchantUser?.status || 'ACTIVE',
+          ownerCreatedAt: merchantUser?.createdAt,
+          kycStatus: merchantUser?.kycStatus || 'UNVERIFIED',
+          nin: kycRecord?.nin || merchantUser?.nin || '',
+          dob: kycRecord?.dob || merchantUser?.dob || '',
+          ninData: merchantUser?.ninData || {},
+          avatarUrl: merchantUser?.avatarUrl || null,
+          kycRecord: kycRecord
+            ? {
+                nin: kycRecord.nin,
+                dob: kycRecord.dob,
+                providerName: kycRecord.providerName,
+                status: kycRecord.status,
+                matchScore: kycRecord.matchScore,
+                photoExtracted: kycRecord.photoExtracted,
+                verifiedAt: kycRecord.verifiedAt,
+                failureReason: kycRecord.failureReason,
+                rawResponse: kycRecord.rawResponse,
+              }
+            : null,
+          primaryBusiness: primaryBiz,
+          ownerBusinesses,
           wallets: {
-            main: main
-              ? {
-                  id: main.id,
-                  balanceKobo: main.balance.toString(),
-                  balanceNaira: koboToNaira(main.balance),
-                  formatted: formatNairaFromKobo(main.balance),
-                }
-              : null,
-            commission: comm
-              ? {
-                  id: comm.id,
-                  balanceKobo: comm.balance.toString(),
-                  balanceNaira: koboToNaira(comm.balance),
-                  formatted: formatNairaFromKobo(comm.balance),
-                }
-              : null,
+            mainBalanceKobo: totalMainKobo.toString(),
+            mainBalanceNaira: koboToNaira(Number(totalMainKobo)),
+            formattedMain: formatNairaFromKobo(Number(totalMainKobo)),
+            commissionBalanceKobo: totalCommissionKobo.toString(),
+            commissionBalanceNaira: koboToNaira(Number(totalCommissionKobo)),
+            formattedCommission: formatNairaFromKobo(Number(totalCommissionKobo)),
           },
           recentTransactions: recentTx.map((tx) => ({
             ...tx,

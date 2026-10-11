@@ -14,6 +14,7 @@ import {
   Tv,
   Printer,
 } from 'lucide-react';
+import { printCableReceipt } from '@/lib/receipt-printer';
 
 export interface CableReceiptData {
   transactionId: string;
@@ -73,7 +74,9 @@ export default function CableReceiptModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (receipt) {
+      printCableReceipt(receipt);
+    }
   };
 
   const handleShare = async () => {

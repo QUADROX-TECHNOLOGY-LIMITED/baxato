@@ -17,6 +17,7 @@ import {
   Receipt,
   ArrowRight,
 } from 'lucide-react';
+import { printTransactionReceipt } from '@/lib/receipt-printer';
 
 export interface TransactionReceiptData {
   transactionId: string;
@@ -173,9 +174,11 @@ export default function TransactionReceiptModal({
     ].join('\n');
   };
 
-  // One-click Download PDF / Print Receipt
+  // One-click Download PDF / Print Receipt (Isolated Iframe Printer, Zero Blank Pages)
   const handlePrintPdf = () => {
-    window.print();
+    if (currentReceipt) {
+      printTransactionReceipt(currentReceipt);
+    }
   };
 
   // Share receipt via native Web Share API or Clipboard Fallback
@@ -210,34 +213,6 @@ export default function TransactionReceiptModal({
 
   return (
     <>
-      {/* Dedicated Print Stylesheet: prints crisp isolated receipt without any modal UI */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #baxato-receipt-document,
-          #baxato-receipt-document * {
-            visibility: visible !important;
-          }
-          #baxato-receipt-document {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 480px !important;
-            margin: 0 auto !important;
-            box-shadow: none !important;
-            border: 1px solid #cbd5e1 !important;
-            background: #ffffff !important;
-            color: #0f172a !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
       {/* Modal Backdrop Overlay */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
         {/* Modal Container */}

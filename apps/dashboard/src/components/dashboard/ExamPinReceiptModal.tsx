@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   CheckCheck,
 } from 'lucide-react';
+import { printExamPinReceipt } from '@/lib/receipt-printer';
 
 export interface ExamPinItem {
   pin: string;
@@ -121,7 +122,9 @@ export default function ExamPinReceiptModal({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (receipt) {
+      printExamPinReceipt(receipt);
+    }
   };
 
   const handleShare = async () => {

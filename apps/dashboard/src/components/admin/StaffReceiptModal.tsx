@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
+import { printStaffReceipt } from '@/lib/receipt-printer';
 
 interface StaffReceiptModalProps {
   isOpen: boolean;
@@ -62,39 +63,14 @@ export default function StaffReceiptModal({
   });
 
   const handlePrint = () => {
-    window.print();
+    if (tx) {
+      printStaffReceipt(tx);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:static">
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #staff-printable-receipt, #staff-printable-receipt * {
-            visibility: visible !important;
-          }
-          #staff-printable-receipt {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 400px !important;
-            margin: 0 auto !important;
-            padding: 16px !important;
-            background: white !important;
-            color: black !important;
-            box-shadow: none !important;
-            border: 1px dashed #444 !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
-      <div className="relative w-full max-w-md my-auto bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden print:shadow-none print:border-none print:max-w-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-md my-auto bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header Bar (Hidden on print) */}
         <div className="no-print flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080E1A]">
           <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
