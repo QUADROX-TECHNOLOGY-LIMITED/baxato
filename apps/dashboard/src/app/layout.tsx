@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 };
 
 import ThemeSynchronizer from '@/components/ThemeSynchronizer';
+import GlobalNotificationToast from '@/components/GlobalNotificationToast';
 
 export default function RootLayout({
   children,
@@ -64,6 +65,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 antialiased selection:bg-blue-100 selection:text-[#126BEB]">
         <ThemeSynchronizer />
+        <GlobalNotificationToast />
         {isClerkConfigured ? (
           children
         ) : (

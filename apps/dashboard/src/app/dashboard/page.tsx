@@ -333,8 +333,8 @@ export default function DashboardOverviewPage() {
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                 {getGreeting()}, {merchantName}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {businessName} • Digital Vending Workspace
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                {businessName ? `${businessName} Workspace` : 'Workspace'}
               </p>
             </div>
           </div>

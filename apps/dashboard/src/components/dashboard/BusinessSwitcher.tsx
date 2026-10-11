@@ -16,6 +16,7 @@ import {
   setActiveBusiness,
   type StoredBusiness,
 } from '@/lib/auth-session';
+import { setPendingToast } from '@/lib/toast';
 import CreateBusinessModal from './CreateBusinessModal';
 
 interface BusinessItem {
@@ -160,6 +161,12 @@ export default function BusinessSwitcher({
 
         setActiveBiz(updatedBiz);
         setActiveBusiness(updatedBiz, newToken);
+
+        setPendingToast({
+          type: 'success',
+          title: 'Workspace Switched',
+          message: `Switched to "${updatedBiz.name}" workspace.`,
+        });
 
         if (onBusinessChanged) {
           onBusinessChanged(updatedBiz);
