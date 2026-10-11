@@ -107,7 +107,7 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: cleanEmail,
-          password,
+          password: password.trim(),
         }),
       });
 
@@ -288,8 +288,14 @@ export default function LoginPage() {
       console.warn('Clerk session sync skipped (backend authenticated):', clerkErr);
     }
 
-    // Standard merchant login routes strictly to merchant dashboard
-    const targetUrl = '/dashboard';
+    // Route based on role or server-provided redirectUrl
+    const targetUrl =
+      loginData?.redirectUrl ||
+      (loginData?.user?.role === 'SUPER_ADMIN'
+        ? '/admin/overview'
+        : loginData?.user?.role === 'STAFF'
+        ? '/staff/overview'
+        : '/dashboard');
 
     // Hard navigation to ensure fresh session state across entire app and prevent lingering on login
     if (typeof window !== 'undefined') {

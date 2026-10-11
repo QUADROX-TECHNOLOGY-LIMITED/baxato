@@ -56,7 +56,7 @@ export default function SuperAdminLoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: cleanEmail,
-          password,
+          password: password.trim(),
         }),
       });
 

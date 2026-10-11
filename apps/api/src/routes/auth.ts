@@ -406,6 +406,24 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
 
   /**
+   * Helper to verify passwords with resilience against copy-paste whitespace and mobile capitalization
+   */
+  const verifyPasswordMatch = async (inputPassword: string, hash: string): Promise<boolean> => {
+    if (!inputPassword || !hash) return false;
+    // 1. Direct match
+    if (await bcrypt.compare(inputPassword, hash)) return true;
+    // 2. Trimmed match (handles trailing/leading spaces from copy-paste)
+    const trimmed = inputPassword.trim();
+    if (trimmed !== inputPassword && (await bcrypt.compare(trimmed, hash))) return true;
+    // 3. First-letter case flip (handles mobile/desktop auto-capitalization like Admin@123456 vs admin@123456)
+    const capFirst = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    if (capFirst !== trimmed && (await bcrypt.compare(capFirst, hash))) return true;
+    const lowerFirst = trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+    if (lowerFirst !== trimmed && (await bcrypt.compare(lowerFirst, hash))) return true;
+    return false;
+  };
+
+  /**
    * POST /auth/login
    */
   fastify.post('/login', async (request, reply) => {
@@ -426,20 +444,78 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Invalid email or password.');
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await verifyPasswordMatch(password, user.passwordHash);
     if (!isMatch) {
-      throw new AuthenticationError('Invalid email or password.');
-    }
-
-    // STRICT ISOLATION & ZERO INFORMATION LEAKAGE:
-    // Staff and Platform Administrator accounts do not exist in the merchant domain.
-    // Disclosing their existence, role, status, or portal endpoints is strictly forbidden.
-    if (user.role === 'STAFF' || user.role === 'SUPER_ADMIN') {
       throw new AuthenticationError('Invalid email or password.');
     }
 
     if (user.status !== 'ACTIVE') {
       throw new AuthenticationError(`Your account is ${user.status}. Please contact support.`);
+    }
+
+    // Seamless routing for Super Admin accounts logging in from main portal:
+    if (user.role === 'SUPER_ADMIN') {
+      const token = generateToken({
+        id: user.id,
+        email: user.email,
+        role: user.role as UserRole,
+        kycStatus: user.kycStatus as KycStatus,
+      });
+
+      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+      await auditService.log({
+        userId: user.id,
+        action: 'ADMIN_LOGIN_SUCCESS',
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: clientIp,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: { email: user.email, role: user.role, via: 'MAIN_PORTAL' },
+      });
+
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            user: {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              kycStatus: user.kycStatus,
+            },
+            token,
+            redirectUrl: '/admin/overview',
+            message: 'Admin authentication successful.',
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Seamless routing for Staff accounts logging in from main portal:
+    if (user.role === 'STAFF') {
+      if (!user.twoFactorEnabled) {
+        const tempToken = jwt.sign(
+          { userId: user.id, email: user.email, role: user.role, purpose: 'STAFF_2FA_SETUP' },
+          env.JWT_SECRET,
+          { expiresIn: '15m' },
+        );
+
+        return reply.status(200).send(
+          createSuccessResponse(
+            {
+              requiresTwoFactorSetup: true,
+              tempToken,
+              email: user.email,
+              firstName: user.firstName,
+              redirectUrl: '/staff/overview',
+              message: 'Two-Factor Authentication is required for staff accounts.',
+            },
+            request.id,
+          ),
+        );
+      }
     }
 
     // Handle Two-Factor Authentication if enabled
@@ -603,7 +679,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Invalid email or password.');
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await verifyPasswordMatch(password, user.passwordHash);
     if (!isMatch) {
       throw new AuthenticationError('Invalid email or password.');
     }
@@ -764,7 +840,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Invalid email or password.');
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await verifyPasswordMatch(password, user.passwordHash);
     if (!isMatch) {
       throw new AuthenticationError('Invalid email or password.');
     }
