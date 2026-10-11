@@ -84,8 +84,20 @@ export default function AirtimeVendingPage() {
   const router = useRouter();
 
   // User & Business State
-  const [merchantName, setMerchantName] = useState('Merchant');
-  const [businessName, setBusinessName] = useState('My Business');
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const b = getStoredBusiness();
+      if (b?.name) return b.name;
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -358,6 +370,7 @@ export default function AirtimeVendingPage() {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}

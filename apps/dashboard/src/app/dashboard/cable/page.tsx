@@ -259,8 +259,20 @@ const DEFAULT_BOUQUETS: CableBouquetOption[] = [
 
 export default function CableVendingPage() {
   // Session & User State
-  const [merchantName, setMerchantName] = useState('Merchant');
-  const [businessName, setBusinessName] = useState('My Business');
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const b = getStoredBusiness();
+      if (b?.name) return b.name;
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
@@ -634,6 +646,7 @@ export default function CableVendingPage() {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           isRefreshing={isRefreshing}
           onRefresh={() => {

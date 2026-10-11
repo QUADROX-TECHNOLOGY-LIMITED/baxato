@@ -36,10 +36,34 @@ import {
 
 export default function DashboardOverviewPage() {
   const router = useRouter();
-  const [merchantName, setMerchantName] = useState('Merchant');
-  const [userFirstName, setUserFirstName] = useState('');
-  const [userLastName, setUserLastName] = useState('');
-  const [businessName, setBusinessName] = useState('My Business');
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [userFirstName, setUserFirstName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [userLastName, setUserLastName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.lastName) return u.lastName;
+    }
+    return '';
+  });
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const b = getStoredBusiness();
+      if (b?.name) return b.name;
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -313,6 +337,7 @@ export default function DashboardOverviewPage() {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
           isRefreshing={isRefreshing}
@@ -331,7 +356,7 @@ export default function DashboardOverviewPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                {getGreeting()}, {merchantName}
+                {getGreeting()}{merchantName ? `, ${merchantName}` : ''}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
                 {businessName ? `${businessName} Workspace` : 'Workspace'}

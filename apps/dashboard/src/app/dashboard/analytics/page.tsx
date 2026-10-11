@@ -59,8 +59,20 @@ export default function AnalyticsPage() {
   const [chartMetric, setChartMetric] = useState<'volume' | 'count'>('volume');
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
-  const [businessName, setBusinessName] = useState('Business Workspace');
-  const [merchantName, setMerchantName] = useState('Merchant');
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const b = getStoredBusiness();
+      if (b?.name) return b.name;
+    }
+    return '';
+  });
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState('UNVERIFIED');
   const [userRole, setUserRole] = useState('BUSINESS_OWNER');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -466,6 +478,7 @@ export default function AnalyticsPage() {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
           isRefreshing={isRefreshing}

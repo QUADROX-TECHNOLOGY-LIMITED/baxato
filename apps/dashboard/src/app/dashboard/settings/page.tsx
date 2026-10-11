@@ -262,8 +262,20 @@ export default function SettingsPage() {
   const clerk = useClerk();
 
   // Workspace & Auth State
-  const [merchantName, setMerchantName] = useState('Merchant');
-  const [businessName, setBusinessName] = useState('My Business');
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const u = getStoredUser();
+      if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const b = getStoredBusiness();
+      if (b?.name) return b.name;
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
@@ -841,6 +853,7 @@ export default function SettingsPage() {
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
           isRefreshing={isRefreshing}

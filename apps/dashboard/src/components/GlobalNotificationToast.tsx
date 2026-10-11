@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { CheckCircle2, AlertCircle, Info, X, Building } from 'lucide-react';
 import { consumePendingToast, type ToastData } from '@/lib/toast';
 
 export default function GlobalNotificationToast() {
@@ -16,29 +15,17 @@ export default function GlobalNotificationToast() {
     setToast(data);
     setIsVisible(true);
 
-    const duration = data.durationMs || 4500;
+    const duration = data.durationMs || 2500;
     timerRef.current = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(() => setToast(null), 300);
+      setTimeout(() => setToast(null), 250);
     }, duration);
   };
 
-  const handleDismiss = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-    setIsVisible(false);
-    setTimeout(() => setToast(null), 300);
-  };
-
   useEffect(() => {
-    // Check for any flash toast waiting from a reload / switch action
     const pending = consumePendingToast();
     if (pending) {
-      // Small tick delay to allow initial DOM paint for smooth slide-in
-      const t = setTimeout(() => {
-        displayToast(pending);
-      }, 150);
+      const t = setTimeout(() => displayToast(pending), 100);
       return () => clearTimeout(t);
     }
   }, []);
@@ -57,75 +44,21 @@ export default function GlobalNotificationToast() {
 
   if (!toast) return null;
 
-  const isSuccess = !toast.type || toast.type === 'success';
-  const isError = toast.type === 'error';
-  const isWarning = toast.type === 'warning';
-
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed top-4 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-96 z-50 transition-all duration-300 ease-out transform pointer-events-auto ${
+      className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-200 ease-out transform ${
         isVisible
-          ? 'translate-y-0 opacity-100'
-          : '-translate-y-4 opacity-0 pointer-events-none'
+          ? 'translate-y-0 opacity-100 scale-100'
+          : '-translate-y-3 opacity-0 scale-95'
       }`}
     >
-      <div
-        className={`rounded-2xl p-4 shadow-2xl backdrop-blur-md border transition-all ${
-          isSuccess
-            ? 'bg-white/95 dark:bg-[#0D1726]/95 border-emerald-500/30 dark:border-emerald-500/40 shadow-emerald-500/10'
-            : isError
-            ? 'bg-white/95 dark:bg-[#0D1726]/95 border-red-500/30 dark:border-red-500/40 shadow-red-500/10'
-            : isWarning
-            ? 'bg-white/95 dark:bg-[#0D1726]/95 border-amber-500/30 dark:border-amber-500/40 shadow-amber-500/10'
-            : 'bg-white/95 dark:bg-[#0D1726]/95 border-blue-500/30 dark:border-blue-500/40 shadow-blue-500/10'
-        }`}
-      >
-        <div className="flex items-start gap-3.5">
-          {/* Icon Badge */}
-          <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-              isSuccess
-                ? 'bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                : isError
-                ? 'bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/20'
-                : isWarning
-                ? 'bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                : 'bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/20'
-            }`}
-          >
-            {isSuccess ? (
-              <CheckCircle2 className="w-5 h-5" />
-            ) : isError ? (
-              <AlertCircle className="w-5 h-5" />
-            ) : isWarning ? (
-              <AlertCircle className="w-5 h-5" />
-            ) : (
-              <Building className="w-5 h-5" />
-            )}
-          </div>
-
-          {/* Text Content */}
-          <div className="flex-1 min-w-0 pt-0.5">
-            <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
-              {toast.title}
-            </h4>
-            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-              {toast.message}
-            </p>
-          </div>
-
-          {/* Dismiss Button */}
-          <button
-            type="button"
-            onClick={handleDismiss}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
-            aria-label="Dismiss notification"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+      <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/95 dark:bg-[#0D1726]/95 text-white border border-slate-700/60 shadow-xl backdrop-blur-md">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+        <span className="text-xs font-medium text-slate-100 tracking-tight whitespace-nowrap">
+          {toast.message || toast.title}
+        </span>
       </div>
     </div>
   );

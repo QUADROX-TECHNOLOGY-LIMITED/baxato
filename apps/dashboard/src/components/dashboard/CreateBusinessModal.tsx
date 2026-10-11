@@ -12,7 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { getStoredAuthToken, setActiveBusiness } from '@/lib/auth-session';
-import { setPendingToast } from '@/lib/toast';
+import { showToast } from '@/lib/toast';
 
 interface CreateBusinessModalProps {
   isOpen: boolean;
@@ -100,10 +100,9 @@ export default function CreateBusinessModal({
           newToken,
         );
 
-        setPendingToast({
+        showToast({
           type: 'success',
-          title: 'Workspace Created',
-          message: `"${createdBiz.name}" workspace created and activated.`,
+          message: `Workspace "${createdBiz.name}" created`,
         });
 
         onSuccess(createdBiz);

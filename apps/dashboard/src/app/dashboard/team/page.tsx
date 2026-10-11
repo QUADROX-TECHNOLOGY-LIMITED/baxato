@@ -262,8 +262,8 @@ export default function TeamManagementPage() {
   const user = typeof window !== 'undefined' ? getStoredUser() : null;
   const business = typeof window !== 'undefined' ? getStoredBusiness() : null;
 
-  const businessName = business?.name || 'Workspace';
-  const merchantName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Merchant';
+  const businessName = business?.name || '';
+  const merchantName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.firstName || '';
   const kycStatus = user?.kycStatus || 'UNVERIFIED';
   const userRole = user?.role || 'BUSINESS_OWNER';
   const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
@@ -534,6 +534,7 @@ export default function TeamManagementPage() {
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
           merchantName={merchantName}
+          businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
           isRefreshing={isLoading}

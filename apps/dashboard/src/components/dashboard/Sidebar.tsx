@@ -356,11 +356,11 @@ export default function Sidebar({
           <div className="flex items-center justify-between pt-0.5">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#126BEB] to-[#38BDF8] text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
-                {merchantName ? merchantName.charAt(0).toUpperCase() : 'M'}
+                {merchantName ? merchantName.charAt(0).toUpperCase() : '•'}
               </div>
               <div className="min-w-0">
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                  {merchantName || 'Merchant'}
+                  {merchantName || ''}
                 </span>
                 <span className="block text-[10px] font-medium text-slate-400 truncate">
                   {isOwnerOrAdmin

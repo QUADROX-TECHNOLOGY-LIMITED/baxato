@@ -17,6 +17,7 @@ interface HeaderProps {
   onOpenFundWallet?: () => void;
   onOpenKycModal: () => void;
   merchantName: string;
+  businessName?: string;
   kycStatus: string;
   userRole?: string;
   isRefreshing: boolean;
@@ -39,6 +40,7 @@ export default function Header({
   onToggleSidebar,
   onOpenKycModal,
   merchantName,
+  businessName,
   kycStatus,
   userRole,
   isRefreshing,
@@ -65,20 +67,22 @@ export default function Header({
   const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
 
   return (
-    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 transition-colors duration-150`}>
-      <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200 dark:border-slate-800/80 px-2.5 sm:px-6 lg:px-8 py-2 sm:py-3 transition-colors duration-150`}>
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left Side: Mobile Menu Button, Business Switcher & Search */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onToggleSidebar}
-            className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+            className="lg:hidden p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
             aria-label="Open menu"
           >
             <Menu className="w-5 h-5" />
           </button>
 
           {/* Business Workspace Switcher in Header (accessible directly on mobile & desktop) */}
-          <BusinessSwitcher currentBusinessName={merchantName} variant="header" />
+          <div className="min-w-0 max-w-[130px] xs:max-w-[160px] sm:max-w-[220px] md:max-w-[260px]">
+            <BusinessSwitcher currentBusinessName={businessName} variant="header" />
+          </div>
 
           {/* Quick Search */}
           <div className="relative w-full max-w-xs hidden md:block">
@@ -95,13 +99,13 @@ export default function Header({
         </div>
 
         {/* Right Side: Refresh, Theme, Bell & Profile */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Refresh Balances */}
           <button
             onClick={onRefresh}
             title="Refresh"
             aria-label="Refresh"
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
           >
             <RefreshCw
               className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`}
@@ -112,7 +116,7 @@ export default function Header({
           <button
             title="Notifications"
             aria-label="Notifications"
-            className="relative p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="relative p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
           >
             <Bell className="w-4 h-4" />
           </button>
@@ -121,7 +125,7 @@ export default function Header({
           <ThemeToggle />
 
           {/* User Profile & Status */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-1.5 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-slate-800 shrink-0">
             <button
               onClick={isOwnerOrAdmin && !isVerified ? onOpenKycModal : undefined}
               className={`flex items-center gap-2 p-1 rounded-xl transition-colors text-left ${
@@ -130,9 +134,9 @@ export default function Header({
                   : 'cursor-default'
               }`}
             >
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-[#126BEB] text-white font-bold text-xs flex items-center justify-center shadow-sm">
-                  {merchantName ? merchantName.charAt(0).toUpperCase() : 'M'}
+              <div className="relative shrink-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#126BEB] text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                  {merchantName ? merchantName.charAt(0).toUpperCase() : '•'}
                 </div>
                 {isOwnerOrAdmin ? (
                   isVerified ? (
@@ -148,7 +152,7 @@ export default function Header({
               </div>
               <div className="hidden lg:block text-left">
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                  {merchantName || 'Merchant'}
+                  {merchantName || ''}
                 </span>
                 <span
                   className={`block text-[10px] font-semibold ${
