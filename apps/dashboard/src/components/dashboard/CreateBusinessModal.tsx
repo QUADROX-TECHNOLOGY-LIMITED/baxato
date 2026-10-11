@@ -107,6 +107,12 @@ export default function CreateBusinessModal({
 
         onSuccess(createdBiz);
         onClose();
+
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+          }
+        }, 120);
       } else {
         const msg =
           data?.error?.message ||

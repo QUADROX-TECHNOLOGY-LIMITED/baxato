@@ -165,6 +165,18 @@ export default function DeveloperKeysPage() {
 
     loadKeys();
     loadWebhookConfig();
+
+    const handleBizSwitched = () => {
+      try {
+        const b = getStoredBusiness();
+        if (b?.name) setBusinessName(b.name);
+      } catch {}
+      loadKeys();
+      loadWebhookConfig();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
   }, []);
 
   const getAuthHeaders = (): Record<string, string> => {
@@ -755,7 +767,18 @@ export default function DeveloperKeysPage() {
                 Sandbox API Key
               </label>
 
-              {activeTestKey ? (
+              {isLoadingKeys ? (
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 animate-pulse flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-2 flex-1">
+                    <div className="h-3 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                    <div className="h-4 w-64 bg-slate-200 dark:bg-slate-700 rounded font-mono" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                    <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                  </div>
+                </div>
+              ) : activeTestKey ? (
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1.5 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -1109,7 +1132,18 @@ export default function DeveloperKeysPage() {
                     Production API Key
                   </label>
 
-                  {activeLiveKey ? (
+                  {isLoadingKeys ? (
+                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 animate-pulse flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="space-y-2 flex-1">
+                        <div className="h-3 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-4 w-64 bg-slate-200 dark:bg-slate-700 rounded font-mono" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                      </div>
+                    </div>
+                  ) : activeLiveKey ? (
                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#071120] border border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex items-center gap-2">

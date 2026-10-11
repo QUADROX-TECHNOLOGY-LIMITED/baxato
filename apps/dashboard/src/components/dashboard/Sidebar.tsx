@@ -133,7 +133,7 @@ export default function Sidebar({
         items: [
           { label: 'Airtime Top-up', href: '/dashboard/airtime', icon: Smartphone },
           { label: 'Data Bundles', href: '/dashboard/data', icon: Wifi },
-          { label: 'Electricity Tokens', href: '/dashboard/electricity', icon: Zap },
+          { label: 'Electricity', href: '/dashboard/electricity', icon: Zap },
           { label: 'Cable TV', href: '/dashboard/cable', icon: Tv },
           { label: 'Exam PINs', href: '/dashboard/education', icon: GraduationCap },
         ],

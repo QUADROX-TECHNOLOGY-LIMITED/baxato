@@ -283,7 +283,7 @@ export default function AnalyticsPage() {
       },
       {
         id: 'ELECTRICITY',
-        name: 'Electricity Tokens',
+        name: 'Electricity',
         share: 17.1,
         volume: total * 0.171,
         txnCount: Math.round(analyticsProfile.totalCount * 0.14),

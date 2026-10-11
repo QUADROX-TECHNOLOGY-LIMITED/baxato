@@ -177,6 +177,14 @@ export default function BusinessSwitcher({
         }
 
         setIsOpen(false);
+
+        // Auto-refresh the page so all credentials, balances, keys, webhooks, and transactions
+        // automatically reload for the newly selected workspace without manual browser refresh
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+          }
+        }, 120);
       }
     } catch (err) {
       console.error('Failed to switch business:', err);

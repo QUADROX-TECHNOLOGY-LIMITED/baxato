@@ -697,6 +697,25 @@ export default function EducationPage() {
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 
+          {/* Navigation Action: Back to Dashboard & Exam PIN History */}
+          <div className="flex items-center justify-between">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
+              <span>Back to Dashboard</span>
+            </Link>
+
+            <Link
+              href="/dashboard/ledger?service=EXAM_PIN"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-500" />
+              <span>Exam PIN History</span>
+            </Link>
+          </div>
+
           {/* Page Top Header with Balance & Stats */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <div className="space-y-1">

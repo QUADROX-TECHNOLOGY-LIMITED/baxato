@@ -276,7 +276,7 @@ export default function DashboardOverviewPage() {
     },
     {
       id: 'electricity',
-      name: 'Electricity Tokens',
+      name: 'Electricity',
       desc: 'Prepaid tokens & postpaid bills',
       route: '/dashboard/electricity',
       icon: Zap,
