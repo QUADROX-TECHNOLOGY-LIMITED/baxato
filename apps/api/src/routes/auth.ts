@@ -778,81 +778,61 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Access denied: Platform Super Admin accounts only.');
     }
 
-    // MANDATORY 2FA ENFORCEMENT FOR SUPER ADMIN
-    if (!user.twoFactorEnabled) {
-      const tempToken = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role, purpose: 'ADMIN_2FA_SETUP' },
-        env.JWT_SECRET,
-        { expiresIn: '15m' },
-      );
-
-      return reply.status(200).send(
-        createSuccessResponse(
-          {
-            requiresTwoFactorSetup: true,
-            tempToken,
-            email: user.email,
-            firstName: user.firstName,
-            message: 'Two-Factor Authentication is mandatory for Super Admin accounts.',
-          },
-          request.id,
-        ),
-      );
-    }
-
-    // Case 2: 2FA is already enabled - require verification code
-    const code = twoFactorCode?.trim();
-    if (!code) {
-      if (user.twoFactorMethod === 'EMAIL') {
-        await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
-        const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
-        if (env.NODE_ENV !== 'production') {
-          request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Admin Login 2FA Email OTP dispatched');
+    // Handle Two-Factor Authentication if enabled
+    if (user.twoFactorEnabled) {
+      const code = twoFactorCode?.trim();
+      if (!code) {
+        if (user.twoFactorMethod === 'EMAIL') {
+          await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+          const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+          if (env.NODE_ENV !== 'production') {
+            request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Admin Login 2FA Email OTP dispatched');
+          }
         }
+
+        return reply.status(200).send(
+          createSuccessResponse(
+            {
+              requiresTwoFactor: true,
+              twoFactorMethod: user.twoFactorMethod || 'EMAIL',
+              email: user.email,
+              message:
+                user.twoFactorMethod === 'TOTP'
+                  ? 'Enter the 6-digit code from your authenticator app.'
+                  : `Enter the 6-digit verification code sent to ${user.email}.`,
+            },
+            request.id,
+          ),
+        );
       }
 
-      return reply.status(200).send(
-        createSuccessResponse(
-          {
-            requiresTwoFactor: true,
-            twoFactorMethod: user.twoFactorMethod || 'EMAIL',
-            email: user.email,
-            message:
-              user.twoFactorMethod === 'TOTP'
-                ? 'Enter the 6-digit code from your authenticator app.'
-                : `Enter the 6-digit verification code sent to ${user.email}.`,
-          },
-          request.id,
-        ),
-      );
-    }
-
-    // Verify 2FA code
-    let is2FaValid = false;
-    if (user.twoFactorMethod === 'TOTP') {
-      if (user.twoFactorSecret) {
-        is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
-      }
-      if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
-        const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-        const backupList = user.twoFactorBackupCodes as string[];
-        const matchIdx = backupList.indexOf(codeHash);
-        if (matchIdx !== -1) {
-          is2FaValid = true;
-          const remaining = backupList.filter((_, idx) => idx !== matchIdx);
-          await db
-            .update(users)
-            .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
+      // Verify 2FA code
+      let is2FaValid = false;
+      if (user.twoFactorMethod === 'TOTP') {
+        if (user.twoFactorSecret) {
+          is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
         }
+        if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
+          const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+          const backupList = user.twoFactorBackupCodes as string[];
+          const matchIdx = backupList.indexOf(codeHash);
+          if (matchIdx !== -1) {
+            is2FaValid = true;
+            const remaining = backupList.filter((_, idx) => idx !== matchIdx);
+            await db
+              .update(users)
+              .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
+              .where(eq(users.id, user.id));
+          }
+        }
+      } else {
+        const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+        is2FaValid = emailVerify.valid;
       }
-    } else {
-      const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
-      is2FaValid = emailVerify.valid;
-    }
 
-    if (!is2FaValid) {
-      throw new ValidationError('Invalid or expired two-factor authentication code.');
+      if (!is2FaValid) {
+        throw new ValidationError('Invalid or expired two-factor authentication code.');
+      }
     }
 
     // Issue super admin session token
@@ -886,7 +866,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             kycStatus: user.kycStatus,
           },
           token,
-          message: 'Super Admin authentication successful. Welcome to Baxato Master Command Console.',
+          message: 'Admin authentication successful.',
         },
         request.id,
       ),
@@ -907,7 +887,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     let decoded: any;
     try {
       decoded = jwt.verify(tempToken, env.JWT_SECRET);
-      if (decoded.purpose !== 'STAFF_2FA_SETUP') throw new Error();
+      if (decoded.purpose !== 'STAFF_2FA_SETUP' && decoded.purpose !== 'ADMIN_2FA_SETUP') throw new Error();
     } catch {
       throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
     }
@@ -976,7 +956,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     let decoded: any;
     try {
       decoded = jwt.verify(tempToken, env.JWT_SECRET);
-      if (decoded.purpose !== 'STAFF_2FA_SETUP') throw new Error();
+      if (decoded.purpose !== 'STAFF_2FA_SETUP' && decoded.purpose !== 'ADMIN_2FA_SETUP') throw new Error();
     } catch {
       throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
     }

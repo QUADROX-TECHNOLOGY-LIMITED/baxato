@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Menu, RefreshCw, ShieldCheck, Lock, Activity, Bell } from 'lucide-react';
+import { Menu, RefreshCw, LogOut } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import { clearSessionAndRedirect } from '@/lib/auth-session';
 
 interface AdminHeaderProps {
   onToggleSidebar: () => void;
@@ -17,71 +18,86 @@ export default function AdminHeader({
   adminName,
   isRefreshing,
   onRefresh,
-  title,
+  title = 'Overview',
 }: AdminHeaderProps) {
+  const handleLogout = () => {
+    clearSessionAndRedirect('logout');
+  };
+
   return (
-    <header className="sticky top-0 z-30 h-16 bg-[#060913]/85 backdrop-blur-md border-b border-purple-950/40 px-4 sm:px-6 flex items-center justify-between">
-      {/* Left: Mobile hamburger & breadcrumbs */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onToggleSidebar}
-          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 lg:hidden"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
+    <header className="sticky top-0 z-30 w-full bg-white/95 dark:bg-[#070D18]/95 backdrop-blur border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3 transition-colors duration-150">
+      <div className="flex items-center justify-between gap-4">
+        {/* Left Side: Mobile Menu Button & Breadcrumb */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onToggleSidebar}
+            className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            aria-label="Open admin navigation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
 
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-          <span className="text-xs font-mono uppercase tracking-wider text-purple-400 font-semibold">
-            Baxato Master Root
-          </span>
-          {title && (
-            <>
-              <span className="text-slate-600">/</span>
-              <span className="text-xs font-semibold text-white truncate">{title}</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Right Actions */}
-      <div className="flex items-center gap-2.5 sm:gap-3.5">
-        {/* Solvency Indicator */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/30 border border-purple-800/40 text-xs">
-          <Activity className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-slate-300">Solvency:</span>
-          <span className="font-semibold text-emerald-400 font-mono">100% Backed</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Admin
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">/</span>
+            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              {title}
+            </span>
+          </div>
         </div>
 
-        {/* Refresh Telemetry */}
-        <button
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          title="Refresh Platform Telemetry"
-          className="p-2 rounded-xl bg-[#090E1E] border border-slate-800 text-slate-300 hover:text-white hover:border-purple-600 transition disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`} />
-        </button>
+        {/* Right Side: Refresh, Theme Toggle & Profile */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Refresh button */}
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            title="Refresh Metrics"
+            aria-label="Refresh Metrics"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 transition disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`}
+            />
+            <span className="hidden md:inline">Sync Metrics</span>
+          </button>
 
-        <ThemeToggle />
+          {/* Theme Toggle */}
+          <ThemeToggle />
 
-        {/* Lock Console */}
-        <button
-          onClick={() => {
-            try {
-              localStorage.removeItem('bx_auth_token');
-              localStorage.removeItem('bx_user');
-              localStorage.removeItem('bx_business');
-              document.cookie = 'bx_auth_token=; path=/; max-age=0;';
-            } catch {}
-            window.location.assign('/admin/login');
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/40 border border-red-800/50 hover:bg-red-900/50 text-red-300 hover:text-red-200 text-xs font-semibold transition"
-          title="Emergency Lock Master Console"
-        >
-          <Lock className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Lock</span>
-        </button>
+          {/* Admin Profile Badge */}
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+            <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-white font-bold flex items-center justify-center text-xs shadow-sm">
+              {adminName
+                ? adminName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase()
+                : 'AD'}
+            </div>
+            <div className="hidden md:flex flex-col text-left">
+              <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
+                {adminName || 'Platform Admin'}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                Super Admin
+              </span>
+            </div>
+          </div>
+
+          {/* Sign Out */}
+          <button
+            onClick={handleLogout}
+            title="Sign Out"
+            className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </header>
   );

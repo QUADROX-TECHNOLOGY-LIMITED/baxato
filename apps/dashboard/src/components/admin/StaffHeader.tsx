@@ -1,11 +1,9 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import {
   Menu,
   RefreshCw,
-  ExternalLink,
   ShieldAlert,
   Activity,
   Layers,
@@ -72,15 +70,6 @@ export default function StaffHeader({
 
           {/* Theme Switcher */}
           <ThemeToggle />
-
-          {/* Switch to Merchant Mode */}
-          <Link
-            href="/dashboard"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Merchant Portal</span>
-          </Link>
 
           {/* Staff Profile Badge */}
           <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
