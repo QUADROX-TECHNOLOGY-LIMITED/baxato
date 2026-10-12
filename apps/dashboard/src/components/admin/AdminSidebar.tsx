@@ -10,6 +10,7 @@ import {
   Building2,
   Cpu,
   Sliders,
+  History,
   LogOut,
   X,
 } from 'lucide-react';
@@ -24,12 +25,12 @@ interface AdminSidebarProps {
 
 const NAV_ITEMS = [
   {
-    label: 'Overview & Treasury',
+    label: 'Overview',
     href: '/admin/overview',
     icon: Landmark,
   },
   {
-    label: 'Staff Management',
+    label: 'Staff Team',
     href: '/admin/staff',
     icon: Users,
   },
@@ -39,14 +40,19 @@ const NAV_ITEMS = [
     icon: Building2,
   },
   {
-    label: 'Providers & Routing',
+    label: 'Gateways & Routing',
     href: '/admin/providers',
     icon: Cpu,
   },
   {
-    label: 'System & Audit Logs',
+    label: 'System Settings',
     href: '/admin/settings',
     icon: Sliders,
+  },
+  {
+    label: 'Audit Trail',
+    href: '/admin/audit-logs',
+    icon: History,
   },
 ];
 

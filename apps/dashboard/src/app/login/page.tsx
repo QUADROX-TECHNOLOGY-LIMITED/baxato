@@ -288,14 +288,7 @@ export default function LoginPage() {
       console.warn('Clerk session sync skipped (backend authenticated):', clerkErr);
     }
 
-    // Route based on role or server-provided redirectUrl
-    const targetUrl =
-      loginData?.redirectUrl ||
-      (loginData?.user?.role === 'SUPER_ADMIN'
-        ? '/admin/overview'
-        : loginData?.user?.role === 'STAFF'
-        ? '/staff/overview'
-        : '/dashboard');
+    const targetUrl = '/dashboard';
 
     // Hard navigation to ensure fresh session state across entire app and prevent lingering on login
     if (typeof window !== 'undefined') {

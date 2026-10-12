@@ -453,69 +453,11 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError(`Your account is ${user.status}. Please contact support.`);
     }
 
-    // Seamless routing for Super Admin accounts logging in from main portal:
-    if (user.role === 'SUPER_ADMIN') {
-      const token = generateToken({
-        id: user.id,
-        email: user.email,
-        role: user.role as UserRole,
-        kycStatus: user.kycStatus as KycStatus,
-      });
-
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
-      await auditService.log({
-        userId: user.id,
-        action: 'ADMIN_LOGIN_SUCCESS',
-        resourceType: 'USER',
-        resourceId: user.id,
-        ipAddress: clientIp,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
-        changes: { email: user.email, role: user.role, via: 'MAIN_PORTAL' },
-      });
-
-      return reply.status(200).send(
-        createSuccessResponse(
-          {
-            user: {
-              id: user.id,
-              email: user.email,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              role: user.role,
-              kycStatus: user.kycStatus,
-            },
-            token,
-            redirectUrl: '/admin/overview',
-            message: 'Admin authentication successful.',
-          },
-          request.id,
-        ),
-      );
-    }
-
-    // Seamless routing for Staff accounts logging in from main portal:
-    if (user.role === 'STAFF') {
-      if (!user.twoFactorEnabled) {
-        const tempToken = jwt.sign(
-          { userId: user.id, email: user.email, role: user.role, purpose: 'STAFF_2FA_SETUP' },
-          env.JWT_SECRET,
-          { expiresIn: '15m' },
-        );
-
-        return reply.status(200).send(
-          createSuccessResponse(
-            {
-              requiresTwoFactorSetup: true,
-              tempToken,
-              email: user.email,
-              firstName: user.firstName,
-              redirectUrl: '/staff/overview',
-              message: 'Two-Factor Authentication is required for staff accounts.',
-            },
-            request.id,
-          ),
-        );
-      }
+    // STRICT DOMAIN ISOLATION & ZERO INFORMATION LEAKAGE:
+    // Administrative and staff accounts are strictly prohibited from logging in via the merchant portal.
+    // They must use their dedicated portals (/admin/login and /staff/login).
+    if (user.role === 'STAFF' || user.role === 'SUPER_ADMIN') {
+      throw new AuthenticationError('Invalid email or password.');
     }
 
     // Handle Two-Factor Authentication if enabled
@@ -854,61 +796,82 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AuthenticationError('Access denied: Platform Super Admin accounts only.');
     }
 
-    // Handle Two-Factor Authentication if enabled
-    if (user.twoFactorEnabled) {
-      const code = twoFactorCode?.trim();
-      if (!code) {
-        if (user.twoFactorMethod === 'EMAIL') {
-          await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
-          const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
-          if (env.NODE_ENV !== 'production') {
-            request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Admin Login 2FA Email OTP dispatched');
-          }
-        }
+    // MANDATORY 2FA ENFORCEMENT FOR SUPER ADMIN
+    // Case 1: First-time admin login or 2FA not yet enabled
+    if (!user.twoFactorEnabled) {
+      const tempToken = jwt.sign(
+        { userId: user.id, email: user.email, role: user.role, purpose: 'ADMIN_2FA_SETUP' },
+        env.JWT_SECRET,
+        { expiresIn: '15m' },
+      );
 
-        return reply.status(200).send(
-          createSuccessResponse(
-            {
-              requiresTwoFactor: true,
-              twoFactorMethod: user.twoFactorMethod || 'EMAIL',
-              email: user.email,
-              message:
-                user.twoFactorMethod === 'TOTP'
-                  ? 'Enter the 6-digit code from your authenticator app.'
-                  : `Enter the 6-digit verification code sent to ${user.email}.`,
-            },
-            request.id,
-          ),
-        );
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactorSetup: true,
+            tempToken,
+            email: user.email,
+            firstName: user.firstName,
+            message: 'Two-Factor Authentication is mandatory for administrative accounts. Please complete enrollment.',
+          },
+          request.id,
+        ),
+      );
+    }
+
+    // Case 2: 2FA is enabled - require verification code
+    const code = twoFactorCode?.trim();
+    if (!code) {
+      if (user.twoFactorMethod === 'EMAIL') {
+        await zeptoMailService.sendTwoFactorOtp(user.email, user.firstName);
+        const activeOtp = zeptoMailService.getActiveTwoFactorOtp(user.email);
+        if (env.NODE_ENV !== 'production') {
+          request.log.info({ email: user.email, otp: activeOtp }, '[DEV] Admin Login 2FA Email OTP dispatched');
+        }
       }
 
-      // Verify 2FA code
-      let is2FaValid = false;
-      if (user.twoFactorMethod === 'TOTP') {
-        if (user.twoFactorSecret) {
-          is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
-        }
-        if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
-          const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-          const backupList = user.twoFactorBackupCodes as string[];
-          const matchIdx = backupList.indexOf(codeHash);
-          if (matchIdx !== -1) {
-            is2FaValid = true;
-            const remaining = backupList.filter((_, idx) => idx !== matchIdx);
-            await db
-              .update(users)
-              .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
-              .where(eq(users.id, user.id));
-          }
-        }
-      } else {
-        const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
-        is2FaValid = emailVerify.valid;
-      }
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            requiresTwoFactor: true,
+            twoFactorMethod: user.twoFactorMethod || 'EMAIL',
+            email: user.email,
+            message:
+              user.twoFactorMethod === 'TOTP'
+                ? 'Enter the 6-digit code from your authenticator app.'
+                : `Enter the 6-digit verification code sent to ${user.email}.`,
+          },
+          request.id,
+        ),
+      );
+    }
 
-      if (!is2FaValid) {
-        throw new ValidationError('Invalid or expired two-factor authentication code.');
+    // Verify 2FA code
+    let is2FaValid = false;
+    if (user.twoFactorMethod === 'TOTP') {
+      if (user.twoFactorSecret) {
+        is2FaValid = twoFactorService.verifyTotp(user.twoFactorSecret, code);
       }
+      if (!is2FaValid && Array.isArray(user.twoFactorBackupCodes)) {
+        const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+        const backupList = user.twoFactorBackupCodes as string[];
+        const matchIdx = backupList.indexOf(codeHash);
+        if (matchIdx !== -1) {
+          is2FaValid = true;
+          const remaining = backupList.filter((_, idx) => idx !== matchIdx);
+          await db
+            .update(users)
+            .set({ twoFactorBackupCodes: remaining, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
+      }
+    } else {
+      const emailVerify = zeptoMailService.verifyTwoFactorOtp(user.email, code);
+      is2FaValid = emailVerify.valid;
+    }
+
+    if (!is2FaValid) {
+      throw new ValidationError('Invalid or expired two-factor authentication code.');
     }
 
     // Issue super admin session token
