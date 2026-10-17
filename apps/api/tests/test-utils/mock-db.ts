@@ -1155,6 +1155,7 @@ export function createMockDatabase() {
           const createQueryChain = (items: unknown[]) => {
             let current = [...items];
             const chain = {
+              groupBy: () => chain,
               orderBy: () => chain,
               limit: (num: number) => {
                 current = current.slice(0, num);
@@ -1174,27 +1175,33 @@ export function createMockDatabase() {
               const res = executeFilter(predicate);
               return createQueryChain(res);
             },
-            leftJoin: () => ({
-              where: (predicate: unknown) => {
-                const targetBizId = predicate && typeof predicate === 'object' && 'val' in predicate ? (predicate as Record<string, unknown>).val : null;
-                const members = inMemoryDb.businessMembers.filter((m) => !targetBizId || m.businessId === targetBizId);
+            leftJoin: () => {
+              const chain = {
+                where: (predicate: unknown) => {
+                  const targetBizId = predicate && typeof predicate === 'object' && 'val' in predicate ? (predicate as Record<string, unknown>).val : null;
+                  const members = inMemoryDb.businessMembers.filter((m) => !targetBizId || m.businessId === targetBizId);
 
-                const joined = members.map((m) => {
-                  const u = inMemoryDb.users.find((user) => user.id === m.userId);
-                  return {
-                    id: m.id,
-                    role: m.role,
-                    createdAt: m.createdAt,
-                    userId: u?.id,
-                    email: u?.email,
-                    firstName: u?.firstName,
-                    lastName: u?.lastName,
-                    avatarUrl: u?.avatarUrl,
-                  };
-                });
-                return Promise.resolve(joined);
-              },
-            }),
+                  const joined = members.map((m) => {
+                    const u = inMemoryDb.users.find((user) => user.id === m.userId);
+                    return {
+                      id: m.id,
+                      role: m.role,
+                      createdAt: m.createdAt,
+                      userId: u?.id,
+                      email: u?.email,
+                      firstName: u?.firstName,
+                      lastName: u?.lastName,
+                      avatarUrl: u?.avatarUrl,
+                    };
+                  });
+                  return createQueryChain(joined);
+                },
+                orderBy: () => chain,
+                limit: () => chain,
+                then: (resolve: (data: unknown) => void) => resolve([]),
+              };
+              return chain;
+            },
             then: (resolve: (data: unknown) => void) => resolve(executeFilter()),
           };
         },

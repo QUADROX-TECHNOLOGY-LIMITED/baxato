@@ -56,6 +56,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         totalVolume: sql<string>`coalesce(sum(${serviceTransactions.amount}), 0)`,
         successCount: sql<number>`count(*) filter (where ${serviceTransactions.status} = 'SUCCESSFUL')`,
         successVolume: sql<string>`coalesce(sum(${serviceTransactions.amount}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
+        successFees: sql<string>`coalesce(sum(${serviceTransactions.fee}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
         failedCount: sql<number>`count(*) filter (where ${serviceTransactions.status} = 'FAILED')`,
         pendingCount: sql<number>`count(*) filter (where ${serviceTransactions.status} in ('PENDING', 'PROCESSING'))`,
       })
@@ -79,6 +80,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const totalTx = Number(txStats?.totalCount || 0);
     const successTx = Number(txStats?.successCount || 0);
     const successRate = totalTx > 0 ? Number(((successTx / totalTx) * 100).toFixed(2)) : 0;
+    const todayRevenueNaira = koboToNaira(BigInt(txStats?.successFees || '0'));
 
     // 4. Platform Solvency & Treasury Balance Sheet
     const [walletLiabilities] = await db
@@ -96,6 +98,36 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         allTimeFeesKobo: sql<string>`coalesce(sum(${serviceTransactions.fee}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
       })
       .from(serviceTransactions);
+
+    // 5. Service Breakdown Today
+    const serviceBreakdown = await db
+      .select({
+        serviceType: serviceTransactions.serviceType,
+        count: sql<number>`count(*)`,
+        volumeKobo: sql<string>`coalesce(sum(${serviceTransactions.amount}), 0)`,
+        feesKobo: sql<string>`coalesce(sum(${serviceTransactions.fee}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
+      })
+      .from(serviceTransactions)
+      .where(gte(serviceTransactions.createdAt, todayStart))
+      .groupBy(serviceTransactions.serviceType);
+
+    // 6. Recent Platform Transactions
+    const recentTxns = await db
+      .select({
+        id: serviceTransactions.id,
+        reference: serviceTransactions.requestReference,
+        clientReference: serviceTransactions.clientReference,
+        serviceType: serviceTransactions.serviceType,
+        amountKobo: serviceTransactions.amount,
+        status: serviceTransactions.status,
+        recipient: serviceTransactions.recipient,
+        createdAt: serviceTransactions.createdAt,
+        businessName: businesses.name,
+      })
+      .from(serviceTransactions)
+      .leftJoin(businesses, eq(serviceTransactions.businessId, businesses.id))
+      .orderBy(desc(serviceTransactions.createdAt))
+      .limit(8);
 
     const liabilitiesKobo = BigInt(walletLiabilities?.totalLiabilitiesKobo || '0');
     const liabilitiesNaira = koboToNaira(liabilitiesKobo);
@@ -116,6 +148,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             successTransactions: successTx,
             successVolumeKobo: String(txStats?.successVolume || '0'),
             successVolumeNaira: koboToNaira(BigInt(txStats?.successVolume || 0)),
+            todayRevenueNaira,
             failedTransactions: Number(txStats?.failedCount || 0),
             pendingTransactions: Number(txStats?.pendingCount || 0),
             successRatePercent: successRate,
@@ -141,6 +174,22 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             health: providerHealth,
             routing: routingConfig,
           },
+          serviceBreakdown: serviceBreakdown.map((s) => ({
+            serviceType: s.serviceType,
+            count: Number(s.count || 0),
+            volumeNaira: koboToNaira(BigInt(s.volumeKobo || '0')),
+            feesNaira: koboToNaira(BigInt(s.feesKobo || '0')),
+          })),
+          recentTransactions: recentTxns.map((t) => ({
+            id: t.id,
+            reference: t.reference || t.clientReference || t.id,
+            serviceType: t.serviceType,
+            amountNaira: koboToNaira(BigInt(t.amountKobo || '0')),
+            status: t.status,
+            recipient: t.recipient,
+            createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt || new Date().toISOString()),
+            businessName: t.businessName || 'Direct Merchant',
+          })),
         },
         request.id,
       ),
