@@ -129,6 +129,34 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .orderBy(desc(serviceTransactions.createdAt))
       .limit(8);
 
+    // 7. Real Hourly Throughput for Today
+    const todayTransactionsForHourly = await db
+      .select({
+        createdAt: serviceTransactions.createdAt,
+        amount: serviceTransactions.amount,
+      })
+      .from(serviceTransactions)
+      .where(gte(serviceTransactions.createdAt, todayStart));
+
+    const hourlyWindows = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'];
+    const hourlyMap: Record<string, { hour: string; volumeNaira: number; count: number }> = {};
+    for (const hw of hourlyWindows) {
+      hourlyMap[hw] = { hour: hw, volumeNaira: 0, count: 0 };
+    }
+
+    for (const tx of todayTransactionsForHourly) {
+      const d = new Date(tx.createdAt);
+      const hour = d.getHours();
+      const bucket = Math.floor(hour / 4) * 4;
+      const key = `${String(bucket).padStart(2, '0')}:00`;
+      if (hourlyMap[key]) {
+        hourlyMap[key].volumeNaira += koboToNaira(BigInt(tx.amount || '0'));
+        hourlyMap[key].count += 1;
+      }
+    }
+
+    const hourlyThroughput = hourlyWindows.map((hw) => hourlyMap[hw]);
+
     const liabilitiesKobo = BigInt(walletLiabilities?.totalLiabilitiesKobo || '0');
     const liabilitiesNaira = koboToNaira(liabilitiesKobo);
     const monnifyFloatNaira = 2500000;
@@ -153,6 +181,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             pendingTransactions: Number(txStats?.pendingCount || 0),
             successRatePercent: successRate,
           },
+          hourlyThroughput,
           treasury: {
             merchantWalletLiabilitiesNaira: liabilitiesNaira,
             merchantWalletsCount: Number(walletLiabilities?.walletsCount || 0),
