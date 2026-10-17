@@ -223,24 +223,13 @@ export default function SuperAdminOverviewPage() {
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Platform Overview
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Real-time transaction activity, liquidity liability, and system health
-          </p>
-        </div>
-
-        <button
-          onClick={fetchOverview}
-          disabled={isLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition disabled:opacity-50 self-start sm:self-auto shadow-sm"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#126BEB]' : ''}`} />
-          <span>Sync Telemetry</span>
-        </button>
+      <div className="pb-1 border-b border-slate-100 dark:border-slate-800/60">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          Platform Overview
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          Real-time transaction activity, liquidity liability, and system health
+        </p>
       </div>
 
       {errorMessage && (
@@ -650,10 +639,10 @@ export default function SuperAdminOverviewPage() {
           </div>
 
           <Link
-            href="/admin/merchants"
+            href="/admin/transactions"
             className="text-xs text-[#126BEB] hover:underline inline-flex items-center gap-1 font-medium self-start sm:self-auto"
           >
-            <span>View Merchants</span>
+            <span>View All Transactions</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>

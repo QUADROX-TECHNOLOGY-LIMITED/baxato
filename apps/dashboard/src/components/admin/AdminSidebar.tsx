@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   Landmark,
+  Receipt,
   Users,
   Building2,
   Cpu,
@@ -28,6 +29,11 @@ const NAV_ITEMS = [
     label: 'Overview',
     href: '/admin/overview',
     icon: Landmark,
+  },
+  {
+    label: 'Transactions',
+    href: '/admin/transactions',
+    icon: Receipt,
   },
   {
     label: 'Staff Team',
