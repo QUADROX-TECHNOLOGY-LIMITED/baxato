@@ -28,6 +28,7 @@ import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import {
   getStoredAuthToken,
+  isTokenExpired,
   getStoredUser,
   getStoredBusiness,
   clearSessionAndRedirect,
@@ -79,7 +80,7 @@ export default function DashboardOverviewPage() {
     try {
       setIsLoadingBalance(true);
       const authToken = getStoredAuthToken();
-      if (!authToken) {
+      if (!authToken || isTokenExpired(authToken)) {
         clearSessionAndRedirect('expired');
         return;
       }
@@ -176,7 +177,10 @@ export default function DashboardOverviewPage() {
   const loadRecentTransactions = async () => {
     try {
       const authToken = getStoredAuthToken();
-      if (!authToken) return;
+      if (!authToken || isTokenExpired(authToken)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
       const storedBiz = getStoredBusiness();
       const res = await fetch('/api/transactions?limit=6', {
         headers: {
@@ -185,6 +189,7 @@ export default function DashboardOverviewPage() {
         },
       });
       const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) return;
       if (res.ok && data?.success && Array.isArray(data.data?.transactions)) {
         setTransactions(
           data.data.transactions.map((t: any) => ({

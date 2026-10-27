@@ -24,7 +24,12 @@ import {
   AlertTriangle,
   AlertCircle,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 interface ServiceBreakdownItem {
   serviceType: string;
@@ -97,6 +102,10 @@ export default function SuperAdminOverviewPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/overview', {
         headers: {
@@ -105,6 +114,10 @@ export default function SuperAdminOverviewPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) {
+        return;
+      }
+
       if (res.ok && json?.success) {
         setData(json.data);
       } else {

@@ -14,7 +14,12 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 interface AuditLogRecord {
   id: string;
@@ -42,6 +47,10 @@ export default function SuperAdminAuditLogsPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const params = new URLSearchParams();
       params.set('page', String(page));
@@ -55,6 +64,8 @@ export default function SuperAdminAuditLogsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success) {
         setAuditLogs(json.data || []);
         if (json.pagination) setPagination(json.pagination);

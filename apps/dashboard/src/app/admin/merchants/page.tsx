@@ -16,7 +16,12 @@ import {
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 interface MerchantRecord {
   id: string; // User ID
@@ -69,6 +74,10 @@ export default function SuperAdminMerchantsPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const params = new URLSearchParams({
         page: page.toString(),
@@ -83,6 +92,8 @@ export default function SuperAdminMerchantsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success && Array.isArray(json.data)) {
         setMerchants(json.data);
         if (json.pagination) setPagination(json.pagination);
@@ -123,6 +134,10 @@ export default function SuperAdminMerchantsPage() {
       setErrorMessage(null);
       setSuccessMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/merchants/${targetId}/status`, {
         method: 'PATCH',
@@ -134,6 +149,7 @@ export default function SuperAdminMerchantsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Workspace "${m.name}" is now ${nextStatus}.`);
         fetchMerchants();
@@ -153,6 +169,10 @@ export default function SuperAdminMerchantsPage() {
       setIsSubmitting(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/merchants/${userId}/kyc-override`, {
         method: 'PATCH',
@@ -167,6 +187,7 @@ export default function SuperAdminMerchantsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`KYC status for ${selectedMerchant.ownerEmail} updated to ${overrideStatus}.`);
         setIsOverrideModalOpen(false);

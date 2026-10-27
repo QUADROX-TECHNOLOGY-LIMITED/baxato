@@ -17,7 +17,12 @@ import {
   GraduationCap,
   ArrowRightLeft,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 export default function SuperAdminSettingsPage() {
   const [settings, setSettings] = useState<any>(null);
@@ -31,6 +36,10 @@ export default function SuperAdminSettingsPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/settings', {
         headers: {
@@ -39,6 +48,8 @@ export default function SuperAdminSettingsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success) {
         setSettings(json.data);
       } else {
@@ -61,6 +72,10 @@ export default function SuperAdminSettingsPage() {
       setErrorMessage(null);
       setSuccessMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const updated = { ...settings, ...partialUpdates };
 
@@ -74,6 +89,8 @@ export default function SuperAdminSettingsPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success) {
         setSettings(updated);
         setSuccessMessage('System configuration updated successfully.');

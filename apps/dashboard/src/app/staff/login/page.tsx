@@ -30,6 +30,25 @@ export default function StaffLoginPage() {
   const [step, setStep] = useState<LoginStep>('credentials');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
+
+  // Check for expired session query param and ensure credentials are wiped clean
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('expired') === 'true' || params.get('unauthorized') === 'true') {
+          setIsSessionExpired(true);
+          try {
+            localStorage.removeItem('bx_auth_token');
+            localStorage.removeItem('bx_user');
+            localStorage.removeItem('bx_business');
+            document.cookie = 'bx_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          } catch {}
+        }
+      }
+    } catch {}
+  }, []);
 
   // 2FA Verification state
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -329,6 +348,14 @@ export default function StaffLoginPage() {
 
         {/* Card Box */}
         <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm dark:shadow-xl transition-colors">
+          {/* Session Expired / Re-authentication Notice */}
+          {isSessionExpired && !errorMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2 shadow-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <div className="leading-relaxed font-medium">Your staff session has expired. Please sign in again to continue.</div>
+            </div>
+          )}
+
           {/* Error Banner */}
           {errorMessage && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">

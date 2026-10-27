@@ -6,7 +6,12 @@ import {
   RefreshCw,
   ArrowUpRight,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 export default function StaffOverviewPage() {
   const [overviewData, setOverviewData] = useState<any>(null);
@@ -17,7 +22,10 @@ export default function StaffOverviewPage() {
     try {
       setIsLoading(true);
       const token = getStoredAuthToken();
-      if (!token) return;
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const [overviewRes, txRes] = await Promise.all([
         fetch('/api/admin/overview', {
@@ -29,9 +37,13 @@ export default function StaffOverviewPage() {
       ]);
 
       const [overviewJson, txJson] = await Promise.all([
-        overviewRes.json(),
-        txRes.json(),
+        overviewRes.json().catch(() => null),
+        txRes.json().catch(() => null),
       ]);
+
+      if (handleAuthResponse(overviewRes, overviewJson) || handleAuthResponse(txRes, txJson)) {
+        return;
+      }
 
       if (overviewRes.ok && overviewJson?.success) {
         setOverviewData(overviewJson.data);

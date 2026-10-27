@@ -17,7 +17,12 @@ import {
   Server,
   ShieldCheck,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 
 const STRATEGY_OPTIONS = [
   { value: 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK', label: 'Monnify Primary → Interswitch Fallback' },
@@ -42,6 +47,10 @@ export default function SuperAdminProvidersPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/providers/config', {
         headers: {
@@ -50,6 +59,8 @@ export default function SuperAdminProvidersPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success) {
         setProvidersData(json.data);
       } else {
@@ -71,6 +82,10 @@ export default function SuperAdminProvidersPage() {
       setIsPinging(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/providers/test-connection', {
         method: 'POST',
@@ -82,6 +97,7 @@ export default function SuperAdminProvidersPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success && Array.isArray(json.data)) {
         setPingResults(json.data);
         setSuccessMessage('Gateway latency ping completed successfully.');
@@ -101,6 +117,10 @@ export default function SuperAdminProvidersPage() {
       setErrorMessage(null);
       setSuccessMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/providers/routing', {
         method: 'PATCH',
@@ -116,6 +136,7 @@ export default function SuperAdminProvidersPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Routing strategy for ${serviceType} updated.`);
         fetchProvidersConfig();

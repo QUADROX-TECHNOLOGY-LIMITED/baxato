@@ -15,7 +15,13 @@ import {
   Mail,
   Lock,
 } from 'lucide-react';
-import { getStoredAuthToken, getStoredUser } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+  getStoredUser,
+} from '@/lib/auth-session';
 
 interface StaffUser {
   id: string;
@@ -60,6 +66,10 @@ export default function SuperAdminStaffPage() {
       setIsLoading(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/staff', {
         headers: {
@@ -68,6 +78,8 @@ export default function SuperAdminStaffPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
+
       if (res.ok && json?.success && Array.isArray(json.data)) {
         setStaffList(json.data);
       } else {
@@ -100,6 +112,10 @@ export default function SuperAdminStaffPage() {
     try {
       setIsSubmitting(true);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/admin/staff', {
         method: 'POST',
@@ -117,6 +133,7 @@ export default function SuperAdminStaffPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Account created for ${cleanEmail}. 2FA enrollment will be required upon initial sign-in.`);
         setIsInviteModalOpen(false);
@@ -141,6 +158,10 @@ export default function SuperAdminStaffPage() {
       setIsSubmitting(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/staff/${editingStaff.id}/role`, {
         method: 'PATCH',
@@ -152,6 +173,7 @@ export default function SuperAdminStaffPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Updated role for ${editingStaff.email} to ${selectedRole}.`);
         setEditingStaff(null);
@@ -173,6 +195,10 @@ export default function SuperAdminStaffPage() {
     try {
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/staff/${staff.id}/status`, {
         method: 'PATCH',
@@ -184,6 +210,7 @@ export default function SuperAdminStaffPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Account ${staff.email} is now ${nextStatus}.`);
         fetchStaff();
@@ -201,6 +228,10 @@ export default function SuperAdminStaffPage() {
     try {
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/staff/${staff.id}`, {
         method: 'DELETE',
@@ -210,6 +241,7 @@ export default function SuperAdminStaffPage() {
       });
 
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
       if (res.ok && json?.success) {
         setSuccessMessage(`Account access revoked for ${staff.email}.`);
         fetchStaff();

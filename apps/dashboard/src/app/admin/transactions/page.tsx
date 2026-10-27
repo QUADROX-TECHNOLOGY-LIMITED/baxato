@@ -20,7 +20,12 @@ import {
   ChevronRight,
   ExternalLink,
 } from 'lucide-react';
-import { getStoredAuthToken } from '@/lib/auth-session';
+import {
+  getStoredAuthToken,
+  isTokenExpired,
+  clearSessionAndRedirect,
+  handleAuthResponse,
+} from '@/lib/auth-session';
 import StaffReceiptModal from '@/components/admin/StaffReceiptModal';
 
 const SERVICE_CONFIG: Record<
@@ -63,7 +68,10 @@ export default function AdminTransactionsPage() {
     try {
       setIsLoadingTx(true);
       const token = getStoredAuthToken();
-      if (!token) return;
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const params = new URLSearchParams({
         page: txPage.toString(),
@@ -76,7 +84,9 @@ export default function AdminTransactionsPage() {
       const res = await fetch(`/api/admin/transactions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) return;
+
       if (res.ok && data?.success) {
         setTransactions(data.data || []);
         setTxPagination(data.pagination);
@@ -102,7 +112,10 @@ export default function AdminTransactionsPage() {
       setIsRequerying(true);
       setRequeryFeedback(null);
       const token = getStoredAuthToken();
-      if (!token) return;
+      if (!token || isTokenExpired(token)) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch(`/api/admin/transactions/${txId}/requery`, {
         method: 'POST',
@@ -111,7 +124,8 @@ export default function AdminTransactionsPage() {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) return;
       if (res.ok && data?.success) {
         const syncMsg = data.data.syncMessage || `Status: ${data.data.currentStatus}`;
         const currentStatus = data.data.currentStatus;

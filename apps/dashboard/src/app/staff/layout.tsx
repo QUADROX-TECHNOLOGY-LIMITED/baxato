@@ -8,6 +8,7 @@ import StaffSidebar from '@/components/admin/StaffSidebar';
 import StaffHeader from '@/components/admin/StaffHeader';
 import {
   getStoredAuthToken,
+  isTokenExpired,
   getStoredUser,
   clearSessionAndRedirect,
 } from '@/lib/auth-session';
@@ -32,7 +33,7 @@ export default function StaffLayout({
     if (isLoginPage) return;
 
     const token = getStoredAuthToken();
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
       setIsAuthorized(false);
       clearSessionAndRedirect('expired');
       return;
@@ -47,6 +48,7 @@ export default function StaffLayout({
     } else {
       // Immediate lock out — user is regular merchant or unauthenticated
       setIsAuthorized(false);
+      clearSessionAndRedirect('unauthorized');
     }
   }, [isLoginPage]);
 
@@ -55,37 +57,11 @@ export default function StaffLayout({
     return <>{children}</>;
   }
 
-  // 1. Silent loading state while evaluating auth — ABSOLUTELY ZERO CONTENT FLASH
-  if (isAuthorized === null) {
+  // Silent loading state while evaluating auth or redirecting — ABSOLUTELY ZERO CONTENT FLASH
+  if (isAuthorized !== true) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-[#126BEB] border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
-  // 2. Unauthorized Screen for non-staff accounts
-  if (isAuthorized === false) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] flex items-center justify-center p-6 text-slate-900 dark:text-white">
-        <div className="max-w-md w-full bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center shadow-xl">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-            <Lock className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-bold mb-2">Staff Access Only</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-            Please sign in with your staff account to continue.
-          </p>
-          <div className="flex justify-center">
-            <Link
-              href="/staff/login"
-              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl font-medium bg-[#126BEB] text-white hover:bg-[#0E58C4] transition shadow-md shadow-blue-500/20 text-xs"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Staff Sign In</span>
-            </Link>
-          </div>
-        </div>
       </div>
     );
   }

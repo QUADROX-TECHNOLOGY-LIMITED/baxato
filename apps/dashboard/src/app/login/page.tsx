@@ -74,12 +74,13 @@ export default function LoginPage() {
     try {
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('expired') === 'true') {
+        if (params.get('expired') === 'true' || params.get('unauthorized') === 'true') {
           setIsSessionExpired(true);
           try {
             localStorage.removeItem('bx_auth_token');
             localStorage.removeItem('bx_user');
             localStorage.removeItem('bx_business');
+            document.cookie = 'bx_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
           } catch {}
         }
       }
