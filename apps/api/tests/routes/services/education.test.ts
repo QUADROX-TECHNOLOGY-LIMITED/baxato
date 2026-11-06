@@ -31,7 +31,7 @@ vi.mock('../../../src/services/providers', async (importOriginal) => {
       }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
-        providerName: 'INTERSWITCH',
+        providerName: 'MONNIFY',
         providerReference: 'ISW_ORION_99214',
         requestReference: '241109283746',
         amountKobo: 570000n,

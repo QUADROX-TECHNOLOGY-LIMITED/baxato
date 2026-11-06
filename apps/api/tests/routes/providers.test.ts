@@ -111,8 +111,8 @@ describe('Provider & Routing Management Endpoints (/providers/*)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<ApiResponse<{ providers: string[]; routingTable: unknown[] }>>();
     expect(body.success).toBe(true);
-    expect(body.data.providers).toContain('INTERSWITCH');
     expect(body.data.providers).toContain('MONNIFY');
+    expect(body.data.providers).toContain('VTPASS');
     expect(body.data.routingTable.length).toBeGreaterThan(0);
   });
 
@@ -149,24 +149,6 @@ describe('Provider & Routing Management Endpoints (/providers/*)', () => {
     const { providerRouterService } = await import('../../src/services/providers');
     const spy = vi.spyOn(providerRouterService, 'getAllProviderHealth').mockResolvedValueOnce([
       {
-        providerName: 'INTERSWITCH' as any,
-        health: {
-          providerName: 'INTERSWITCH' as any,
-          isHealthy: true,
-          latencyMs: 30,
-          message: 'OK',
-          checkedAt: new Date(),
-        },
-        circuitBreaker: {
-          name: 'INTERSWITCH',
-          state: 'CLOSED' as any,
-          failureCount: 0,
-          successCount: 1,
-          consecutiveSuccesses: 1,
-          lastStateChange: new Date(),
-        },
-      },
-      {
         providerName: 'MONNIFY' as any,
         health: {
           providerName: 'MONNIFY' as any,
@@ -197,7 +179,7 @@ describe('Provider & Routing Management Endpoints (/providers/*)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<ApiResponse<{ providerStatuses: Array<{ providerName: string }> }>>();
     expect(body.success).toBe(true);
-    expect(body.data.providerStatuses).toHaveLength(2);
+    expect(body.data.providerStatuses).toHaveLength(1);
     spy.mockRestore();
   });
 
@@ -210,8 +192,8 @@ describe('Provider & Routing Management Endpoints (/providers/*)', () => {
       },
       payload: {
         serviceType: ServiceType.AIRTIME,
-        strategy: ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
-        allowFailover: true,
+        strategy: ProviderRoutingStrategy.MONNIFY_ONLY,
+        allowFailover: false,
       },
     });
 
@@ -219,9 +201,9 @@ describe('Provider & Routing Management Endpoints (/providers/*)', () => {
     const body = res.json<ApiResponse<{ config: { strategy: string; primaryProvider: string } }>>();
     expect(body.success).toBe(true);
     expect(body.data.config.strategy).toBe(
-      ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
+      ProviderRoutingStrategy.MONNIFY_ONLY,
     );
-    expect(body.data.config.primaryProvider).toBe('INTERSWITCH');
+    expect(body.data.config.primaryProvider).toBe('MONNIFY');
   });
 
   it('PATCH /providers/routing returns 400 on invalid serviceType', async () => {

@@ -64,7 +64,7 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
       }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
-        providerName: 'INTERSWITCH',
+        providerName: 'MONNIFY',
         providerReference: 'XAT|Web|3XAT0001|IBDPR|090926070221|A78FKC7H3RP',
         token: '18173728177997242246',
         units: '14.3 kWh',
@@ -249,7 +249,7 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
       expect(receipt.discountNaira).toBe(6);
       expect(receipt.amountDebitedKobo).toBe('49400');
       expect(receipt.amountDebitedNaira).toBe(494);
-      expect(receipt.providerName).toBe('INTERSWITCH');
+      expect(receipt.providerName).toBe('MONNIFY');
 
       // Verify wallet balance decremented by 49,400 Kobo (5,000,000 - 49,400 = 4,950,600)
       const wallet = inMemoryDb.wallets.find((w) => w.id === mainWalletId);
@@ -302,7 +302,7 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
     it('rolls back wallet balance when provider vending fails', async () => {
       (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         status: TransactionStatus.FAILED,
-        providerName: 'INTERSWITCH',
+        providerName: 'MONNIFY',
         responseCode: '91',
         responseMessage: 'DISCO STS generation server unavailable',
       });

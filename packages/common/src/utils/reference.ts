@@ -7,13 +7,13 @@ const generateNumeric = (len: number) => customAlphabet(numericAlphabet, len)();
 const generateAlphanumeric16 = customAlphabet(alphanumericAlphabet, 16);
 
 /**
- * Generates an Interswitch-compliant numeric transaction reference.
+ * Generates a numeric transaction reference.
  * Defaults to 20 digits total length, beginning with the assigned 4-digit prefix (e.g., '2411').
  */
-export function generateInterswitchReference(prefix: string = '2411', totalLength: number = 20): string {
+export function generateNumericReference(prefix: string = '2411', totalLength: number = 20): string {
   const cleanPrefix = prefix.replace(/\D/g, '');
   if (cleanPrefix.length !== 4) {
-    throw new Error(`Interswitch reference prefix must be exactly 4 digits. Got: '${prefix}'`);
+    throw new Error(`Numeric reference prefix must be exactly 4 digits. Got: '${prefix}'`);
   }
   const suffixLength = Math.max(8, totalLength - cleanPrefix.length);
   const suffix = generateNumeric(suffixLength);

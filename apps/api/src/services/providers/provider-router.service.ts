@@ -17,16 +17,16 @@ import {
   ProviderRoutingStrategy,
   ServiceRoutingConfig,
 } from './provider.interface.js';
-import { InterswitchProvider } from './interswitch.provider.js';
 import { MonnifyProvider } from './monnify.provider.js';
+import { VtpassProvider } from './vtpass.provider.js';
 import { CircuitBreaker, CircuitBreakerMetrics } from './circuit-breaker.js';
 import { sanitizeForJson } from '../audit.service.js';
 
 export interface ProviderRouterOptions {
   env: Env;
   db?: Database;
-  interswitchProvider?: ProviderAdapter;
   monnifyProvider?: ProviderAdapter;
+  vtpassProvider?: ProviderAdapter;
 }
 
 export interface ProviderStatusSummary {
@@ -45,28 +45,27 @@ export class ProviderRouterService {
     this.db = options.db;
 
     // 1. Initialize or inject providers
-    const isw = options.interswitchProvider ?? new InterswitchProvider(options.env);
     const mon = options.monnifyProvider ?? new MonnifyProvider(options.env);
+    const vt = options.vtpassProvider ?? new VtpassProvider(options.env);
 
-    this.providers.set(ProviderName.INTERSWITCH, isw);
     this.providers.set(ProviderName.MONNIFY, mon);
+    this.providers.set(ProviderName.VTPASS, vt);
 
     // 2. Initialize circuit breakers with 3-failure threshold, 30s cooldown
     this.circuitBreakers.set(
-      ProviderName.INTERSWITCH,
+      ProviderName.MONNIFY,
       new CircuitBreaker({
-        name: ProviderName.INTERSWITCH,
+        name: ProviderName.MONNIFY,
         failureThreshold: 3,
         resetTimeoutMs: 30000,
         successThreshold: 2,
         timeoutMs: 25000,
       }),
     );
-
     this.circuitBreakers.set(
-      ProviderName.MONNIFY,
+      ProviderName.VTPASS,
       new CircuitBreaker({
-        name: ProviderName.MONNIFY,
+        name: ProviderName.VTPASS,
         failureThreshold: 3,
         resetTimeoutMs: 30000,
         successThreshold: 2,
@@ -79,39 +78,26 @@ export class ProviderRouterService {
   }
 
   private initDefaultRoutingConfigs(): void {
-    // Exam PINs are direct national distribution on Interswitch
-    this.routingConfigs.set(ServiceType.EXAM_PIN, {
-      serviceType: ServiceType.EXAM_PIN,
-      strategy: ProviderRoutingStrategy.INTERSWITCH_ONLY,
-      primaryProvider: ProviderName.INTERSWITCH,
-      allowFailover: false,
-    });
-
-    // Cable TV is supported on both Interswitch Quickteller Orion (Biller 104, 459, 240) and Monnify VAS
-    this.routingConfigs.set(ServiceType.CABLE_TV, {
-      serviceType: ServiceType.CABLE_TV,
-      strategy: ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
-      primaryProvider: ProviderName.INTERSWITCH,
-      fallbackProvider: ProviderName.MONNIFY,
-      allowFailover: true,
-    });
-
-    // Telecom & Utilities default: Monnify primary, Interswitch fallback
-    const dualServices: ServiceType[] = [
+    const allServices: ServiceType[] = [
       ServiceType.AIRTIME,
       ServiceType.DATA,
+      ServiceType.CABLE_TV,
       ServiceType.ELECTRICITY,
+      ServiceType.EXAM_PIN,
     ];
 
-    for (const service of dualServices) {
+    for (const service of allServices) {
       this.routingConfigs.set(service, {
         serviceType: service,
-        strategy: ProviderRoutingStrategy.MONNIFY_PRIMARY_INTERSWITCH_FALLBACK,
+        strategy: ProviderRoutingStrategy.MONNIFY_ONLY,
         primaryProvider: ProviderName.MONNIFY,
-        fallbackProvider: ProviderName.INTERSWITCH,
-        allowFailover: true,
+        allowFailover: false,
       });
     }
+  }
+
+  public getRegisteredProviders(): ProviderName[] {
+    return Array.from(this.providers.keys());
   }
 
   public getProvider(name: ProviderName): ProviderAdapter {
@@ -151,10 +137,10 @@ export class ProviderRouterService {
   public updateRoutingConfig(
     serviceType: ServiceType,
     strategy: ProviderRoutingStrategy,
-    allowFailover: boolean = true,
+    allowFailover: boolean = false,
   ): ServiceRoutingConfig {
-    let primary: ProviderName;
-    let fallback: ProviderName | undefined;
+    let primary: ProviderName = ProviderName.MONNIFY;
+    let fallback: ProviderName | undefined = undefined;
 
     switch (strategy) {
       case ProviderRoutingStrategy.MONNIFY_ONLY:
@@ -162,19 +148,20 @@ export class ProviderRouterService {
         fallback = undefined;
         allowFailover = false;
         break;
-      case ProviderRoutingStrategy.INTERSWITCH_ONLY:
-        primary = ProviderName.INTERSWITCH;
+      case ProviderRoutingStrategy.VTPASS_ONLY:
+        primary = ProviderName.VTPASS;
         fallback = undefined;
         allowFailover = false;
         break;
-      case ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK:
-        primary = ProviderName.INTERSWITCH;
-        fallback = ProviderName.MONNIFY;
+      case ProviderRoutingStrategy.PRIMARY_FALLBACK:
+        primary = ProviderName.MONNIFY;
+        fallback = ProviderName.VTPASS;
+        allowFailover = true;
         break;
-      case ProviderRoutingStrategy.MONNIFY_PRIMARY_INTERSWITCH_FALLBACK:
       default:
         primary = ProviderName.MONNIFY;
-        fallback = ProviderName.INTERSWITCH;
+        fallback = undefined;
+        allowFailover = false;
         break;
     }
 
@@ -198,9 +185,9 @@ export class ProviderRouterService {
     serviceType: ServiceType,
   ): Promise<{ primaryName: ProviderName; fallbackName?: ProviderName; allowFailover: boolean }> {
     const config = this.getRoutingConfig(serviceType)[0];
-    let primaryName = config?.primaryProvider ?? ProviderName.INTERSWITCH;
+    let primaryName = config?.primaryProvider ?? ProviderName.MONNIFY;
     let fallbackName = config?.fallbackProvider;
-    let allowFailover = config?.allowFailover ?? true;
+    let allowFailover = config?.allowFailover ?? false;
     let source = 'In-Memory Configuration';
 
     if (this.db) {
@@ -240,7 +227,7 @@ export class ProviderRouterService {
         const pool = explicitlyEnabled.length > 0 ? explicitlyEnabled : eligibleProviders;
 
         if (pool.length > 0) {
-          // If in-memory strategy specifically designates a primaryProvider (e.g. INTERSWITCH for CABLE_TV),
+          // If in-memory strategy specifically designates a primaryProvider,
           // prioritize it if it exists in the active eligible pool.
           const primaryCandidate =
             pool.find((p) => p.name === config?.primaryProvider && p.isPrimary) ||

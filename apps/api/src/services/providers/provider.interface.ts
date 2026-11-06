@@ -104,7 +104,7 @@ export interface ProviderHealthStatus {
 
 /**
  * Unified Provider Adapter Interface
- * All bill payment providers (Interswitch, Monnify, etc.) implement this contract.
+ * All bill payment providers (Monnify, etc.) implement this contract.
  */
 export interface ProviderAdapter {
   readonly providerName: ProviderName;
@@ -134,10 +134,9 @@ export interface ProviderAdapter {
  * Dynamic Provider Routing Strategies
  */
 export enum ProviderRoutingStrategy {
-  MONNIFY_PRIMARY_INTERSWITCH_FALLBACK = 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK',
-  INTERSWITCH_PRIMARY_MONNIFY_FALLBACK = 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK',
   MONNIFY_ONLY = 'MONNIFY_ONLY',
-  INTERSWITCH_ONLY = 'INTERSWITCH_ONLY',
+  VTPASS_ONLY = 'VTPASS_ONLY',
+  PRIMARY_FALLBACK = 'PRIMARY_FALLBACK',
 }
 
 /**

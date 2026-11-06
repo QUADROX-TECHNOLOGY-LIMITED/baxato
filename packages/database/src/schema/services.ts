@@ -20,8 +20,8 @@ export const transactionStatusEnum = pgEnum('transaction_status', [
 ]);
 
 export const providerNameEnum = pgEnum('provider_name', [
-  ProviderName.INTERSWITCH,
   ProviderName.MONNIFY,
+  ProviderName.VTPASS,
   ProviderName.INTERNAL_MOCK,
 ]);
 

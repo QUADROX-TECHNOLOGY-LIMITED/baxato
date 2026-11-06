@@ -172,11 +172,11 @@ export default function StaffOverviewPage() {
           </div>
           <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800">
             <span className="text-slate-500 block text-[11px]">Cable TV</span>
-            <span className="font-semibold text-slate-900 dark:text-white mt-0.5 block">Interswitch</span>
+            <span className="font-semibold text-slate-900 dark:text-white mt-0.5 block">Monnify</span>
           </div>
           <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800">
             <span className="text-slate-500 block text-[11px]">Exam PINs</span>
-            <span className="font-semibold text-slate-900 dark:text-white mt-0.5 block">Interswitch</span>
+            <span className="font-semibold text-slate-900 dark:text-white mt-0.5 block">Monnify</span>
           </div>
         </div>
       </div>

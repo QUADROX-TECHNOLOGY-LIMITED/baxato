@@ -28,7 +28,7 @@ interface CachedMonnifyToken {
   expiresAt: number;
 }
 
-const INTERSWITCH_TO_MONNIFY_AIRTIME: Record<string, string> = {
+const TELCO_TO_MONNIFY_AIRTIME: Record<string, string> = {
   '10901': 'MTN',
   '109': 'MTN',
   '90102': 'AIRTEL',
@@ -50,7 +50,7 @@ const MONNIFY_AIRTIME_PRODUCT_CODES: Record<string, string> = {
   '9MOBILE': '14',
 };
 
-export const INTERSWITCH_TO_MONNIFY_ELECTRICITY: Record<
+export const LEGACY_CODE_TO_MONNIFY_ELECTRICITY: Record<
   string,
   { billerCode: string; productCode: string }
 > = {
@@ -177,7 +177,7 @@ export const OPERATOR_TO_MONNIFY_BILLER: Record<string, string> = {
   'biller-showmax': 'biller-showmax',
 };
 
-export const INTERSWITCH_TO_MONNIFY_CABLE: Record<
+export const LEGACY_CODE_TO_MONNIFY_CABLE: Record<
   string,
   { billerCode: string; productCode: string }
 > = {
@@ -357,7 +357,7 @@ export class MonnifyProvider implements ProviderAdapter {
         String(request.metadata?.meterType || '').toUpperCase() === 'POSTPAID' ||
         String(request.paymentCode || '').toUpperCase().includes('POST');
 
-      const mappedPaymentCode = INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode];
+      const mappedPaymentCode = LEGACY_CODE_TO_MONNIFY_ELECTRICITY[request.paymentCode];
       const discoKey = String(request.metadata?.disco || request.paymentCode || '').toUpperCase();
       const mappedDisco = DISCO_CODE_TO_MONNIFY[discoKey];
 
@@ -384,8 +384,8 @@ export class MonnifyProvider implements ProviderAdapter {
     } else if (request.serviceType === ServiceType.CABLE_TV) {
       const op = String(request.metadata?.operator || request.paymentCode || '').toUpperCase();
       const mapped =
-        INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
-        INTERSWITCH_TO_MONNIFY_CABLE[op] ||
+        LEGACY_CODE_TO_MONNIFY_CABLE[request.paymentCode] ||
+        LEGACY_CODE_TO_MONNIFY_CABLE[op] ||
         (request.metadata?.monnifyProductCode
           ? {
               billerCode:
@@ -506,7 +506,7 @@ export class MonnifyProvider implements ProviderAdapter {
         const resolvedCode =
           (request.metadata?.monnifyNetworkCode as string) ||
           (request.metadata?.network as string) ||
-          INTERSWITCH_TO_MONNIFY_AIRTIME[request.paymentCode] ||
+          TELCO_TO_MONNIFY_AIRTIME[request.paymentCode] ||
           request.paymentCode;
         billerCode = String(resolvedCode).toUpperCase();
         productCode = MONNIFY_AIRTIME_PRODUCT_CODES[billerCode] || '13';
@@ -524,7 +524,7 @@ export class MonnifyProvider implements ProviderAdapter {
           String(request.metadata?.meterType || '').toUpperCase() === 'POSTPAID' ||
           String(request.paymentCode || '').toUpperCase().includes('POST');
 
-        const mappedPaymentCode = INTERSWITCH_TO_MONNIFY_ELECTRICITY[request.paymentCode];
+        const mappedPaymentCode = LEGACY_CODE_TO_MONNIFY_ELECTRICITY[request.paymentCode];
         const discoKey = String(request.metadata?.disco || request.paymentCode || '').toUpperCase();
         const mappedDisco = DISCO_CODE_TO_MONNIFY[discoKey];
 
@@ -557,8 +557,8 @@ export class MonnifyProvider implements ProviderAdapter {
       case ServiceType.CABLE_TV: {
         const op = String(request.metadata?.operator || '').toUpperCase();
         const mapped =
-          INTERSWITCH_TO_MONNIFY_CABLE[request.paymentCode] ||
-          INTERSWITCH_TO_MONNIFY_CABLE[op] ||
+          LEGACY_CODE_TO_MONNIFY_CABLE[request.paymentCode] ||
+          LEGACY_CODE_TO_MONNIFY_CABLE[op] ||
           (request.metadata?.monnifyProductCode
             ? {
                 billerCode:

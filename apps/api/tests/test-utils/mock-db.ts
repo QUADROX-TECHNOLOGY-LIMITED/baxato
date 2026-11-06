@@ -1131,19 +1131,11 @@ export function createMockDatabase() {
             if (isProvidersTable(table)) {
               return [
                 {
-                  id: 'prv_isw',
-                  name: 'INTERSWITCH',
-                  status: 'ACTIVE',
-                  failureRate: 0,
-                  isPrimary: true,
-                  config: {},
-                },
-                {
                   id: 'prv_monnify',
                   name: 'MONNIFY',
                   status: 'ACTIVE',
                   failureRate: 0,
-                  isPrimary: false,
+                  isPrimary: true,
                   config: {},
                 },
               ];

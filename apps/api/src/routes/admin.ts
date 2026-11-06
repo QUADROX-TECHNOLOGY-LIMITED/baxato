@@ -160,8 +160,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const liabilitiesKobo = BigInt(walletLiabilities?.totalLiabilitiesKobo || '0');
     const liabilitiesNaira = koboToNaira(liabilitiesKobo);
     const monnifyFloatNaira = 2500000;
-    const interswitchFloatNaira = 3800000;
-    const totalProviderFloatNaira = monnifyFloatNaira + interswitchFloatNaira;
+    const totalProviderFloatNaira = monnifyFloatNaira;
     const netSolvencyMarginNaira = totalProviderFloatNaira - liabilitiesNaira;
     const allTimeGtvNaira = koboToNaira(BigInt(allTimeStats?.allTimeVolumeKobo || '0'));
     const allTimeRevenueNaira = koboToNaira(BigInt(allTimeStats?.allTimeFeesKobo || '0'));
@@ -186,7 +185,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             merchantWalletLiabilitiesNaira: liabilitiesNaira,
             merchantWalletsCount: Number(walletLiabilities?.walletsCount || 0),
             monnifyFloatNaira,
-            interswitchFloatNaira,
             totalProviderFloatNaira,
             netSolvencyMarginNaira,
             isSolvent: netSolvencyMarginNaira >= 0,
@@ -451,7 +449,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * POST /admin/transactions/:id/requery
-   * Re-queries live status from Interswitch or Monnify to sync settlement status.
+   * Re-queries live status from active upstream provider to sync settlement status.
    */
   fastify.post('/transactions/:id/requery', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -1452,17 +1450,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         currency: 'NGN',
         supportedServices: ['AIRTIME', 'DATA', 'ELECTRICITY', 'CABLE', 'EDUCATION'],
       },
-      {
-        id: 'INTERSWITCH',
-        name: 'Interswitch Quickteller Business',
-        status: 'ONLINE',
-        terminalId: '3ITW0001',
-        apiKeyPrefix: 'IKIA_LIVE_****',
-        baseUrl: 'https://saturn.interswitchng.com',
-        floatingBalanceNaira: 3800000,
-        currency: 'NGN',
-        supportedServices: ['AIRTIME', 'DATA', 'ELECTRICITY', 'CABLE', 'EDUCATION'],
-      },
     ];
 
     return reply.status(200).send(
@@ -1491,13 +1478,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         status: 'CONNECTED',
         latencyMs: 142,
         endpoint: 'https://sandbox.monnify.com/api/v1/auth/login',
-        timestamp: new Date().toISOString(),
-      },
-      {
-        provider: 'INTERSWITCH',
-        status: 'CONNECTED',
-        latencyMs: 98,
-        endpoint: 'https://saturn.interswitchng.com/passport/oauth/token',
         timestamp: new Date().toISOString(),
       },
     ];

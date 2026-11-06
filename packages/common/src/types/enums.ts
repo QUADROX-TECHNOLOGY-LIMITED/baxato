@@ -50,8 +50,8 @@ export enum DiscoCode {
 }
 
 export enum ProviderName {
-  INTERSWITCH = 'INTERSWITCH',
   MONNIFY = 'MONNIFY',
+  VTPASS = 'VTPASS',
   INTERNAL_MOCK = 'INTERNAL_MOCK',
 }
 

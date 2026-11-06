@@ -4,29 +4,10 @@ import { UserRole, WalletType, ProviderName } from '@baxato/common';
 import { eq } from 'drizzle-orm';
 
 export async function seedProviders() {
-  console.log('  -> Seeding providers (Interswitch & Monnify)...');
+  console.log('  -> Seeding providers (Monnify & VTpass)...');
   await db
     .insert(providers)
     .values([
-      {
-        name: ProviderName.INTERSWITCH,
-        status: 'ACTIVE',
-        isPrimary: true,
-        failureRate: 0,
-        config: {
-          airtime: true,
-          data: true,
-          electricity: true,
-          cable: true,
-          exam_pin: true,
-          billerIds: {
-            airtel: '901',
-            mtn: '109',
-            glo: '908',
-            nineMobile: '908',
-          },
-        },
-      },
       {
         name: ProviderName.MONNIFY,
         status: 'ACTIVE',
@@ -36,6 +17,19 @@ export async function seedProviders() {
           airtime: true,
           data: true,
           electricity: true,
+          cable: true,
+          exam_pin: true,
+        },
+      },
+      {
+        name: ProviderName.VTPASS,
+        status: 'ACTIVE',
+        isPrimary: false,
+        failureRate: 0,
+        config: {
+          airtime: true,
+          electricity: true,
+          data: false,
           cable: false,
           exam_pin: false,
         },
@@ -48,27 +42,7 @@ export async function seedProviders() {
     const existing = await db.select().from(providers);
     for (const p of existing) {
       const cfg = (p.config || {}) as Record<string, unknown>;
-      if (p.name === ProviderName.INTERSWITCH && cfg.airtime === undefined) {
-        await db
-          .update(providers)
-          .set({
-            config: {
-              ...cfg,
-              airtime: true,
-              data: true,
-              electricity: true,
-              cable: true,
-              exam_pin: true,
-              billerIds: cfg.billerIds || {
-                airtel: '901',
-                mtn: '109',
-                glo: '908',
-                nineMobile: '908',
-              },
-            },
-          })
-          .where(eq(providers.id, p.id));
-      } else if (p.name === ProviderName.MONNIFY && cfg.airtime === undefined) {
+      if (p.name === ProviderName.MONNIFY && cfg.airtime === undefined) {
         await db
           .update(providers)
           .set({
@@ -78,8 +52,8 @@ export async function seedProviders() {
               airtime: true,
               data: true,
               electricity: true,
-              cable: false,
-              exam_pin: false,
+              cable: true,
+              exam_pin: true,
             },
           })
           .where(eq(providers.id, p.id));

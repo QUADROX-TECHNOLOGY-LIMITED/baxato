@@ -21,10 +21,11 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [requirePlatformPermission(Permission.PLATFORM_PROVIDERS_MANAGE)] },
     async (request, reply) => {
       const routingTable = providerRouterService.getRoutingConfig();
+      const providersList = providerRouterService.getRegisteredProviders();
       return reply.status(200).send(
         createSuccessResponse(
           {
-            providers: ['INTERSWITCH', 'MONNIFY'],
+            providers: providersList,
             routingTable,
           },
           request.id,

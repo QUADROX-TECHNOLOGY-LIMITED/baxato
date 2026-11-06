@@ -33,7 +33,7 @@ vi.mock('../../../src/services/providers', async (importOriginal) => {
       }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
-        providerName: 'INTERSWITCH',
+        providerName: 'MONNIFY',
         providerReference: 'XAT|Web|3XAT0001|IBDPR|090926070221|A78FKC7H3RP',
         token: '18173728177997242246',
         units: '14.3 kWh',
@@ -313,7 +313,7 @@ describe('Electricity Domain Endpoints (/services/electricity/*)', () => {
       expect(json.data.discountNaira).toBe(12); // 1.2% discount on 1000 = 12
       expect(json.data.amountDebitedNaira).toBe(988); // 1000 - 12 = 988
       expect(json.data.vatNaira).toBe(34.88);
-      expect(json.data.providerName).toBe('INTERSWITCH');
+      expect(json.data.providerName).toBe('MONNIFY');
       expect(json.data.providerReference).toBe('XAT|Web|3XAT0001|IBDPR|090926070221|A78FKC7H3RP');
     });
 

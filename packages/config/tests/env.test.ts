@@ -15,8 +15,6 @@ describe('Environment Configuration Schema (Zod)', () => {
     expect(parsed.NODE_ENV).toBe('test');
     expect(parsed.PORT).toBe(5000);
     expect(parsed.API_PREFIX).toBe('/v1');
-    expect(parsed.INTERSWITCH_TERMINAL_ID).toBe('3XAT0001');
-    expect(parsed.INTERSWITCH_TRANSFER_CODE_PREFIX).toBe('2411');
   });
 
   it('throws informative error when required variables are missing or invalid', () => {
@@ -39,14 +37,16 @@ describe('Environment Configuration Schema (Zod)', () => {
       JWT_SECRET: 'super_secret_jwt_key_at_least_16_chars',
       CLERK_PUBLISHABLE_KEY: 'pk_test_baxato_sample_key',
       CLERK_SECRET_KEY: 'sk_live_very_secret_clerk_key',
-      INTERSWITCH_CLIENT_SECRET: 'super_secret_interswitch_secret',
       MONNIFY_SECRET_KEY: 'super_secret_monnify_secret',
+      VTPASS_SECRET_KEY: 'SK_super_secret_vtpass_secret',
+      VTPASS_API_KEY: 'vtpass_api_key_sample',
     });
 
     const sanitized = getSanitizedEnv(parsed);
     expect(sanitized.DATABASE_URL).toBe('postgresql://db_user:****@db.example.com:5432/prod');
     expect(sanitized.CLERK_SECRET_KEY).toBe('****');
-    expect(sanitized.INTERSWITCH_CLIENT_SECRET).toBe('****');
     expect(sanitized.MONNIFY_SECRET_KEY).toBe('****');
+    expect(sanitized.VTPASS_SECRET_KEY).toBe('****');
+    expect(sanitized.VTPASS_API_KEY).toBe('****');
   });
 });

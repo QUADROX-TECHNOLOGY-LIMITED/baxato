@@ -6,7 +6,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateInterswitchReference,
+  generateNumericReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -309,7 +309,7 @@ export class EducationService {
 
   /**
    * Validates Candidate Profile Code or Registration ID.
-   * For JAMB, performs real-time validation via Interswitch SVA v5.
+   * For JAMB, performs real-time validation via upstream provider.
    */
   public async validateCandidate(input: {
     examBody: ExamBody;
@@ -427,7 +427,7 @@ export class EducationService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row
-    const requestReference = generateInterswitchReference('2411', 12);
+    const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('EPN');
 
     const [txnRow] = await db
@@ -442,7 +442,7 @@ export class EducationService {
         totalAmount: amountToDebitKobo,
         status: TransactionStatus.PROCESSING,
         recipient: cleanCandidateId,
-        providerName: 'INTERSWITCH' as any,
+        providerName: 'MONNIFY' as any,
         clientReference: clientRef,
         requestReference,
         metadata: {
@@ -469,7 +469,7 @@ export class EducationService {
       let dispensedPins: Array<{ pin: string; serialNumber?: string; instructions?: string }> = [];
       let fulfillmentSource: 'LIVE_PROVIDER' | 'ENCRYPTED_INVENTORY' = 'LIVE_PROVIDER';
       let providerReference = requestReference;
-      let providerName = 'INTERSWITCH';
+      let providerName = 'MONNIFY';
 
       // Attempt 1: Live Provider Vending
       try {

@@ -63,7 +63,7 @@ describe('EducationService (WAEC, NECO, JAMB, NABTEB & Dynamic Pricing)', () => 
       }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
-        providerName: 'INTERSWITCH',
+        providerName: 'MONNIFY',
         providerReference: 'ISW_ORION_99214',
         requestReference: '241109283746',
         amountKobo: 570000n,
@@ -195,7 +195,7 @@ describe('EducationService (WAEC, NECO, JAMB, NABTEB & Dynamic Pricing)', () => 
   it('falls back to offline encrypted inventory (examPins table) when live provider fails', async () => {
     // Provider fails
     (mockRouter.vendService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('Interswitch Orion timeout'),
+      new Error('Provider gateway timeout'),
     );
 
     // Preload encrypted PIN into inventory

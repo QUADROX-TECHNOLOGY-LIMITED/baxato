@@ -25,10 +25,7 @@ import {
 } from '@/lib/auth-session';
 
 const STRATEGY_OPTIONS = [
-  { value: 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK', label: 'Monnify Primary → Interswitch Fallback' },
-  { value: 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK', label: 'Interswitch Primary → Monnify Fallback' },
   { value: 'MONNIFY_ONLY', label: 'Monnify Exclusive (No Fallback)' },
-  { value: 'INTERSWITCH_ONLY', label: 'Interswitch Exclusive (No Fallback)' },
   { value: 'LEAST_LATENCY', label: 'Dynamic (Lowest Latency Probe)' },
   { value: 'ROUND_ROBIN', label: 'Round-Robin Load Distribution' },
 ];
@@ -159,11 +156,11 @@ export default function SuperAdminProvidersPage() {
   };
 
   const routes = providersData?.routing || [
-    { serviceType: 'AIRTIME', strategy: 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK', allowFailover: true },
-    { serviceType: 'DATA', strategy: 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK', allowFailover: true },
-    { serviceType: 'ELECTRICITY', strategy: 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK', allowFailover: true },
-    { serviceType: 'CABLE', strategy: 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK', allowFailover: true },
-    { serviceType: 'EDUCATION', strategy: 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK', allowFailover: true },
+    { serviceType: 'AIRTIME', strategy: 'MONNIFY_ONLY', allowFailover: false },
+    { serviceType: 'DATA', strategy: 'MONNIFY_ONLY', allowFailover: false },
+    { serviceType: 'ELECTRICITY', strategy: 'MONNIFY_ONLY', allowFailover: false },
+    { serviceType: 'CABLE', strategy: 'MONNIFY_ONLY', allowFailover: false },
+    { serviceType: 'EDUCATION', strategy: 'MONNIFY_ONLY', allowFailover: false },
   ];
 
   return (
@@ -236,43 +233,6 @@ export default function SuperAdminProvidersPage() {
             <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">Gateway URL:</span>
               <span className="text-slate-700 dark:text-slate-300">api.monnify.com</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-500">Circuit Breaker:</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">CLOSED (Healthy)</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Interswitch Card */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-600 flex items-center justify-center font-bold">
-                I
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm">Interswitch Quickteller</h3>
-                <p className="text-xs text-slate-500">PurePay / Saturn Core Vending Engine</p>
-              </div>
-            </div>
-
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              ONLINE
-            </span>
-          </div>
-
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-500">Live Probe Latency:</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                {pingResults?.find((p) => p.provider === 'INTERSWITCH')?.latencyMs || 98} ms
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-500">Gateway URL:</span>
-              <span className="text-slate-700 dark:text-slate-300">saturn.interswitchng.com</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500">Circuit Breaker:</span>

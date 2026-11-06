@@ -108,7 +108,7 @@ describe('CableService (Validation, Concurrency Locking & Multi-Provider Vending
       expect(bouquet).toBeDefined();
       expect(bouquet.name).toBe('DStv Confam');
       expect(bouquet.priceKobo).toBe(1100000n); // ₦11,000
-      expect(bouquet.interswitchPaymentCode).toBe('104153');
+      expect(bouquet.monnifyPlanCode).toBe('prd-dstv-cfm-e36');
       expect(bouquet.discountBps).toBe(150); // 1.5%
     });
 

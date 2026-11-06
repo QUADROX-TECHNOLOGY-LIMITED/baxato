@@ -44,9 +44,9 @@ describe('AppError Hierarchy', () => {
   });
 
   it('instantiates ProviderError with 502 status and provider metadata', () => {
-    const err = new ProviderError('INTERSWITCH', 'System busy', { rawCode: '90099' });
+    const err = new ProviderError('MONNIFY', 'System busy', { rawCode: '90099' });
     expect(err.statusCode).toBe(502);
-    expect(err.providerName).toBe('INTERSWITCH');
+    expect(err.providerName).toBe('MONNIFY');
     expect(err.rawProviderResponse).toEqual({ rawCode: '90099' });
   });
 

@@ -6,7 +6,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateInterswitchReference,
+  generateNumericReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -499,7 +499,6 @@ export class ElectricityService {
         metadata: {
           disco: input.disco,
           meterType: input.meterType,
-          interswitchPaymentCode: paymentCode,
           monnifyBillerCode,
           monnifyProductCode,
         },
@@ -580,7 +579,6 @@ export class ElectricityService {
           metadata: {
             disco: input.disco,
             meterType: alternateType,
-            interswitchPaymentCode: altPaymentCode,
             monnifyBillerCode: altMonnifyBiller,
             monnifyProductCode: altMonnifyProduct,
           },
@@ -725,7 +723,7 @@ export class ElectricityService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row
-    const requestReference = generateInterswitchReference('2411', 12);
+    const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('ELEC');
 
     const [txnRow] = await db
@@ -783,7 +781,6 @@ export class ElectricityService {
           metadata: {
             disco: input.disco,
             meterType: input.meterType,
-            interswitchPaymentCode: paymentCode,
             monnifyBillerCode,
             monnifyProductCode,
           },

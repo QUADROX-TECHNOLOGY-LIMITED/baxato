@@ -5,7 +5,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateInterswitchReference,
+  generateNumericReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -98,7 +98,6 @@ export interface CableBouquet {
   priceKobo: bigint;
   priceNaira: number;
   discountBps: number;
-  interswitchPaymentCode: string;
   monnifyPlanCode: string;
   description: string;
 }
@@ -115,7 +114,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 440000n, // ₦4,400
     priceNaira: 4400,
     discountBps: 150,
-    interswitchPaymentCode: '104154',
     monnifyPlanCode: 'prd-dstv-padi',
     description: 'Entry-level local entertainment, news, and kids channels',
   },
@@ -129,7 +127,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 600000n, // ₦6,000
     priceNaira: 6000,
     discountBps: 150,
-    interswitchPaymentCode: '104152',
     monnifyPlanCode: 'prd-dstv-yng-e36',
     description: 'Expanded movie, family entertainment, and music bouquet',
   },
@@ -143,7 +140,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 1100000n, // ₦11,000
     priceNaira: 11000,
     discountBps: 150,
-    interswitchPaymentCode: '104153',
     monnifyPlanCode: 'prd-dstv-cfm-e36',
     description: 'Over 120 channels including sports, movies, and documentary',
   },
@@ -157,7 +153,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 1900000n, // ₦19,000
     priceNaira: 19000,
     discountBps: 150,
-    interswitchPaymentCode: '10403',
     monnifyPlanCode: 'prd-dstv-cmp-e36',
     description: 'Premier League football, international movies, and drama series',
   },
@@ -171,7 +166,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 3000000n, // ₦30,000
     priceNaira: 30000,
     discountBps: 150,
-    interswitchPaymentCode: '10430',
     monnifyPlanCode: 'prd-dstv-cppl-e36',
     description: 'Champions League, UFC, motorsport, and premium entertainment',
   },
@@ -185,7 +179,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 4450000n, // ₦44,500
     priceNaira: 44500,
     discountBps: 150,
-    interswitchPaymentCode: '10401',
     monnifyPlanCode: 'prd-dstv-prwa-e36',
     description: 'All DStv channels, all sports, Showmax included and 4K Ultra HD',
   },
@@ -199,7 +192,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 600000n, // ₦6,000
     priceNaira: 6000,
     discountBps: 150,
-    interswitchPaymentCode: '10436',
     monnifyPlanCode: 'prd-dstv-hdpvr',
     description: 'Link up to 3 decoders under one primary subscription',
   },
@@ -215,7 +207,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 190000n, // ₦1,900
     priceNaira: 1900,
     discountBps: 150,
-    interswitchPaymentCode: '459137',
     monnifyPlanCode: 'prd-gotv-smallie-mo',
     description: 'Essential local news, music, and religious channels',
   },
@@ -229,7 +220,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 390000n, // ₦3,900
     priceNaira: 3900,
     discountBps: 150,
-    interswitchPaymentCode: '459120',
     monnifyPlanCode: 'product-gotv-jinja',
     description: 'Over 45 family channels with Nollywood movies and cartoons',
   },
@@ -243,7 +233,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 580000n, // ₦5,800
     priceNaira: 5800,
     discountBps: 150,
-    interswitchPaymentCode: '459121',
     monnifyPlanCode: 'product-gotv-jolli',
     description: 'Over 65 channels, telenovelas, movies, and youth entertainment',
   },
@@ -257,7 +246,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 850000n, // ₦8,500
     priceNaira: 8500,
     discountBps: 150,
-    interswitchPaymentCode: '459119',
     monnifyPlanCode: 'product-gotv-max',
     description: 'La Liga, Serie A, WWE, international movies, and kids TV',
   },
@@ -271,7 +259,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 1140000n, // ₦11,400
     priceNaira: 11400,
     discountBps: 150,
-    interswitchPaymentCode: '459133',
     monnifyPlanCode: 'product-gotv-supa',
     description: 'Over 80 channels including Nick Jr, Africa Magic Urban, and sports',
   },
@@ -285,7 +272,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 1680000n, // ₦16,800
     priceNaira: 16800,
     discountBps: 150,
-    interswitchPaymentCode: '459134',
     monnifyPlanCode: 'prd-gotv-supa-pls',
     description: 'All Premier League football matches and complete GOtv package',
   },
@@ -301,7 +287,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 210000n, // ₦2,100
     priceNaira: 2100,
     discountBps: 200,
-    interswitchPaymentCode: '24019',
     monnifyPlanCode: 'product-star-nova',
     description: 'Affordable digital TV package with 30+ local channels',
   },
@@ -315,7 +300,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 400000n, // ₦4,000
     priceNaira: 4000,
     discountBps: 200,
-    interswitchPaymentCode: '24017',
     monnifyPlanCode: 'product-star-basic',
     description: 'Over 45 digital channels including movies, kids, and news',
   },
@@ -329,7 +313,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 600000n, // ₦6,000
     priceNaira: 6000,
     discountBps: 200,
-    interswitchPaymentCode: '24013',
     monnifyPlanCode: 'product-star-classic',
     description: 'Comprehensive bouquet with Bundesliga football and entertainment',
   },
@@ -343,7 +326,6 @@ export const CABLE_BOUQUETS: CableBouquet[] = [
     priceKobo: 950000n, // ₦9,500
     priceNaira: 9500,
     discountBps: 200,
-    interswitchPaymentCode: '24025',
     monnifyPlanCode: 'prd-star-sup',
     description: 'Full HD access to all StarTimes sports, movie, and global channels',
   },
@@ -498,11 +480,10 @@ export class CableService {
     try {
       const result = await this.router.validateCustomer({
         serviceType: ServiceType.CABLE_TV,
-        paymentCode: opInfo.defaultPaymentCode,
+        paymentCode: OPERATOR_TO_MONNIFY_INFO[operator]?.billerCode || opInfo.defaultPaymentCode,
         customerId: cleanSmartcard,
         metadata: {
           operator,
-          interswitchPaymentCode: opInfo.defaultPaymentCode,
           monnifyBillerCode: OPERATOR_TO_MONNIFY_INFO[operator]?.billerCode || `biller-${operator.toLowerCase()}`,
           monnifyProductCode: OPERATOR_TO_MONNIFY_INFO[operator]?.defaultProductCode || 'prd-dstv-padi',
         },
@@ -584,7 +565,7 @@ export class CableService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row
-    const requestReference = generateInterswitchReference('2411', 12);
+    const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('CABLE');
 
     const [txnRow] = await db
@@ -626,7 +607,7 @@ export class CableService {
       const vendResult = await this.router.vendService(
         {
           serviceType: ServiceType.CABLE_TV,
-          paymentCode: bouquet.interswitchPaymentCode,
+          paymentCode: bouquet.monnifyPlanCode,
           customerId: cleanSmartcard,
           customerMobile: input.customerMobile,
           customerName: input.customerName,
@@ -634,7 +615,6 @@ export class CableService {
           requestReference,
           metadata: {
             operator: bouquet.operator,
-            interswitchPaymentCode: bouquet.interswitchPaymentCode,
             monnifyBillerCode: OPERATOR_TO_MONNIFY_INFO[bouquet.operator]?.billerCode || `biller-${bouquet.operator.toLowerCase()}`,
             monnifyPlanCode: bouquet.monnifyPlanCode,
             monnifyProductCode: bouquet.monnifyPlanCode,

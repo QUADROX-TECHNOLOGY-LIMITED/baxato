@@ -5,7 +5,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateInterswitchReference,
+  generateNumericReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -37,7 +37,6 @@ import { auditService } from './audit.service.js';
 export interface TelcoNetworkConfig {
   network: TelecomNetwork;
   name: string;
-  interswitchPaymentCode: string;
   monnifyNetworkCode: string;
   discountBps: number; // Basis points: 250 = 2.5%
   minAmountKobo: bigint;
@@ -49,7 +48,6 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
   [TelecomNetwork.MTN]: {
     network: TelecomNetwork.MTN,
     name: 'MTN Nigeria',
-    interswitchPaymentCode: '10901',
     monnifyNetworkCode: 'MTN',
     discountBps: 250, // 2.5% discount
     minAmountKobo: 10000n, // ₦100
@@ -59,7 +57,6 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
   [TelecomNetwork.AIRTEL]: {
     network: TelecomNetwork.AIRTEL,
     name: 'Airtel Nigeria',
-    interswitchPaymentCode: '90102',
     monnifyNetworkCode: 'AIRTEL',
     discountBps: 250, // 2.5% discount
     minAmountKobo: 10000n, // ₦100
@@ -69,7 +66,6 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
   [TelecomNetwork.GLO]: {
     network: TelecomNetwork.GLO,
     name: 'Globacom',
-    interswitchPaymentCode: '40201',
     monnifyNetworkCode: 'GLO',
     discountBps: 350, // 3.5% discount
     minAmountKobo: 10000n, // ₦100
@@ -79,7 +75,6 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
   [TelecomNetwork.NINEMOBILE]: {
     network: TelecomNetwork.NINEMOBILE,
     name: '9mobile',
-    interswitchPaymentCode: '10801',
     monnifyNetworkCode: '9MOBILE',
     discountBps: 300, // 3.0% discount
     minAmountKobo: 10000n, // ₦100
@@ -292,7 +287,7 @@ export class AirtimeService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate reference & initialize service transaction row
-    const requestReference = generateInterswitchReference('2411', 12);
+    const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('AIRTIME');
 
     const [txnRow] = await db
@@ -329,7 +324,7 @@ export class AirtimeService {
       const vendResult = await this.router.vendService(
         {
           serviceType: ServiceType.AIRTIME,
-          paymentCode: config.interswitchPaymentCode, // ProviderRouter maps to correct biller code
+          paymentCode: config.monnifyNetworkCode,
           customerId: normalizedPhone,
           amountKobo: faceAmountKobo,
           requestReference,

@@ -41,20 +41,6 @@ export const envSchema = z.object({
   IDENTITY_API_BASE_URL: z.string().url().optional(),
   IDENTITY_APP_ID: z.string().default('').optional(),
 
-  // Interswitch Orion SVA v5
-  INTERSWITCH_CLIENT_ID: z.string().default(''),
-  INTERSWITCH_CLIENT_SECRET: z.string().default(''),
-  INTERSWITCH_PASSPORT_URL: z
-    .string()
-    .url()
-    .default('https://passport.interswitchng.com/passport/oauth/token'),
-  INTERSWITCH_BASE_URL: z
-    .string()
-    .url()
-    .default('https://orion.interswitchng.com'),
-  INTERSWITCH_TERMINAL_ID: z.string().default('3XAT0001'),
-  INTERSWITCH_TRANSFER_CODE_PREFIX: z.string().default('2411'),
-
   // Monnify Provider (Dual Provider / Wallet Funding)
   MONNIFY_API_KEY: z.string().default(''),
   MONNIFY_SECRET_KEY: z.string().default(''),
@@ -64,6 +50,15 @@ export const envSchema = z.object({
     .default('https://sandbox.monnify.com'),
   MONNIFY_CONTRACT_CODE: z.string().default(''),
   MONNIFY_WALLET_ACCOUNT_NUMBER: z.string().default('').optional(),
+
+  // VTpass Provider (Bills Payment / Electricity & Airtime)
+  VTPASS_BASE_URL: z
+    .string()
+    .url()
+    .default('https://sandbox.vtpass.com/api'),
+  VTPASS_API_KEY: z.string().default(''),
+  VTPASS_SECRET_KEY: z.string().default(''),
+  VTPASS_PUBLIC_KEY: z.string().default(''),
 
   // Webhooks & Security
   WEBHOOK_SIGNING_SECRET: z.string().default(''),
@@ -100,8 +95,9 @@ export function getSanitizedEnv(env: Env): Record<string, unknown> {
     CLERK_SECRET_KEY: env.CLERK_SECRET_KEY ? '****' : undefined,
     WHATSAPP_API_TOKEN: env.WHATSAPP_API_TOKEN ? '****' : undefined,
     IDENTITY_API_KEY: env.IDENTITY_API_KEY ? '****' : undefined,
-    INTERSWITCH_CLIENT_SECRET: env.INTERSWITCH_CLIENT_SECRET ? '****' : undefined,
     MONNIFY_SECRET_KEY: env.MONNIFY_SECRET_KEY ? '****' : undefined,
+    VTPASS_SECRET_KEY: env.VTPASS_SECRET_KEY ? '****' : undefined,
+    VTPASS_API_KEY: env.VTPASS_API_KEY ? '****' : undefined,
     WEBHOOK_SIGNING_SECRET: env.WEBHOOK_SIGNING_SECRET ? '****' : undefined,
     ENCRYPTION_MASTER_KEY: env.ENCRYPTION_MASTER_KEY ? '****' : undefined,
     ZEPTOMAIL_API_KEY: env.ZEPTOMAIL_API_KEY ? '****' : undefined,

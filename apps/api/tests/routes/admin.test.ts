@@ -313,16 +313,16 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
         },
         payload: {
           serviceType: ServiceType.AIRTIME,
-          strategy: ProviderRoutingStrategy.INTERSWITCH_PRIMARY_MONNIFY_FALLBACK,
-          allowFailover: true,
+          strategy: ProviderRoutingStrategy.MONNIFY_ONLY,
+          allowFailover: false,
         },
       });
 
       expect(res.statusCode).toBe(200);
       const body = res.json<ApiResponse<any>>();
       expect(body.success).toBe(true);
-      expect(body.data.config.primaryProvider).toBe(ProviderName.INTERSWITCH);
-      expect(body.data.config.fallbackProvider).toBe(ProviderName.MONNIFY);
+      expect(body.data.config.primaryProvider).toBe(ProviderName.MONNIFY);
+      expect(body.data.config.strategy).toBe(ProviderRoutingStrategy.MONNIFY_ONLY);
     });
 
     it('rejects invalid serviceType with 400', async () => {

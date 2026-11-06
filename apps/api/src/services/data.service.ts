@@ -5,7 +5,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateInterswitchReference,
+  generateNumericReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -45,7 +45,6 @@ export interface DataPlan {
   priceKobo: bigint;
   priceNaira: number;
   discountBps: number; // e.g. 250 = 2.5%
-  interswitchPaymentCode: string;
   monnifyPlanCode: string;
 }
 
@@ -62,7 +61,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 10000n, // ₦100 (Verified Pilot: 34814470)
     priceNaira: 100,
     discountBps: 250,
-    interswitchPaymentCode: '34814470',
     monnifyPlanCode: 'MTN_100MB_1D',
   },
   {
@@ -76,7 +74,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 50000n, // ₦500
     priceNaira: 500,
     discountBps: 250,
-    interswitchPaymentCode: '34814471',
     monnifyPlanCode: 'MTN_1GB_2D',
   },
   {
@@ -90,7 +87,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 100000n, // ₦1,000
     priceNaira: 1000,
     discountBps: 250,
-    interswitchPaymentCode: '34814472',
     monnifyPlanCode: 'MTN_1.5GB_7D',
   },
   {
@@ -104,7 +100,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 150000n, // ₦1,500
     priceNaira: 1500,
     discountBps: 250,
-    interswitchPaymentCode: '34814473',
     monnifyPlanCode: 'MTN_2.5GB_30D',
   },
   {
@@ -118,7 +113,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 500000n, // ₦5,000
     priceNaira: 5000,
     discountBps: 250,
-    interswitchPaymentCode: '34814474',
     monnifyPlanCode: 'MTN_10GB_30D',
   },
 
@@ -134,7 +128,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 10000n, // ₦100 (Verified Pilot: 04277538)
     priceNaira: 100,
     discountBps: 250,
-    interswitchPaymentCode: '04277538',
     monnifyPlanCode: 'AIRTEL_100MB_1D',
   },
   {
@@ -148,7 +141,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 50000n, // ₦500
     priceNaira: 500,
     discountBps: 250,
-    interswitchPaymentCode: '04277539',
     monnifyPlanCode: 'AIRTEL_1GB_2D',
   },
   {
@@ -162,7 +154,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 100000n, // ₦1,000
     priceNaira: 1000,
     discountBps: 250,
-    interswitchPaymentCode: '04277540',
     monnifyPlanCode: 'AIRTEL_1.5GB_7D',
   },
   {
@@ -176,7 +167,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 150000n, // ₦1,500
     priceNaira: 1500,
     discountBps: 250,
-    interswitchPaymentCode: '04277541',
     monnifyPlanCode: 'AIRTEL_3GB_30D',
   },
   {
@@ -190,7 +180,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 500000n, // ₦5,000
     priceNaira: 5000,
     discountBps: 250,
-    interswitchPaymentCode: '04277542',
     monnifyPlanCode: 'AIRTEL_10GB_30D',
   },
 
@@ -206,7 +195,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 10000n, // ₦100
     priceNaira: 100,
     discountBps: 350, // 3.5%
-    interswitchPaymentCode: '4020101',
     monnifyPlanCode: 'GLO_150MB_1D',
   },
   {
@@ -220,7 +208,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 50000n, // ₦500
     priceNaira: 500,
     discountBps: 350,
-    interswitchPaymentCode: '4020102',
     monnifyPlanCode: 'GLO_1.25GB_7D',
   },
   {
@@ -234,7 +221,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 100000n, // ₦1,000
     priceNaira: 1000,
     discountBps: 350,
-    interswitchPaymentCode: '4020103',
     monnifyPlanCode: 'GLO_2.5GB_30D',
   },
   {
@@ -248,7 +234,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 250000n, // ₦2,500
     priceNaira: 2500,
     discountBps: 350,
-    interswitchPaymentCode: '4020104',
     monnifyPlanCode: 'GLO_7.5GB_30D',
   },
 
@@ -264,7 +249,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 10000n, // ₦100
     priceNaira: 100,
     discountBps: 300, // 3.0%
-    interswitchPaymentCode: '1080101',
     monnifyPlanCode: '9MOB_100MB_1D',
   },
   {
@@ -278,7 +262,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 50000n, // ₦500
     priceNaira: 500,
     discountBps: 300,
-    interswitchPaymentCode: '1080102',
     monnifyPlanCode: '9MOB_1GB_7D',
   },
   {
@@ -292,7 +275,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 120000n, // ₦1,200
     priceNaira: 1200,
     discountBps: 300,
-    interswitchPaymentCode: '1080103',
     monnifyPlanCode: '9MOB_2.5GB_30D',
   },
   {
@@ -306,7 +288,6 @@ export const DATA_PLANS: DataPlan[] = [
     priceKobo: 400000n, // ₦4,000
     priceNaira: 4000,
     discountBps: 300,
-    interswitchPaymentCode: '1080104',
     monnifyPlanCode: '9MOB_11GB_30D',
   },
 ];
@@ -480,7 +461,7 @@ export class DataService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row
-    const requestReference = generateInterswitchReference('2411', 12);
+    const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('DATA');
 
     const [txnRow] = await db
@@ -521,7 +502,7 @@ export class DataService {
       const vendResult = await this.router.vendService(
         {
           serviceType: ServiceType.DATA,
-          paymentCode: plan.interswitchPaymentCode,
+          paymentCode: plan.monnifyPlanCode,
           customerId: normalizedPhone,
           amountKobo: faceAmountKobo,
           requestReference,

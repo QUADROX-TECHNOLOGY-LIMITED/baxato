@@ -91,7 +91,7 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
       expect(plan).toBeDefined();
       expect(plan.name).toBe('Airtel 100MB Daily Plan');
       expect(plan.dataAllowance).toBe('100MB');
-      expect(plan.interswitchPaymentCode).toBe('04277538');
+      expect(plan.monnifyPlanCode).toBe('AIRTEL_100MB_1D');
     });
 
     it('throws NotFoundError for non-existent plan ID', () => {

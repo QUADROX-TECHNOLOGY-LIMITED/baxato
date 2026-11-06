@@ -20,8 +20,8 @@ interface ServiceItem {
   name: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-  defaultPrimary: 'MONNIFY' | 'INTERSWITCH';
-  defaultFallback?: 'MONNIFY' | 'INTERSWITCH' | 'NONE';
+  defaultPrimary: 'MONNIFY';
+  defaultFallback?: 'NONE' | 'MONNIFY';
 }
 
 const SERVICES: ServiceItem[] = [
@@ -31,7 +31,7 @@ const SERVICES: ServiceItem[] = [
     description: 'MTN, Airtel, Glo, 9mobile VTU',
     icon: Smartphone,
     defaultPrimary: 'MONNIFY',
-    defaultFallback: 'INTERSWITCH',
+    defaultFallback: 'NONE',
   },
   {
     type: 'DATA',
@@ -39,7 +39,7 @@ const SERVICES: ServiceItem[] = [
     description: 'SME and direct data plans',
     icon: Wifi,
     defaultPrimary: 'MONNIFY',
-    defaultFallback: 'INTERSWITCH',
+    defaultFallback: 'NONE',
   },
   {
     type: 'ELECTRICITY',
@@ -47,22 +47,22 @@ const SERVICES: ServiceItem[] = [
     description: '12 DisCos prepaid & postpaid',
     icon: Zap,
     defaultPrimary: 'MONNIFY',
-    defaultFallback: 'INTERSWITCH',
+    defaultFallback: 'NONE',
   },
   {
     type: 'CABLE_TV',
     name: 'Cable TV',
     description: 'DStv, GOtv, StarTimes',
     icon: Tv,
-    defaultPrimary: 'INTERSWITCH',
-    defaultFallback: 'MONNIFY',
+    defaultPrimary: 'MONNIFY',
+    defaultFallback: 'NONE',
   },
   {
     type: 'EXAM_PIN',
     name: 'Exam PINs',
     description: 'WAEC, JAMB, NECO tokens',
     icon: GraduationCap,
-    defaultPrimary: 'INTERSWITCH',
+    defaultPrimary: 'MONNIFY',
     defaultFallback: 'NONE',
   },
 ];
@@ -79,8 +79,8 @@ export default function StaffRoutingPage() {
     Record<
       string,
       {
-        primary: 'MONNIFY' | 'INTERSWITCH';
-        fallback: 'NONE' | 'MONNIFY' | 'INTERSWITCH';
+        primary: 'MONNIFY';
+        fallback: 'NONE' | 'MONNIFY';
         allowFailover: boolean;
       }
     >
@@ -137,8 +137,8 @@ export default function StaffRoutingPage() {
     setFormState((prev) => {
       const current = prev[serviceType] || {
         primary: 'MONNIFY',
-        fallback: 'INTERSWITCH',
-        allowFailover: true,
+        fallback: 'NONE',
+        allowFailover: false,
       };
 
       const updated = { ...current, [field]: value };
@@ -154,15 +154,7 @@ export default function StaffRoutingPage() {
   };
 
   const computeStrategy = (primary: string, fallback: string): string => {
-    if (primary === 'MONNIFY') {
-      return fallback === 'INTERSWITCH'
-        ? 'MONNIFY_PRIMARY_INTERSWITCH_FALLBACK'
-        : 'MONNIFY_ONLY';
-    } else {
-      return fallback === 'MONNIFY'
-        ? 'INTERSWITCH_PRIMARY_MONNIFY_FALLBACK'
-        : 'INTERSWITCH_ONLY';
-    }
+    return 'MONNIFY_ONLY';
   };
 
   const handleSave = async (serviceType: string) => {
@@ -301,13 +293,12 @@ export default function StaffRoutingPage() {
                         handleFieldChange(
                           s.type,
                           'primary',
-                          e.target.value as 'MONNIFY' | 'INTERSWITCH',
+                          e.target.value as 'MONNIFY',
                         )
                       }
                       className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
                     >
                       <option value="MONNIFY">Monnify</option>
-                      <option value="INTERSWITCH">Interswitch</option>
                     </select>
                   </div>
 
@@ -322,7 +313,7 @@ export default function StaffRoutingPage() {
                         handleFieldChange(
                           s.type,
                           'fallback',
-                          e.target.value as 'NONE' | 'MONNIFY' | 'INTERSWITCH',
+                          e.target.value as 'NONE' | 'MONNIFY',
                         )
                       }
                       className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none"
@@ -330,9 +321,6 @@ export default function StaffRoutingPage() {
                       <option value="NONE">None</option>
                       {current.primary !== 'MONNIFY' && (
                         <option value="MONNIFY">Monnify</option>
-                      )}
-                      {current.primary !== 'INTERSWITCH' && (
-                        <option value="INTERSWITCH">Interswitch</option>
                       )}
                     </select>
                   </div>
