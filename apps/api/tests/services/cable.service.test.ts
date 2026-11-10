@@ -300,5 +300,59 @@ describe('CableService (Validation, Concurrency Locking & Multi-Provider Vending
       expect(history.transactions[0].smartcard).toBe('1041541234');
       expect(history.transactions[0].operator).toBe(CableOperator.DSTV);
     });
+
+    it('passes vtpassVariationCode in router metadata during bouquet purchase', async () => {
+      await service.purchaseBouquet({
+        businessId: testBizId,
+        userId: testUserId,
+        operator: CableOperator.DSTV,
+        smartcard: '1041541234',
+        bouquetId: 'dstv-padi',
+      });
+
+      expect(mockRouter.vendService).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            operator: CableOperator.DSTV,
+            bouquetId: 'dstv-padi',
+            vtpassVariationCode: 'dstv-padi',
+          }),
+        }),
+        expect.any(String),
+      );
+    });
+
+    it('handles PROCESSING status from router gracefully without rolling back or failing', async () => {
+      (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: TransactionStatus.PROCESSING,
+        providerName: 'VTPASS',
+        providerReference: 'VTP_PENDING_001',
+        responseCode: '099',
+        responseMessage: 'Transaction is currently processing',
+      });
+
+      const receipt = await service.purchaseBouquet({
+        businessId: testBizId,
+        userId: testUserId,
+        operator: CableOperator.DSTV,
+        smartcard: '1041541234',
+        bouquetId: 'dstv-confam',
+      });
+
+      expect(receipt.status).toBe(TransactionStatus.PROCESSING);
+      expect(receipt.providerName).toBe('VTPASS');
+      expect(receipt.providerReference).toBe('VTP_PENDING_001');
+
+      // Wallet debited and not refunded
+      const wallet = inMemoryDb.wallets.find((w) => w.id === mainWalletId);
+      expect(wallet?.balance).toBe(3916500n);
+
+      // Service transaction marked PROCESSING
+      expect(inMemoryDb.serviceTransactions).toHaveLength(1);
+      expect(inMemoryDb.serviceTransactions[0].status).toBe(TransactionStatus.PROCESSING);
+
+      // Ledger entries committed for processing transaction
+      expect(inMemoryDb.financialLedger).toHaveLength(2);
+    });
   });
 });

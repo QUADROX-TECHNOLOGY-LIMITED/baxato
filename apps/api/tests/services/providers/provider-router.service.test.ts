@@ -14,6 +14,7 @@ import {
   CustomerValidationResult,
   ServiceVendingResult,
 } from '../../../src/services/providers/provider.interface';
+import { CircuitBreakerTimeoutError } from '../../../src/services/providers/circuit-breaker';
 
 describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
   let router: ProviderRouterService;
@@ -166,6 +167,118 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
     expect(mockVtpass.vendService).toHaveBeenCalledTimes(1);
     expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
     expect(result.providerName).toBe(ProviderName.VTPASS);
+  });
+
+  it('blocks failover and returns PROCESSING when primary times out and requery confirms PROCESSING', async () => {
+    router.updateRoutingConfig(
+      ServiceType.ELECTRICITY,
+      ProviderRoutingStrategy.PRIMARY_FALLBACK,
+      true,
+    );
+
+    // Primary Monnify times out
+    (mockMonnify.vendService as any).mockRejectedValueOnce(
+      new CircuitBreakerTimeoutError('MONNIFY', 15000),
+    );
+
+    // Monnify requery reports transaction is in-flight (PROCESSING)
+    (mockMonnify.requeryTransaction as any).mockResolvedValueOnce({
+      status: TransactionStatus.PROCESSING,
+      providerReference: 'MNFY_IN_FLIGHT_99',
+      responseCode: '099',
+      responseMessage: 'Order received and processing downstream',
+    });
+
+    const result = await router.vendService({
+      serviceType: ServiceType.ELECTRICITY,
+      paymentCode: '053396201',
+      customerId: '01234567890',
+      amountKobo: 500000n,
+      requestReference: 'REF_TIMEOUT_GUARD_1',
+    });
+
+    // Primary was called and queried
+    expect(mockMonnify.vendService).toHaveBeenCalledTimes(1);
+    expect(mockMonnify.requeryTransaction).toHaveBeenCalledWith('REF_TIMEOUT_GUARD_1');
+
+    // Crucial: Fallback was NOT called to prevent double-charging/double-vending
+    expect(mockVtpass.vendService).not.toHaveBeenCalled();
+
+    expect(result.status).toBe(TransactionStatus.PROCESSING);
+    expect(result.providerName).toBe(ProviderName.MONNIFY);
+    expect(result.providerReference).toBe('MNFY_IN_FLIGHT_99');
+  });
+
+  it('resolves transaction as SUCCESSFUL when primary times out and requery confirms SUCCESSFUL', async () => {
+    router.updateRoutingConfig(
+      ServiceType.ELECTRICITY,
+      ProviderRoutingStrategy.PRIMARY_FALLBACK,
+      true,
+    );
+
+    // Primary Monnify times out
+    (mockMonnify.vendService as any).mockRejectedValueOnce(
+      new CircuitBreakerTimeoutError('MONNIFY', 15000),
+    );
+
+    // Monnify requery reveals it actually went through successfully
+    (mockMonnify.requeryTransaction as any).mockResolvedValueOnce({
+      status: TransactionStatus.SUCCESSFUL,
+      providerReference: 'MNFY_RESOLVED_100',
+      token: '1234 5678 9012 3456 7890',
+      units: '45 kWh',
+      responseCode: '0',
+      responseMessage: 'Token generated successfully',
+    });
+
+    const result = await router.vendService({
+      serviceType: ServiceType.ELECTRICITY,
+      paymentCode: '053396201',
+      customerId: '01234567890',
+      amountKobo: 500000n,
+      requestReference: 'REF_TIMEOUT_GUARD_2',
+    });
+
+    expect(mockMonnify.vendService).toHaveBeenCalledTimes(1);
+    expect(mockMonnify.requeryTransaction).toHaveBeenCalledWith('REF_TIMEOUT_GUARD_2');
+    expect(mockVtpass.vendService).not.toHaveBeenCalled();
+
+    expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+    expect(result.providerName).toBe(ProviderName.MONNIFY);
+    expect(result.providerReference).toBe('MNFY_RESOLVED_100');
+    expect(result.token).toBe('1234 5678 9012 3456 7890');
+    expect(result.units).toBe('45 kWh');
+  });
+
+  it('aborts failover and throws timeout error when primary times out and requery is indeterminate', async () => {
+    router.updateRoutingConfig(
+      ServiceType.ELECTRICITY,
+      ProviderRoutingStrategy.PRIMARY_FALLBACK,
+      true,
+    );
+
+    // Primary times out
+    (mockMonnify.vendService as any).mockRejectedValueOnce(
+      new CircuitBreakerTimeoutError('MONNIFY', 15000),
+    );
+
+    // Requery also fails / is indeterminate
+    (mockMonnify.requeryTransaction as any).mockRejectedValueOnce(
+      new Error('Requery service unreachable'),
+    );
+
+    await expect(
+      router.vendService({
+        serviceType: ServiceType.ELECTRICITY,
+        paymentCode: '053396201',
+        customerId: '01234567890',
+        amountKobo: 500000n,
+        requestReference: 'REF_TIMEOUT_GUARD_3',
+      }),
+    ).rejects.toThrow(CircuitBreakerTimeoutError);
+
+    // Secondary provider must NOT be invoked when state is indeterminate
+    expect(mockVtpass.vendService).not.toHaveBeenCalled();
   });
 
   it('throws error when primary circuit breaker is OPEN and no fallback is enabled', async () => {

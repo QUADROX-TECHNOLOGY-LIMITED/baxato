@@ -29,8 +29,8 @@ export async function seedProviders() {
         config: {
           airtime: true,
           electricity: true,
+          cable: true,
           data: false,
-          cable: false,
           exam_pin: false,
         },
       },
@@ -54,6 +54,19 @@ export async function seedProviders() {
               electricity: true,
               cable: true,
               exam_pin: true,
+            },
+          })
+          .where(eq(providers.id, p.id));
+      }
+      if (p.name === ProviderName.VTPASS && cfg.cable === false) {
+        await db
+          .update(providers)
+          .set({
+            config: {
+              ...cfg,
+              airtime: true,
+              electricity: true,
+              cable: true,
             },
           })
           .where(eq(providers.id, p.id));

@@ -19,7 +19,11 @@ import {
 } from './provider.interface.js';
 import { MonnifyProvider } from './monnify.provider.js';
 import { VtpassProvider } from './vtpass.provider.js';
-import { CircuitBreaker, CircuitBreakerMetrics } from './circuit-breaker.js';
+import {
+  CircuitBreaker,
+  CircuitBreakerMetrics,
+  CircuitBreakerTimeoutError,
+} from './circuit-breaker.js';
 import { sanitizeForJson } from '../audit.service.js';
 
 export interface ProviderRouterOptions {
@@ -371,6 +375,80 @@ export class ProviderRouterService {
     }
 
     // 2. Automatic Failover to Fallback Provider
+    // SAFETY GUARD: If primary timed out, it may still be executing downstream with the telco/biller.
+    // Blindly falling over to a secondary provider causes duplicate vending (double-charging).
+    const isTimeout =
+      caughtError instanceof CircuitBreakerTimeoutError ||
+      (caughtError as any)?.code === 'TIMEOUT';
+
+    if (isTimeout && allowFailover && fallbackName) {
+      console.warn(
+        `[PROVIDER FAILOVER GUARD] Primary ${primaryName} timed out. Requerying before considering failover to prevent duplicate transaction...`,
+      );
+      try {
+        const requery = await primaryProvider.requeryTransaction(request.requestReference);
+        if (requery && requery.status === TransactionStatus.SUCCESSFUL) {
+          console.log(`[PROVIDER REQUERY RESOLVED] Primary ${primaryName} succeeded on requery.`);
+          const resolved: ServiceVendingResult = {
+            status: TransactionStatus.SUCCESSFUL,
+            providerName: primaryName,
+            providerReference: requery.providerReference || request.requestReference,
+            requestReference: request.requestReference,
+            amountKobo: request.amountKobo,
+            responseCode: requery.responseCode || '000',
+            responseMessage: requery.responseMessage || 'Delivered on requery',
+            token: requery.token,
+            units: requery.units,
+            tariff: requery.tariff,
+            feeder: requery.feeder,
+            rawResponse: requery.rawResponse,
+          };
+          await this.auditProviderTransaction(
+            transactionId,
+            primaryName,
+            request,
+            resolved,
+            resolved.responseCode,
+            Date.now() - startTime,
+          );
+          return resolved;
+        } else if (
+          requery &&
+          (requery.status === TransactionStatus.PROCESSING ||
+            requery.status === TransactionStatus.PENDING)
+        ) {
+          console.log(
+            `[PROVIDER REQUERY IN-FLIGHT] Primary ${primaryName} is still processing. Marking as PROCESSING (failover blocked to prevent double-vend).`,
+          );
+          const processingResult: ServiceVendingResult = {
+            status: TransactionStatus.PROCESSING,
+            providerName: primaryName,
+            providerReference: requery.providerReference || request.requestReference,
+            requestReference: request.requestReference,
+            amountKobo: request.amountKobo,
+            responseCode: requery.responseCode || '099',
+            responseMessage: requery.responseMessage || 'Processing with provider',
+            rawResponse: requery.rawResponse,
+          };
+          await this.auditProviderTransaction(
+            transactionId,
+            primaryName,
+            request,
+            processingResult,
+            processingResult.responseCode,
+            Date.now() - startTime,
+          );
+          return processingResult;
+        }
+      } catch (_reqErr) {
+        // If requery is indeterminate, do not blindly double vend on secondary!
+        console.warn(
+          `[PROVIDER FAILOVER BLOCKED] Primary ${primaryName} is indeterminate after timeout. Aborting failover to prevent double-charge.`,
+        );
+        throw caughtError;
+      }
+    }
+
     if (allowFailover && fallbackName) {
       console.log(`[PROVIDER FAILOVER] Attempting failover to secondary provider: ${fallbackName}...`);
       executedProvider = fallbackName;

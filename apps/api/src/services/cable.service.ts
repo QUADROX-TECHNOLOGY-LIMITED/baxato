@@ -99,6 +99,7 @@ export interface CableBouquet {
   priceNaira: number;
   discountBps: number;
   monnifyPlanCode: string;
+  vtpassVariationCode?: string;
   description: string;
 }
 
@@ -615,6 +616,8 @@ export class CableService {
           requestReference,
           metadata: {
             operator: bouquet.operator,
+            bouquetId: bouquet.id,
+            vtpassVariationCode: bouquet.vtpassVariationCode || bouquet.id,
             monnifyBillerCode: OPERATOR_TO_MONNIFY_INFO[bouquet.operator]?.billerCode || `biller-${bouquet.operator.toLowerCase()}`,
             monnifyPlanCode: bouquet.monnifyPlanCode,
             monnifyProductCode: bouquet.monnifyPlanCode,
@@ -622,6 +625,74 @@ export class CableService {
         },
         txnRow.id,
       );
+
+      if (
+        vendResult.status === TransactionStatus.PROCESSING ||
+        vendResult.status === TransactionStatus.PENDING
+      ) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            providerName: vendResult.providerName,
+            providerReference: vendResult.providerReference || requestReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+
+        await ledgerService.recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'CABLE_TV_PURCHASE',
+          description: `Cable TV subscription (Processing): ${bouquet.name} on ${bouquet.operatorName} to smartcard ${cleanSmartcard}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        });
+
+        const receipt: CableReceiptDto = {
+          transactionId: txnRow.id,
+          status: TransactionStatus.PROCESSING,
+          operator: bouquet.operator,
+          operatorName: bouquet.operatorName,
+          smartcard: cleanSmartcard,
+          customerName: input.customerName || vendResult.customerName,
+          bouquetId: bouquet.id,
+          bouquetName: bouquet.name,
+          validity: bouquet.validity,
+          faceAmountKobo: faceAmountKobo.toString(),
+          faceAmountNaira: bouquet.priceNaira,
+          formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
+          discountKobo: discountKobo.toString(),
+          discountNaira: koboToNaira(discountKobo),
+          formattedDiscount: formatNairaFromKobo(discountKobo),
+          amountDebitedKobo: amountToDebitKobo.toString(),
+          amountDebitedNaira: koboToNaira(amountToDebitKobo),
+          formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+          reference: requestReference,
+          clientReference: clientRef,
+          providerReference: vendResult.providerReference,
+          providerName: vendResult.providerName,
+          createdAt: new Date(),
+        };
+
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
+        }
+
+        return receipt;
+      }
 
       if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
         throw new AppError(

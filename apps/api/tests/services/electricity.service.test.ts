@@ -384,5 +384,39 @@ describe('ElectricityService (DISCOs, STS Token Dispensing & Ledger Accounting)'
       expect(history.transactions[0].meterNumber).toBe('45077162324');
       expect(history.transactions[0].token).toBe('1817 3728 1779 9724 2246');
     });
+
+    it('handles PROCESSING status from router gracefully without rolling back or failing', async () => {
+      (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: TransactionStatus.PROCESSING,
+        providerName: 'VTPASS',
+        providerReference: 'VTP_ELEC_PENDING_001',
+        responseCode: '099',
+        responseMessage: 'Order received and processing with DisCo',
+      });
+
+      const receipt = await service.purchaseElectricity({
+        businessId: testBizId,
+        userId: testUserId,
+        disco: DiscoCode.IBEDC,
+        meterNumber: '45077162324',
+        meterType: ElectricityMeterType.PREPAID,
+        amountKobo: 50000n,
+      });
+
+      expect(receipt.status).toBe(TransactionStatus.PROCESSING);
+      expect(receipt.providerName).toBe('VTPASS');
+      expect(receipt.providerReference).toBe('VTP_ELEC_PENDING_001');
+
+      // Wallet debited and not refunded
+      const wallet = inMemoryDb.wallets.find((w) => w.id === mainWalletId);
+      expect(wallet?.balance).toBe(4950600n);
+
+      // Service transaction marked PROCESSING
+      expect(inMemoryDb.serviceTransactions).toHaveLength(1);
+      expect(inMemoryDb.serviceTransactions[0].status).toBe(TransactionStatus.PROCESSING);
+
+      // Ledger entries committed for processing transaction
+      expect(inMemoryDb.financialLedger).toHaveLength(2);
+    });
   });
 });

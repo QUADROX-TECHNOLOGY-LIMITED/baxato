@@ -187,6 +187,72 @@ describe('VtpassProvider Adapter Implementation', () => {
         }),
       ).rejects.toThrow(AppError);
     });
+
+    it('validates Cable TV smartcard successfully via /merchant-verify for DStv, GOtv, and StarTimes', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '000',
+            response_description: 'TRANSACTION SUCCESSFUL',
+            content: {
+              Customer_Name: 'CHUKWUMA OKONKWO',
+              Status: 'ACTIVE',
+              Balance: 0,
+            },
+          }),
+      } as any);
+
+      const result = await provider.validateCustomer({
+        serviceType: ServiceType.CABLE_TV,
+        paymentCode: 'gotv',
+        customerId: '1212121212',
+        metadata: {
+          operator: 'GOTV',
+        },
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.customerName).toBe('CHUKWUMA OKONKWO');
+      expect(result.responseCode).toBe('000');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://sandbox.vtpass.com/api/merchant-verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            billersCode: '1212121212',
+            serviceID: 'gotv',
+          }),
+        }),
+      );
+    });
+
+    it('returns isValid: false when Cable TV verification returns non-000 error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '012',
+            response_description: 'INVALID SMARTCARD NUMBER',
+          }),
+      } as any);
+
+      const result = await provider.validateCustomer({
+        serviceType: ServiceType.CABLE_TV,
+        paymentCode: 'dstv',
+        customerId: '0000000000',
+        metadata: {
+          operator: 'DSTV',
+        },
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.responseCode).toBe('012');
+      expect(result.responseMessage).toContain('INVALID SMARTCARD NUMBER');
+    });
   });
 
   describe('Service Vending (vendService)', () => {
@@ -408,6 +474,99 @@ describe('VtpassProvider Adapter Implementation', () => {
       expect(result.status).toBe(TransactionStatus.FAILED);
       expect(result.responseCode).toBe('014');
     });
+
+    it('vends Cable TV subscription with correct variation_code and subscription_type', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '000',
+            response_description: 'TRANSACTION SUCCESSFUL',
+            requestId: '20261106120000777777',
+            amount: 6000,
+            content: {
+              transactions: {
+                status: 'delivered',
+                product_name: 'GOtv Jolli',
+                transactionId: 'VTP_CABLE_GOTV_1',
+              },
+            },
+          }),
+      } as any);
+
+      const result = await provider.vendService({
+        serviceType: ServiceType.CABLE_TV,
+        paymentCode: 'gotv-jolli',
+        customerId: '1212121212',
+        customerMobile: '08011111111',
+        amountKobo: 600000n, // ₦6,000
+        requestReference: 'BAX_CABLE_GOTV_1',
+        metadata: {
+          operator: 'GOTV',
+          vtpassVariationCode: 'gotv-jolli',
+          subscriptionType: 'change',
+        },
+      });
+
+      expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+      expect(result.providerName).toBe(ProviderName.VTPASS);
+      expect(result.providerReference).toBe('VTP_CABLE_GOTV_1');
+
+      const lastFetchCall = (global.fetch as any).mock.calls[0];
+      expect(lastFetchCall[0]).toBe('https://sandbox.vtpass.com/api/pay');
+      expect(lastFetchCall[1].method).toBe('POST');
+      const body = JSON.parse(lastFetchCall[1].body);
+      expect(body.serviceID).toBe('gotv');
+      expect(body.billersCode).toBe('1212121212');
+      expect(body.variation_code).toBe('gotv-jolli');
+      expect(body.amount).toBe(6000);
+      expect(body.phone).toBe('08011111111');
+      expect(body.subscription_type).toBe('change');
+      expect(body.request_id).toBeDefined();
+    });
+
+    it('resolves variation code from CABLE_PLAN_TO_VTPASS_VARIATION when metadata.vtpassVariationCode not provided', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '000',
+            response_description: 'TRANSACTION SUCCESSFUL',
+            requestId: '20261106120000666666',
+            amount: 4400,
+            content: {
+              transactions: {
+                status: 'delivered',
+                product_name: 'DStv Padi',
+                transactionId: 'VTP_CABLE_DSTV_PADI',
+              },
+            },
+          }),
+      } as any);
+
+      const result = await provider.vendService({
+        serviceType: ServiceType.CABLE_TV,
+        paymentCode: 'prd-dstv-padi',
+        customerId: '1212121212',
+        amountKobo: 440000n,
+        requestReference: 'BAX_CABLE_DSTV_1',
+        metadata: {
+          operator: 'DSTV',
+        },
+      });
+
+      expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+      expect(result.providerReference).toBe('VTP_CABLE_DSTV_PADI');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://sandbox.vtpass.com/api/pay',
+        expect.objectContaining({
+          body: expect.stringContaining('"variation_code":"dstv-padi"'),
+        }),
+      );
+    });
   });
 
   describe('Requery (requeryTransaction)', () => {
@@ -531,3 +690,4 @@ describe('VtpassProvider Adapter Implementation', () => {
     });
   });
 });
+

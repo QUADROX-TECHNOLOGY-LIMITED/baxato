@@ -788,6 +788,97 @@ export class ElectricityService {
         txnRow.id,
       );
 
+      if (
+        vendResult.status === TransactionStatus.PROCESSING ||
+        vendResult.status === TransactionStatus.PENDING
+      ) {
+        const rawToken = vendResult.token || vendResult.pinData?.pin;
+        const formattedToken = rawToken ? this.formatStsToken(rawToken) : undefined;
+
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            providerName: vendResult.providerName,
+            providerReference: vendResult.providerReference || requestReference,
+            metadata: {
+              disco: input.disco,
+              discoName: config.name,
+              meterType: input.meterType,
+              token: formattedToken,
+              units: vendResult.units,
+              tariff: vendResult.tariff,
+              feeder: vendResult.feeder,
+              customerName: input.customerName || vendResult.customerName,
+              customerAddress: vendResult.customerAddress,
+              unitsCostKobo: vendResult.unitsCostKobo?.toString(),
+              vatKobo: vendResult.vatKobo?.toString(),
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+
+        await ledgerService.recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'ELECTRICITY_PURCHASE',
+          description: `Electricity purchase (Processing): ${formatNairaFromKobo(faceAmountKobo)} for ${config.name} (${input.meterType}) meter ${cleanMeter}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing balance
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        });
+
+        const receipt: ElectricityReceiptDto = {
+          transactionId: txnRow.id,
+          status: TransactionStatus.PROCESSING,
+          disco: input.disco,
+          discoName: config.name,
+          meterNumber: cleanMeter,
+          meterType: input.meterType,
+          customerName: input.customerName || vendResult.customerName,
+          customerAddress: vendResult.customerAddress,
+          token: formattedToken,
+          units: vendResult.units,
+          unitsCostKobo: vendResult.unitsCostKobo ? vendResult.unitsCostKobo.toString() : undefined,
+          unitsCostNaira: vendResult.unitsCostKobo ? koboToNaira(vendResult.unitsCostKobo) : undefined,
+          vatKobo: vendResult.vatKobo ? vendResult.vatKobo.toString() : undefined,
+          vatNaira: vendResult.vatKobo ? koboToNaira(vendResult.vatKobo) : undefined,
+          tariff: vendResult.tariff,
+          feeder: vendResult.feeder,
+          faceAmountKobo: faceAmountKobo.toString(),
+          faceAmountNaira: koboToNaira(faceAmountKobo),
+          formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
+          discountKobo: discountKobo.toString(),
+          discountNaira: koboToNaira(discountKobo),
+          formattedDiscount: formatNairaFromKobo(discountKobo),
+          amountDebitedKobo: amountToDebitKobo.toString(),
+          amountDebitedNaira: koboToNaira(amountToDebitKobo),
+          formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+          reference: requestReference,
+          clientReference: clientRef,
+          providerReference: vendResult.providerReference,
+          providerName: vendResult.providerName,
+          createdAt: new Date(),
+        };
+
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
+        }
+
+        return receipt;
+      }
+
       if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
         throw new AppError(
           `Electricity vending failed with response code ${vendResult.responseCode}: ${vendResult.responseMessage}`,

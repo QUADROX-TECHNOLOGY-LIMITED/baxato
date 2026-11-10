@@ -89,6 +89,90 @@ export const DISCO_TO_VTPASS_SERVICE_ID: Record<string, string> = {
   'aba-electric': 'aba-electric',
 };
 
+export const CABLE_OPERATOR_TO_VTPASS: Record<string, string> = {
+  DSTV: 'dstv',
+  GOTV: 'gotv',
+  STARTIMES: 'startimes',
+  SHOWMAX: 'showmax',
+  'biller-dstv': 'dstv',
+  'biller-gotv': 'gotv',
+  'biller-startimes': 'startimes',
+  'biller-showmax': 'showmax',
+  dstv: 'dstv',
+  gotv: 'gotv',
+  startimes: 'startimes',
+  showmax: 'showmax',
+};
+
+export const CABLE_PLAN_TO_VTPASS_VARIATION: Record<string, string> = {
+  // DStv
+  'dstv-padi': 'dstv-padi',
+  'prd-dstv-padi': 'dstv-padi',
+  '104154': 'dstv-padi',
+  'dstv-yanga': 'dstv-yanga',
+  'prd-dstv-yng-e36': 'dstv-yanga',
+  '104152': 'dstv-yanga',
+  'dstv-confam': 'dstv-confam',
+  'prd-dstv-cfm-e36': 'dstv-confam',
+  '104153': 'dstv-confam',
+  'dstv-compact': 'dstv79',
+  'prd-dstv-cmp-e36': 'dstv79',
+  '10403': 'dstv79',
+  'dstv-compact-plus': 'dstv7',
+  'prd-dstv-cppl-e36': 'dstv7',
+  '10430': 'dstv7',
+  'dstv-premium': 'dstv3',
+  'prd-dstv-prwa-e36': 'dstv3',
+  '10401': 'dstv3',
+  'dstv-asia': 'dstv6',
+  'dstv-extraview': 'dstv-extraview',
+  'prd-dstv-hdpvr': 'dstv-extraview',
+  '10436': 'dstv-extraview',
+
+  // GOtv
+  'gotv-smallie': 'gotv-lite',
+  'prd-gotv-smallie-mo': 'gotv-lite',
+  '459137': 'gotv-lite',
+  'gotv-lite': 'gotv-lite',
+  'gotv-jinja': 'gotv-jinja',
+  'product-gotv-jinja': 'gotv-jinja',
+  '459120': 'gotv-jinja',
+  'gotv-jolli': 'gotv-jolli',
+  'product-gotv-jolli': 'gotv-jolli',
+  '459121': 'gotv-jolli',
+  'gotv-max': 'gotv-max',
+  'product-gotv-max': 'gotv-max',
+  '459119': 'gotv-max',
+  'gotv-supa': 'gotv-supa',
+  'product-gotv-supa': 'gotv-supa',
+  '459133': 'gotv-supa',
+  'gotv-supa-plus': 'gotv-supa-plus',
+  'prd-gotv-supa-pls': 'gotv-supa-plus',
+  '459134': 'gotv-supa-plus',
+
+  // StarTimes
+  'startimes-nova': 'nova',
+  'product-star-nova': 'nova',
+  '24019': 'nova',
+  'nova': 'nova',
+  'startimes-basic': 'basic',
+  'product-star-basic': 'basic',
+  '24017': 'basic',
+  'basic': 'basic',
+  'startimes-classic': 'classic',
+  'product-star-classic': 'classic',
+  '24013': 'classic',
+  'classic': 'classic',
+  'startimes-super': 'super',
+  'prd-star-sup': 'super',
+  '24025': 'super',
+  'super': 'super',
+  'startimes-smart': 'smart',
+  'product-star-smart': 'smart',
+  '24008': 'smart',
+  'smart': 'smart',
+};
+
 /**
  * Clean electricity prepaid token string from VTpass response:
  * e.g., "Token : 1234 5678 9012 3456 7890" -> "1234-5678-9012-3456-7890" / numeric PIN
@@ -149,12 +233,98 @@ export class VtpassProvider implements ProviderAdapter {
     request: CustomerValidationRequest,
   ): Promise<CustomerValidationResult> {
     // Airtime/Data phone validation is bypassed
-    if (request.serviceType !== ServiceType.ELECTRICITY) {
+    if (
+      request.serviceType !== ServiceType.ELECTRICITY &&
+      request.serviceType !== ServiceType.CABLE_TV
+    ) {
       return {
         isValid: true,
         customerId: request.customerId,
         responseCode: '000',
         responseMessage: 'Validation bypassed for telecom service',
+      };
+    }
+
+    if (request.serviceType === ServiceType.CABLE_TV) {
+      const opKey = String(
+        request.metadata?.operator || request.paymentCode || '',
+      ).toUpperCase();
+      const serviceID = CABLE_OPERATOR_TO_VTPASS[opKey] || request.paymentCode.toLowerCase();
+
+      const endpoint = `${this.config.baseUrl}/merchant-verify`;
+
+      let res: Response;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: this.getHeaders('POST'),
+          body: JSON.stringify({
+            billersCode: request.customerId,
+            serviceID,
+          }),
+        });
+      } catch (networkErr) {
+        throw new AppError(
+          'Cable TV verification service unreachable',
+          503,
+          'PROVIDER_UNAVAILABLE',
+          true,
+          { originalError: (networkErr as Error).message },
+        );
+      }
+
+      const data = await safeParseResponse(res);
+      const content = data?.content as Record<string, any> | undefined;
+
+      const code = String(data?.code ?? data?.response_description ?? '');
+      const isSuccess =
+        code === '000' ||
+        code.toUpperCase() === 'TRANSACTION SUCCESSFUL' ||
+        code.toUpperCase() === 'VERIFIED' ||
+        Boolean(content?.Customer_Name || content?.customer_name);
+
+      if (!isSuccess) {
+        const errorMessage =
+          data?.response_description ||
+          content?.error ||
+          content?.message ||
+          'Smartcard / IUC verification failed';
+
+        return {
+          isValid: false,
+          customerId: request.customerId,
+          responseCode: code || String(res.status),
+          responseMessage: errorMessage,
+          rawResponse: data ?? undefined,
+        };
+      }
+
+      const customerName =
+        content?.Customer_Name ||
+        content?.customer_name ||
+        content?.name ||
+        undefined;
+
+      const outstandingBalanceKobo =
+        content?.Balance !== undefined && content?.Balance !== null && !isNaN(Number(content.Balance))
+          ? BigInt(Math.round(Number(content.Balance) * 100))
+          : undefined;
+
+      const renewalAmountKobo =
+        content?.Renewal_Amount !== undefined && !isNaN(Number(content.Renewal_Amount))
+          ? BigInt(Math.round(Number(content.Renewal_Amount) * 100))
+          : undefined;
+
+      return {
+        isValid: true,
+        customerId: request.customerId,
+        customerName,
+        customerAddress: content?.Address || undefined,
+        outstandingBalanceKobo,
+        minimumAmountKobo: renewalAmountKobo,
+        responseCode: code || '000',
+        responseMessage: data?.response_description || 'Smartcard validated successfully',
+        rawResponse: data ?? undefined,
       };
     }
 
@@ -305,6 +475,31 @@ export class VtpassProvider implements ProviderAdapter {
         variation_code: variationCode,
         amount: amountInNaira,
         phone: request.customerMobile || request.customerId,
+      };
+    } else if (request.serviceType === ServiceType.CABLE_TV) {
+      const opKey = String(
+        request.metadata?.operator || request.paymentCode || '',
+      ).toUpperCase();
+      const serviceID = CABLE_OPERATOR_TO_VTPASS[opKey] || 'dstv';
+
+      const monnifyPlanCode = request.metadata?.monnifyPlanCode as string | undefined;
+      const variationCode =
+        (request.metadata?.vtpassVariationCode as string) ||
+        CABLE_PLAN_TO_VTPASS_VARIATION[request.paymentCode] ||
+        (monnifyPlanCode ? CABLE_PLAN_TO_VTPASS_VARIATION[monnifyPlanCode] : undefined) ||
+        request.paymentCode;
+
+      const subscriptionType =
+        (request.metadata?.subscriptionType as string) || 'change';
+
+      payload = {
+        request_id: requestId,
+        serviceID,
+        billersCode: request.customerId,
+        variation_code: variationCode,
+        amount: amountInNaira,
+        phone: request.customerMobile || request.customerId,
+        subscription_type: subscriptionType,
       };
     } else {
       throw new AppError(
@@ -510,3 +705,4 @@ export class VtpassProvider implements ProviderAdapter {
     }
   }
 }
+
