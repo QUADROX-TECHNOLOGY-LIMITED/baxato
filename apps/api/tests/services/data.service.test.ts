@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   TelecomNetwork,
   ServiceType,
+  ProviderName,
   TransactionStatus,
   WalletType,
   ValidationError,
@@ -51,8 +52,12 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
       version: 1,
     });
 
-    // Mock Provider Router
+    // Mock Provider Router (defaults to Monnify active for Data)
     mockRouter = {
+      resolveDynamicRouting: vi.fn().mockResolvedValue({
+        primaryName: ProviderName.MONNIFY,
+        allowFailover: false,
+      }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
         providerName: 'MONNIFY',
@@ -65,33 +70,67 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
     service = new DataService(mockRouter);
   });
 
-  describe('Data Plan Catalog & Lookups', () => {
-    it('returns all active data plans across 4 major Nigerian operators', () => {
-      const allPlans = service.getDataPlans();
-      expect(allPlans.length).toBeGreaterThanOrEqual(16);
+  describe('Data Plan Catalog & Per-Provider Gating', () => {
+    it('returns active Monnify data plans without SME or vendor internals leaked', async () => {
+      const allPlans = await service.getDataPlans();
+      expect(allPlans.length).toBeGreaterThanOrEqual(20);
+      expect(allPlans.some((p) => p.category === 'SME' || p.dataType === 'SME')).toBe(false);
+
+      // Security: verify no internal upstream vendor fields are present on public DTOs
+      allPlans.forEach((p: any) => {
+        expect(p.monnifyPlanCode).toBeUndefined();
+        expect(p.vtpassVariationCode).toBeUndefined();
+        expect(p.vtpassServiceId).toBeUndefined();
+        expect(p.supportedProviders).toBeUndefined();
+      });
+
+      const availability = await service.getAvailableCategories();
+      expect(availability.categories).not.toContain('SME');
+      expect(availability.dataTypes).toEqual(['DIRECT']);
     });
 
-    it('filters data plans by telecom network', () => {
-      const mtnPlans = service.getDataPlans(TelecomNetwork.MTN);
+    it('exposes SME category and Glo SME / MTN SME bundles when VTpass is activated', async () => {
+      (mockRouter.resolveDynamicRouting as ReturnType<typeof vi.fn>).mockResolvedValue({
+        primaryName: ProviderName.VTPASS,
+        allowFailover: false,
+      });
+
+      const smePlans = await service.getDataPlans(undefined, 'SME');
+      expect(smePlans.length).toBeGreaterThanOrEqual(10);
+      expect(smePlans.some((p) => p.id === 'glo_sme_200mb' && p.priceNaira === 70)).toBe(true);
+      expect(smePlans.some((p) => p.id === 'glo_sme_1gb' && p.priceNaira === 320)).toBe(true);
+      expect(smePlans.some((p) => p.id === 'mtn_sme_25gb' && p.priceNaira === 10000)).toBe(true);
+
+      const gloCategories = await service.getAvailableCategories(TelecomNetwork.GLO);
+      expect(gloCategories.categories).toContain('DAILY');
+      expect(gloCategories.categories).toContain('WEEKLY');
+      expect(gloCategories.categories).toContain('SME');
+      expect(gloCategories.dataTypes).toEqual(['DIRECT', 'SME']);
+    });
+
+    it('filters data plans by telecom network', async () => {
+      const mtnPlans = await service.getDataPlans(TelecomNetwork.MTN);
       expect(mtnPlans.length).toBeGreaterThanOrEqual(5);
       mtnPlans.forEach((p) => expect(p.network).toBe(TelecomNetwork.MTN));
 
-      const airtelPlans = service.getDataPlans(TelecomNetwork.AIRTEL);
+      const airtelPlans = await service.getDataPlans(TelecomNetwork.AIRTEL);
+      expect(airtelPlans.length).toBeGreaterThanOrEqual(5);
       airtelPlans.forEach((p) => expect(p.network).toBe(TelecomNetwork.AIRTEL));
     });
 
-    it('filters data plans by validity category', () => {
-      const monthlyPlans = service.getDataPlans(undefined, 'MONTHLY');
+    it('filters data plans by validity category', async () => {
+      const monthlyPlans = await service.getDataPlans(undefined, 'MONTHLY');
       expect(monthlyPlans.length).toBeGreaterThanOrEqual(4);
       monthlyPlans.forEach((p) => expect(p.category).toBe('MONTHLY'));
     });
 
-    it('finds data plan by ID', () => {
-      const plan = service.getPlanById('airtel_daily_100mb');
+    it('finds data plan by ID with verified upstream code', () => {
+      expect(DATA_PLANS.length).toBeGreaterThan(40);
+      const plan = service.getPlanById('airtel_daily_110mb');
       expect(plan).toBeDefined();
-      expect(plan.name).toBe('Airtel 100MB Daily Plan');
-      expect(plan.dataAllowance).toBe('100MB');
-      expect(plan.monnifyPlanCode).toBe('AIRTEL_100MB_1D');
+      expect(plan.name).toBe('Airtel 110MB Daily Plan');
+      expect(plan.dataAllowance).toBe('110MB');
+      expect(plan.monnifyPlanCode).toBe('2044');
     });
 
     it('throws NotFoundError for non-existent plan ID', () => {
@@ -112,28 +151,46 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
           businessId: testBizId,
           userId: testUserId,
           phone: '07019367464',
-          planId: 'mtn_daily_100mb',
+          planId: 'mtn_daily_110mb',
         }),
       ).rejects.toThrow(ValidationError);
+    });
+
+    it('rejects purchase of inactive provider plan without leaking vendor names', async () => {
+      // Active provider is MONNIFY; glo_sme_200mb is only supported on VTpass
+      try {
+        await service.purchaseDataBundle({
+          businessId: testBizId,
+          userId: testUserId,
+          phone: '08051234567',
+          planId: 'glo_sme_200mb',
+        });
+        expect.unreachable('Expected ValidationError');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ValidationError);
+        expect(err.message).not.toMatch(/vtpass|monnify/i);
+      }
+      expect(mockRouter.vendService).not.toHaveBeenCalled();
     });
   });
 
   describe('Data Bundle Vending Execution Flow', () => {
     it('vends data bundle, calculates merchant discount, debits wallet, and posts ledger entries', async () => {
-      // Purchase MTN 100MB Daily (₦100.00 / 10,000 Kobo) to 08161437292
+      // Purchase MTN 110MB Daily (₦100.00 / 10,000 Kobo) to 08161437292
       // MTN Discount: 2.5% = 250 Kobo (₦2.50)
       // Debit: 9,750 Kobo (₦97.50)
       const receipt = await service.purchaseDataBundle({
         businessId: testBizId,
         userId: testUserId,
         phone: '08161437292',
-        planId: 'mtn_daily_100mb',
+        planId: 'mtn_daily_110mb',
       });
 
       expect(receipt.status).toBe(TransactionStatus.SUCCESSFUL);
       expect(receipt.network).toBe(TelecomNetwork.MTN);
-      expect(receipt.planId).toBe('mtn_daily_100mb');
-      expect(receipt.dataAllowance).toBe('100MB');
+      expect(receipt.planId).toBe('mtn_daily_110mb');
+      expect(receipt.dataAllowance).toBe('110MB');
+      expect(receipt.dataType).toBe('DIRECT');
       expect(receipt.validity).toBe('1 Day');
       expect(receipt.faceAmountKobo).toBe('10000');
       expect(receipt.faceAmountNaira).toBe(100);
@@ -166,6 +223,67 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
       expect(debitEntry?.balanceAfter).toBe(190250n);
     });
 
+    it('vends Glo SME data bundle via VTpass metadata when VTpass is activated', async () => {
+      (mockRouter.resolveDynamicRouting as ReturnType<typeof vi.fn>).mockResolvedValue({
+        primaryName: ProviderName.VTPASS,
+        allowFailover: false,
+      });
+      (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: TransactionStatus.SUCCESSFUL,
+        providerName: ProviderName.VTPASS,
+        providerReference: 'VTP_GLO_SME_1GB_001',
+        responseCode: '000',
+        responseMessage: 'TRANSACTION SUCCESSFUL',
+      });
+
+      // Glo 1GB SME = ₦320 (32,000 Kobo), 2% discount = 640 Kobo, Debit = 31,360 Kobo
+      const receipt = await service.purchaseDataBundle({
+        businessId: testBizId,
+        userId: testUserId,
+        phone: '08051234567',
+        planId: 'glo_sme_1gb',
+      });
+
+      expect(receipt.status).toBe(TransactionStatus.SUCCESSFUL);
+      expect(receipt.dataType).toBe('SME');
+      expect(receipt.amountDebitedKobo).toBe('31360');
+      expect(mockRouter.vendService).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serviceType: ServiceType.DATA,
+          metadata: expect.objectContaining({
+            network: TelecomNetwork.GLO,
+            dataType: 'SME',
+            vtpassServiceId: 'glo-sme-data',
+            vtpassVariationCode: 'glo-dg-320',
+          }),
+        }),
+        expect.any(String),
+      );
+    });
+
+    it('keeps wallet debited and commits ledger when upstream returns PROCESSING', async () => {
+      (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: TransactionStatus.PROCESSING,
+        providerName: ProviderName.MONNIFY,
+        providerReference: 'MNFY_PROC_999',
+        responseCode: '099',
+        responseMessage: 'Transaction Processing',
+      });
+
+      const receipt = await service.purchaseDataBundle({
+        businessId: testBizId,
+        userId: testUserId,
+        phone: '08161437292',
+        planId: 'mtn_daily_110mb',
+      });
+
+      expect(receipt.status).toBe(TransactionStatus.PROCESSING);
+      const wallet = inMemoryDb.wallets.find((w) => w.id === mainWalletId);
+      expect(wallet?.balance).toBe(190250n);
+      expect(inMemoryDb.serviceTransactions[0].status).toBe(TransactionStatus.PROCESSING);
+      expect(inMemoryDb.financialLedger).toHaveLength(2);
+    });
+
     it('rolls back wallet debit when provider vending fails', async () => {
       // Configure router mock to fail
       (mockRouter.vendService as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -180,7 +298,7 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
           businessId: testBizId,
           userId: testUserId,
           phone: '08161437292',
-          planId: 'mtn_daily_100mb',
+          planId: 'mtn_daily_110mb',
         }),
       ).rejects.toThrow(AppError);
 
@@ -204,7 +322,7 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
         businessId: testBizId,
         userId: testUserId,
         phone: '08161437292',
-        planId: 'mtn_daily_100mb',
+        planId: 'mtn_daily_110mb',
         idempotencyKey,
       });
 
@@ -216,7 +334,7 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
         businessId: testBizId,
         userId: testUserId,
         phone: '08161437292',
-        planId: 'mtn_daily_100mb',
+        planId: 'mtn_daily_110mb',
         idempotencyKey,
       });
 
@@ -234,12 +352,12 @@ describe('DataService (Catalog, Concurrency Locking & Multi-Provider Vending)', 
         businessId: testBizId,
         userId: testUserId,
         phone: '08161437292',
-        planId: 'mtn_daily_100mb',
+        planId: 'mtn_daily_110mb',
       });
 
       const history = await service.getDataHistory(testBizId, 10, 0);
       expect(history.total).toBe(1);
-      expect(history.transactions[0].planId).toBe('mtn_daily_100mb');
+      expect(history.transactions[0].planId).toBe('mtn_daily_110mb');
       expect(history.transactions[0].recipientPhone).toBe('08161437292');
     });
   });

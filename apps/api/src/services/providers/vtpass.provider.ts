@@ -174,6 +174,69 @@ export const CABLE_PLAN_TO_VTPASS_VARIATION: Record<string, string> = {
 };
 
 /**
+ * Mapping from Baxato TelecomNetwork / Data subtype to VTpass Data serviceID.
+ */
+export const TELCO_TO_VTPASS_DATA: Record<string, string> = {
+  MTN: 'mtn-data',
+  AIRTEL: 'airtel-data',
+  GLO: 'glo-data',
+  GLO_SME: 'glo-sme-data',
+  '9MOBILE': 'etisalat-data',
+  NINEMOBILE: 'etisalat-data',
+  ETISALAT: 'etisalat-data',
+};
+
+/**
+ * Fallback mapping from Monnify numeric product codes to VTpass variation codes
+ * for cross-provider data failover routing.
+ */
+export const DATA_PLAN_TO_VTPASS_VARIATION: Record<string, string> = {
+  '1807': 'mtn-10mb-100',
+  '1810': 'mtn-50mb-200',
+  '1816': 'mtn-3gb-2500',
+  '1821': 'mtn-3gb-2500',
+  '2044': 'airt-100',
+  '1964': 'airt-300',
+  '1970': 'airt-500',
+  '1849': 'airt-1500',
+  '1850': 'airt-2000',
+  '1975': 'airt-3000',
+  '1854': 'airt-4000',
+  '1949': 'airt-5000',
+  '2318': 'glo1500',
+  '1875': 'eti-2000',
+  '2052': 'eti-5000',
+};
+
+/**
+ * Resolves the exact VTpass Data serviceID from network, delivery type (DIRECT/SME),
+ * explicit metadata override, or variation code prefix.
+ */
+export function resolveVtpassDataServiceId(
+  networkRaw?: string,
+  dataTypeRaw?: string,
+  explicitServiceId?: string,
+  variationCode?: string,
+): string {
+  if (explicitServiceId && typeof explicitServiceId === 'string' && explicitServiceId.trim().length > 0) {
+    return explicitServiceId.trim();
+  }
+
+  const network = String(networkRaw || '').toUpperCase().trim();
+  const dataType = String(dataTypeRaw || '').toUpperCase().trim();
+  const code = String(variationCode || '').toLowerCase();
+
+  if (
+    network === 'GLO_SME' ||
+    (network === 'GLO' && (dataType === 'SME' || code.startsWith('glo-dg-')))
+  ) {
+    return 'glo-sme-data';
+  }
+
+  return TELCO_TO_VTPASS_DATA[network] || 'mtn-data';
+}
+
+/**
  * Clean electricity prepaid token string from VTpass response:
  * e.g., "Token : 1234 5678 9012 3456 7890" -> "1234-5678-9012-3456-7890" / numeric PIN
  */
@@ -500,6 +563,30 @@ export class VtpassProvider implements ProviderAdapter {
         amount: amountInNaira,
         phone: request.customerMobile || request.customerId,
         subscription_type: subscriptionType,
+      };
+    } else if (request.serviceType === ServiceType.DATA) {
+      const explicitServiceId = request.metadata?.vtpassServiceId as string | undefined;
+      const monnifyPlanCode = request.metadata?.monnifyPlanCode as string | undefined;
+      const variationCode =
+        (request.metadata?.vtpassVariationCode as string) ||
+        DATA_PLAN_TO_VTPASS_VARIATION[request.paymentCode] ||
+        (monnifyPlanCode ? DATA_PLAN_TO_VTPASS_VARIATION[monnifyPlanCode] : undefined) ||
+        request.paymentCode;
+
+      const serviceID = resolveVtpassDataServiceId(
+        String(request.metadata?.network || ''),
+        String(request.metadata?.dataType || ''),
+        explicitServiceId,
+        variationCode,
+      );
+
+      payload = {
+        request_id: requestId,
+        serviceID,
+        billersCode: request.customerId,
+        variation_code: variationCode,
+        amount: amountInNaira,
+        phone: request.customerMobile || request.customerId,
       };
     } else {
       throw new AppError(

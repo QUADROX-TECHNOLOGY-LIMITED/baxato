@@ -10,6 +10,8 @@ import {
   generateVtpassRequestId,
   extractCleanToken,
   TELCO_TO_VTPASS_AIRTIME,
+  TELCO_TO_VTPASS_DATA,
+  resolveVtpassDataServiceId,
   DISCO_TO_VTPASS_SERVICE_ID,
 } from '../../../src/services/providers/vtpass.provider.js';
 
@@ -60,6 +62,21 @@ describe('VtpassProvider Adapter Implementation', () => {
       expect(TELCO_TO_VTPASS_AIRTIME['GLO']).toBe('glo');
       expect(TELCO_TO_VTPASS_AIRTIME['9MOBILE']).toBe('etisalat');
       expect(TELCO_TO_VTPASS_AIRTIME['NINEMOBILE']).toBe('etisalat');
+    });
+
+    it('TELCO_TO_VTPASS_DATA and resolveVtpassDataServiceId handle Direct and Glo SME services', () => {
+      expect(TELCO_TO_VTPASS_DATA['MTN']).toBe('mtn-data');
+      expect(TELCO_TO_VTPASS_DATA['AIRTEL']).toBe('airtel-data');
+      expect(TELCO_TO_VTPASS_DATA['GLO']).toBe('glo-data');
+      expect(TELCO_TO_VTPASS_DATA['GLO_SME']).toBe('glo-sme-data');
+      expect(TELCO_TO_VTPASS_DATA['9MOBILE']).toBe('etisalat-data');
+
+      expect(resolveVtpassDataServiceId('MTN', 'DIRECT')).toBe('mtn-data');
+      expect(resolveVtpassDataServiceId('AIRTEL', 'DIRECT')).toBe('airtel-data');
+      expect(resolveVtpassDataServiceId('GLO', 'DIRECT')).toBe('glo-data');
+      expect(resolveVtpassDataServiceId('GLO', 'SME')).toBe('glo-sme-data');
+      expect(resolveVtpassDataServiceId('GLO', 'DIRECT', undefined, 'glo-dg-320')).toBe('glo-sme-data');
+      expect(resolveVtpassDataServiceId('9MOBILE', 'DIRECT')).toBe('etisalat-data');
     });
 
     it('DISCO_TO_VTPASS_SERVICE_ID correctly maps all 12 Nigerian DisCos', () => {
@@ -566,6 +583,124 @@ describe('VtpassProvider Adapter Implementation', () => {
           body: expect.stringContaining('"variation_code":"dstv-padi"'),
         }),
       );
+    });
+
+    it('vends Data Bundle across MTN, Airtel, Glo Direct, Glo SME, and 9mobile via /pay', async () => {
+      const cases = [
+        {
+          network: 'MTN',
+          dataType: 'DIRECT',
+          variationCode: 'mtn-10mb-100',
+          expectedServiceId: 'mtn-data',
+          amountNaira: 100,
+        },
+        {
+          network: 'AIRTEL',
+          dataType: 'DIRECT',
+          variationCode: 'airt-100',
+          expectedServiceId: 'airtel-data',
+          amountNaira: 100,
+        },
+        {
+          network: 'GLO',
+          dataType: 'DIRECT',
+          variationCode: 'glo100',
+          expectedServiceId: 'glo-data',
+          amountNaira: 100,
+        },
+        {
+          network: 'GLO',
+          dataType: 'SME',
+          variationCode: 'glo-dg-70',
+          expectedServiceId: 'glo-sme-data',
+          amountNaira: 70,
+        },
+        {
+          network: '9MOBILE',
+          dataType: 'DIRECT',
+          variationCode: 'eti-100',
+          expectedServiceId: 'etisalat-data',
+          amountNaira: 100,
+        },
+      ];
+
+      for (const c of cases) {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              code: '000',
+              response_description: 'TRANSACTION SUCCESSFUL',
+              requestId: '20261111120000DATA',
+              content: {
+                transactions: {
+                  status: 'delivered',
+                  transactionId: `VTP_${c.expectedServiceId}`,
+                },
+              },
+            }),
+        } as any);
+
+        const result = await provider.vendService({
+          serviceType: ServiceType.DATA,
+          paymentCode: c.variationCode,
+          customerId: '08011111111',
+          customerMobile: '08011111111',
+          amountKobo: BigInt(c.amountNaira * 100),
+          requestReference: `BAX_${c.expectedServiceId}`,
+          metadata: {
+            network: c.network,
+            dataType: c.dataType,
+            vtpassVariationCode: c.variationCode,
+          },
+        });
+
+        expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+        expect(result.providerReference).toBe(`VTP_${c.expectedServiceId}`);
+
+        const sentBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+        expect(sentBody.serviceID).toBe(c.expectedServiceId);
+        expect(sentBody.billersCode).toBe('08011111111');
+        expect(sentBody.variation_code).toBe(c.variationCode);
+        expect(sentBody.amount).toBe(c.amountNaira);
+        expect(sentBody.phone).toBe('08011111111');
+      }
+    });
+
+    it('maps Monnify data codes via DATA_PLAN_TO_VTPASS_VARIATION failover table', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '000',
+            response_description: 'TRANSACTION SUCCESSFUL',
+            content: {
+              transactions: {
+                status: 'delivered',
+                transactionId: 'VTP_DATA_FAILOVER_1',
+              },
+            },
+          }),
+      } as any);
+
+      const result = await provider.vendService({
+        serviceType: ServiceType.DATA,
+        paymentCode: '1807',
+        customerId: '08031234567',
+        amountKobo: 10000n,
+        requestReference: 'BAX_FAILOVER_DATA_1',
+        metadata: {
+          network: 'MTN',
+          monnifyPlanCode: '1807',
+        },
+      });
+
+      expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+      const sentBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+      expect(sentBody.serviceID).toBe('mtn-data');
+      expect(sentBody.variation_code).toBe('mtn-10mb-100');
     });
   });
 

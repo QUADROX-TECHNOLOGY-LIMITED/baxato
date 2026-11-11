@@ -30,7 +30,7 @@ export async function seedProviders() {
           airtime: true,
           electricity: true,
           cable: true,
-          data: false,
+          data: true,
           exam_pin: false,
         },
       },

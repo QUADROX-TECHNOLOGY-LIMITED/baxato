@@ -1,6 +1,7 @@
 import {
   TelecomNetwork,
   ServiceType,
+  ProviderName,
   TransactionStatus,
   LedgerDirection,
   LedgerEntryType,
@@ -31,266 +32,24 @@ import {
   ProviderRouterService,
 } from './providers/index.js';
 import { TELCO_PREFIXES } from './airtime.service.js';
+import {
+  DATA_PLANS,
+  filterCatalogForProvider,
+  getAvailableCategoriesForPlans,
+  toPublicDataPlanDto,
+  type DataPlan,
+  type DataPlanCategory,
+  type DataDeliveryType,
+  type PublicDataPlanDto,
+} from './data-catalog.js';
 
-export type DataPlanCategory = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MEGA';
-
-export interface DataPlan {
-  id: string;
-  network: TelecomNetwork;
-  networkName: string;
-  name: string;
-  dataAllowance: string;
-  category: DataPlanCategory;
-  validity: string;
-  priceKobo: bigint;
-  priceNaira: number;
-  discountBps: number; // e.g. 250 = 2.5%
-  monnifyPlanCode: string;
-}
-
-export const DATA_PLANS: DataPlan[] = [
-  // MTN
-  {
-    id: 'mtn_daily_100mb',
-    network: TelecomNetwork.MTN,
-    networkName: 'MTN Nigeria',
-    name: 'MTN 100MB Daily Plan',
-    dataAllowance: '100MB',
-    category: 'DAILY',
-    validity: '1 Day',
-    priceKobo: 10000n, // ₦100 (Verified Pilot: 34814470)
-    priceNaira: 100,
-    discountBps: 250,
-    monnifyPlanCode: 'MTN_100MB_1D',
-  },
-  {
-    id: 'mtn_2day_1gb',
-    network: TelecomNetwork.MTN,
-    networkName: 'MTN Nigeria',
-    name: 'MTN 1GB 2-Day Plan',
-    dataAllowance: '1GB',
-    category: 'DAILY',
-    validity: '2 Days',
-    priceKobo: 50000n, // ₦500
-    priceNaira: 500,
-    discountBps: 250,
-    monnifyPlanCode: 'MTN_1GB_2D',
-  },
-  {
-    id: 'mtn_weekly_1_5gb',
-    network: TelecomNetwork.MTN,
-    networkName: 'MTN Nigeria',
-    name: 'MTN 1.5GB Weekly Plan',
-    dataAllowance: '1.5GB',
-    category: 'WEEKLY',
-    validity: '7 Days',
-    priceKobo: 100000n, // ₦1,000
-    priceNaira: 1000,
-    discountBps: 250,
-    monnifyPlanCode: 'MTN_1.5GB_7D',
-  },
-  {
-    id: 'mtn_monthly_2_5gb',
-    network: TelecomNetwork.MTN,
-    networkName: 'MTN Nigeria',
-    name: 'MTN 2.5GB Monthly Plan',
-    dataAllowance: '2.5GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 150000n, // ₦1,500
-    priceNaira: 1500,
-    discountBps: 250,
-    monnifyPlanCode: 'MTN_2.5GB_30D',
-  },
-  {
-    id: 'mtn_monthly_10gb',
-    network: TelecomNetwork.MTN,
-    networkName: 'MTN Nigeria',
-    name: 'MTN 10GB Monthly Pro Plan',
-    dataAllowance: '10GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 500000n, // ₦5,000
-    priceNaira: 5000,
-    discountBps: 250,
-    monnifyPlanCode: 'MTN_10GB_30D',
-  },
-
-  // Airtel
-  {
-    id: 'airtel_daily_100mb',
-    network: TelecomNetwork.AIRTEL,
-    networkName: 'Airtel Nigeria',
-    name: 'Airtel 100MB Daily Plan',
-    dataAllowance: '100MB',
-    category: 'DAILY',
-    validity: '1 Day',
-    priceKobo: 10000n, // ₦100 (Verified Pilot: 04277538)
-    priceNaira: 100,
-    discountBps: 250,
-    monnifyPlanCode: 'AIRTEL_100MB_1D',
-  },
-  {
-    id: 'airtel_2day_1gb',
-    network: TelecomNetwork.AIRTEL,
-    networkName: 'Airtel Nigeria',
-    name: 'Airtel 1GB 2-Day Plan',
-    dataAllowance: '1GB',
-    category: 'DAILY',
-    validity: '2 Days',
-    priceKobo: 50000n, // ₦500
-    priceNaira: 500,
-    discountBps: 250,
-    monnifyPlanCode: 'AIRTEL_1GB_2D',
-  },
-  {
-    id: 'airtel_weekly_1_5gb',
-    network: TelecomNetwork.AIRTEL,
-    networkName: 'Airtel Nigeria',
-    name: 'Airtel 1.5GB Weekly Plan',
-    dataAllowance: '1.5GB',
-    category: 'WEEKLY',
-    validity: '7 Days',
-    priceKobo: 100000n, // ₦1,000
-    priceNaira: 1000,
-    discountBps: 250,
-    monnifyPlanCode: 'AIRTEL_1.5GB_7D',
-  },
-  {
-    id: 'airtel_monthly_3gb',
-    network: TelecomNetwork.AIRTEL,
-    networkName: 'Airtel Nigeria',
-    name: 'Airtel 3GB Monthly Plan',
-    dataAllowance: '3GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 150000n, // ₦1,500
-    priceNaira: 1500,
-    discountBps: 250,
-    monnifyPlanCode: 'AIRTEL_3GB_30D',
-  },
-  {
-    id: 'airtel_monthly_10gb',
-    network: TelecomNetwork.AIRTEL,
-    networkName: 'Airtel Nigeria',
-    name: 'Airtel 10GB Monthly Pro Plan',
-    dataAllowance: '10GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 500000n, // ₦5,000
-    priceNaira: 5000,
-    discountBps: 250,
-    monnifyPlanCode: 'AIRTEL_10GB_30D',
-  },
-
-  // Glo
-  {
-    id: 'glo_daily_150mb',
-    network: TelecomNetwork.GLO,
-    networkName: 'Globacom',
-    name: 'Glo 150MB Daily Plan',
-    dataAllowance: '150MB',
-    category: 'DAILY',
-    validity: '1 Day',
-    priceKobo: 10000n, // ₦100
-    priceNaira: 100,
-    discountBps: 350, // 3.5%
-    monnifyPlanCode: 'GLO_150MB_1D',
-  },
-  {
-    id: 'glo_weekly_1_25gb',
-    network: TelecomNetwork.GLO,
-    networkName: 'Globacom',
-    name: 'Glo 1.25GB Weekly Plan',
-    dataAllowance: '1.25GB',
-    category: 'WEEKLY',
-    validity: '7 Days',
-    priceKobo: 50000n, // ₦500
-    priceNaira: 500,
-    discountBps: 350,
-    monnifyPlanCode: 'GLO_1.25GB_7D',
-  },
-  {
-    id: 'glo_monthly_2_5gb',
-    network: TelecomNetwork.GLO,
-    networkName: 'Globacom',
-    name: 'Glo 2.5GB Monthly Plan',
-    dataAllowance: '2.5GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 100000n, // ₦1,000
-    priceNaira: 1000,
-    discountBps: 350,
-    monnifyPlanCode: 'GLO_2.5GB_30D',
-  },
-  {
-    id: 'glo_monthly_7_5gb',
-    network: TelecomNetwork.GLO,
-    networkName: 'Globacom',
-    name: 'Glo 7.5GB Monthly Mega Plan',
-    dataAllowance: '7.5GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 250000n, // ₦2,500
-    priceNaira: 2500,
-    discountBps: 350,
-    monnifyPlanCode: 'GLO_7.5GB_30D',
-  },
-
-  // 9mobile
-  {
-    id: '9mob_daily_100mb',
-    network: TelecomNetwork.NINEMOBILE,
-    networkName: '9mobile',
-    name: '9mobile 100MB Daily Plan',
-    dataAllowance: '100MB',
-    category: 'DAILY',
-    validity: '1 Day',
-    priceKobo: 10000n, // ₦100
-    priceNaira: 100,
-    discountBps: 300, // 3.0%
-    monnifyPlanCode: '9MOB_100MB_1D',
-  },
-  {
-    id: '9mob_weekly_1gb',
-    network: TelecomNetwork.NINEMOBILE,
-    networkName: '9mobile',
-    name: '9mobile 1GB Weekly Plan',
-    dataAllowance: '1GB',
-    category: 'WEEKLY',
-    validity: '7 Days',
-    priceKobo: 50000n, // ₦500
-    priceNaira: 500,
-    discountBps: 300,
-    monnifyPlanCode: '9MOB_1GB_7D',
-  },
-  {
-    id: '9mob_monthly_2_5gb',
-    network: TelecomNetwork.NINEMOBILE,
-    networkName: '9mobile',
-    name: '9mobile 2.5GB Monthly Plan',
-    dataAllowance: '2.5GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 120000n, // ₦1,200
-    priceNaira: 1200,
-    discountBps: 300,
-    monnifyPlanCode: '9MOB_2.5GB_30D',
-  },
-  {
-    id: '9mob_monthly_11gb',
-    network: TelecomNetwork.NINEMOBILE,
-    networkName: '9mobile',
-    name: '9mobile 11GB Monthly Pro Plan',
-    dataAllowance: '11GB',
-    category: 'MONTHLY',
-    validity: '30 Days',
-    priceKobo: 400000n, // ₦4,000
-    priceNaira: 4000,
-    discountBps: 300,
-    monnifyPlanCode: '9MOB_11GB_30D',
-  },
-];
+export {
+  DATA_PLANS,
+  type DataPlan,
+  type DataPlanCategory,
+  type DataDeliveryType,
+  type PublicDataPlanDto,
+};
 
 export interface PurchaseDataInput {
   businessId: string;
@@ -311,6 +70,7 @@ export interface DataReceiptDto {
   planId: string;
   planName: string;
   dataAllowance: string;
+  dataType?: DataDeliveryType;
   validity: string;
   faceAmountKobo: string;
   faceAmountNaira: number;
@@ -374,27 +134,109 @@ export class DataService {
   }
 
   /**
-   * Retrieves data plans, optionally filtered by network and validity category.
+   * Resolves the currently activated primary provider for Data Bundles without exposing
+   * vendor details externally. Falls back to MONNIFY when a test router stub omits resolveDynamicRouting.
    */
-  public getDataPlans(network?: TelecomNetwork, category?: DataPlanCategory) {
-    return DATA_PLANS.filter((p) => {
-      if (network && p.network !== network) return false;
-      if (category && p.category !== category) return false;
-      return true;
-    }).map((p) => ({
-      id: p.id,
-      network: p.network,
-      networkName: p.networkName,
-      name: p.name,
-      dataAllowance: p.dataAllowance,
-      category: p.category,
-      validity: p.validity,
-      priceKobo: p.priceKobo.toString(),
-      priceNaira: p.priceNaira,
-      formattedPrice: formatNairaFromKobo(p.priceKobo),
-      discountBps: p.discountBps,
-      discountPercent: (p.discountBps / 100).toFixed(1) + '%',
-    }));
+  private async resolveActivePrimaryProvider(): Promise<ProviderName> {
+    if (typeof this.router.resolveDynamicRouting === 'function') {
+      const routing = await this.router.resolveDynamicRouting(ServiceType.DATA);
+      return routing.primaryName;
+    }
+    return ProviderName.MONNIFY;
+  }
+
+  /**
+   * Builds a standardized data bundle receipt payload.
+   */
+  private buildReceipt(params: {
+    transactionId: string;
+    status: TransactionStatus;
+    recipientPhone: string;
+    plan: DataPlan;
+    faceAmountKobo: bigint;
+    discountKobo: bigint;
+    amountToDebitKobo: bigint;
+    reference: string;
+    clientReference?: string;
+    providerReference?: string;
+    providerName: string;
+    createdAt: Date;
+  }): DataReceiptDto {
+    const {
+      transactionId,
+      status,
+      recipientPhone,
+      plan,
+      faceAmountKobo,
+      discountKobo,
+      amountToDebitKobo,
+      reference,
+      clientReference,
+      providerReference,
+      providerName,
+      createdAt,
+    } = params;
+
+    return {
+      transactionId,
+      status,
+      recipientPhone,
+      network: plan.network,
+      networkName: plan.networkName,
+      planId: plan.id,
+      planName: plan.name,
+      dataAllowance: plan.dataAllowance,
+      dataType: plan.dataType,
+      validity: plan.validity,
+      faceAmountKobo: faceAmountKobo.toString(),
+      faceAmountNaira: plan.priceNaira,
+      formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
+      discountKobo: discountKobo.toString(),
+      discountNaira: koboToNaira(discountKobo),
+      formattedDiscount: formatNairaFromKobo(discountKobo),
+      amountDebitedKobo: amountToDebitKobo.toString(),
+      amountDebitedNaira: koboToNaira(amountToDebitKobo),
+      formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+      reference,
+      clientReference,
+      providerReference,
+      providerName,
+      createdAt,
+    };
+  }
+
+  /**
+   * Retrieves data plans supported by the currently activated provider,
+   * optionally filtered by network, category, and delivery type (DIRECT vs SME).
+   */
+  public async getDataPlans(
+    network?: TelecomNetwork,
+    category?: DataPlanCategory,
+    dataType?: DataDeliveryType,
+  ): Promise<PublicDataPlanDto[]> {
+    const primaryProvider = await this.resolveActivePrimaryProvider();
+    const filtered = filterCatalogForProvider(DATA_PLANS, primaryProvider, {
+      network,
+      category,
+      dataType,
+    });
+    return filtered.map(toPublicDataPlanDto);
+  }
+
+  /**
+   * Returns categories and delivery types available for the currently activated provider.
+   */
+  public async getAvailableCategories(network?: TelecomNetwork): Promise<{
+    categories: DataPlanCategory[];
+    dataTypes: DataDeliveryType[];
+  }> {
+    const primaryProvider = await this.resolveActivePrimaryProvider();
+    const plans = filterCatalogForProvider(DATA_PLANS, primaryProvider, { network });
+    const categories = getAvailableCategoriesForPlans(plans);
+    const dataTypes: DataDeliveryType[] = [];
+    if (plans.some((p) => p.dataType === 'DIRECT')) dataTypes.push('DIRECT');
+    if (plans.some((p) => p.dataType === 'SME')) dataTypes.push('SME');
+    return { categories, dataTypes };
   }
 
   /**
@@ -410,7 +252,7 @@ export class DataService {
 
   /**
    * End-to-end Data Bundle Purchase workflow:
-   * 1. Phone & Plan Validation
+   * 1. Active Provider Eligibility, Phone & Plan Validation
    * 2. Idempotency Lock Check
    * 3. Concurrency-safe Wallet Debit (with merchant discount)
    * 4. Multi-provider Vending with Automatic Failover
@@ -420,6 +262,13 @@ export class DataService {
   public async purchaseDataBundle(input: PurchaseDataInput): Promise<DataReceiptDto> {
     const normalizedPhone = this.normalizePhoneNumber(input.phone);
     const plan = this.getPlanById(input.planId);
+    const primaryProvider = await this.resolveActivePrimaryProvider();
+
+    if (!plan.supportedProviders.includes(primaryProvider)) {
+      throw new ValidationError(
+        `The selected data plan '${plan.name}' is not currently available. Please refresh available data plans and try again.`,
+      );
+    }
 
     // Verify phone prefix matches selected plan network
     const detectedNet = this.detectNetwork(normalizedPhone);
@@ -476,13 +325,15 @@ export class DataService {
         totalAmount: amountToDebitKobo,
         status: TransactionStatus.PROCESSING,
         recipient: normalizedPhone,
-        providerName: 'MONNIFY' as any,
+        providerName: primaryProvider as any,
         clientReference: clientRef,
         requestReference,
         metadata: {
           planId: plan.id,
           planName: plan.name,
           dataAllowance: plan.dataAllowance,
+          dataType: plan.dataType,
+          category: plan.category,
           validity: plan.validity,
           network: plan.network,
           networkName: plan.networkName,
@@ -502,17 +353,84 @@ export class DataService {
       const vendResult = await this.router.vendService(
         {
           serviceType: ServiceType.DATA,
-          paymentCode: plan.monnifyPlanCode,
+          paymentCode: plan.monnifyPlanCode || plan.vtpassVariationCode || plan.id,
           customerId: normalizedPhone,
+          customerMobile: normalizedPhone,
           amountKobo: faceAmountKobo,
           requestReference,
           metadata: {
             network: plan.network,
-            monnifyPlanCode: plan.monnifyPlanCode,
+            dataType: plan.dataType,
+            monnifyPlanCode: plan.monnifyPlanCode || undefined,
+            productCode: plan.monnifyPlanCode || undefined,
+            vtpassServiceId: plan.vtpassServiceId,
+            vtpassVariationCode: plan.vtpassVariationCode,
           },
         },
         txnRow.id,
       );
+
+      if (
+        vendResult.status === TransactionStatus.PROCESSING ||
+        vendResult.status === TransactionStatus.PENDING
+      ) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            providerName: vendResult.providerName,
+            providerReference: vendResult.providerReference || requestReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+
+        await ledgerService.recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'DATA_PURCHASE',
+          description: `Data bundle purchase (Processing): ${plan.name} (${plan.dataAllowance}) to ${normalizedPhone}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        });
+
+        const processingReceipt = this.buildReceipt({
+          transactionId: txnRow.id,
+          status: TransactionStatus.PROCESSING,
+          recipientPhone: normalizedPhone,
+          plan,
+          faceAmountKobo,
+          discountKobo,
+          amountToDebitKobo,
+          reference: requestReference,
+          clientReference: clientRef,
+          providerReference: vendResult.providerReference,
+          providerName: vendResult.providerName,
+          createdAt: new Date(),
+        });
+
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(
+            input.idempotencyKey,
+            input.businessId,
+            201,
+            processingReceipt,
+          );
+        }
+
+        return processingReceipt;
+      }
 
       if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
         throw new AppError(
@@ -555,31 +473,20 @@ export class DataService {
         },
       });
 
-      const receipt: DataReceiptDto = {
+      const receipt = this.buildReceipt({
         transactionId: txnRow.id,
         status: TransactionStatus.SUCCESSFUL,
         recipientPhone: normalizedPhone,
-        network: plan.network,
-        networkName: plan.networkName,
-        planId: plan.id,
-        planName: plan.name,
-        dataAllowance: plan.dataAllowance,
-        validity: plan.validity,
-        faceAmountKobo: faceAmountKobo.toString(),
-        faceAmountNaira: plan.priceNaira,
-        formattedFaceAmount: formatNairaFromKobo(faceAmountKobo),
-        discountKobo: discountKobo.toString(),
-        discountNaira: koboToNaira(discountKobo),
-        formattedDiscount: formatNairaFromKobo(discountKobo),
-        amountDebitedKobo: amountToDebitKobo.toString(),
-        amountDebitedNaira: koboToNaira(amountToDebitKobo),
-        formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+        plan,
+        faceAmountKobo,
+        discountKobo,
+        amountToDebitKobo,
         reference: requestReference,
         clientReference: clientRef,
         providerReference: vendResult.providerReference,
         providerName: vendResult.providerName,
         createdAt: new Date(),
-      };
+      });
 
       // Save idempotency response if key provided
       if (input.idempotencyKey) {
@@ -656,18 +563,19 @@ export class DataService {
     const transactions: DataReceiptDto[] = rows.map((r) => {
       const meta = (r.metadata || {}) as Record<string, string>;
       const network = (meta.network || TelecomNetwork.MTN) as TelecomNetwork;
-      const plan = DATA_PLANS.find((p) => p.id === meta.planId) || DATA_PLANS[0]!;
+      const plan = DATA_PLANS.find((p) => p.id === meta.planId);
 
       return {
         transactionId: r.id,
         status: r.status as TransactionStatus,
         recipientPhone: r.recipient,
         network,
-        networkName: plan.networkName,
-        planId: plan.id,
-        planName: meta.planName || plan.name,
-        dataAllowance: meta.dataAllowance || plan.dataAllowance,
-        validity: meta.validity || plan.validity,
+        networkName: meta.networkName || plan?.networkName || network,
+        planId: meta.planId || plan?.id || 'unknown',
+        planName: meta.planName || plan?.name || 'Mobile Data Bundle',
+        dataAllowance: meta.dataAllowance || plan?.dataAllowance || '',
+        dataType: (meta.dataType as DataDeliveryType | undefined) || plan?.dataType,
+        validity: meta.validity || plan?.validity || '',
         faceAmountKobo: r.amount.toString(),
         faceAmountNaira: koboToNaira(r.amount),
         formattedFaceAmount: formatNairaFromKobo(r.amount),

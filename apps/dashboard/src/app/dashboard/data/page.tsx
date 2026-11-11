@@ -83,39 +83,35 @@ interface DataPlan {
   networkName: string;
   name: string;
   dataAllowance: string;
-  category: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MEGA';
+  category: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MEGA' | 'SME';
+  dataType?: 'DIRECT' | 'SME';
   validity: string;
   priceNaira: number;
 }
 
+const CATEGORY_ORDER: Array<DataPlan['category']> = [
+  'DAILY',
+  'WEEKLY',
+  'MONTHLY',
+  'MEGA',
+  'SME',
+];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  ALL: 'All Plans',
+  DAILY: 'Daily',
+  WEEKLY: 'Weekly',
+  MONTHLY: 'Monthly',
+  MEGA: 'Mega',
+  SME: 'SME',
+};
+
 const FALLBACK_PLANS: DataPlan[] = [
-  // MTN
-  { id: 'mtn_daily_100mb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 100MB Daily', dataAllowance: '100MB', category: 'DAILY', validity: '1 Day', priceNaira: 100 },
-  { id: 'mtn_daily_1gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 1GB Daily', dataAllowance: '1GB', category: 'DAILY', validity: '1 Day', priceNaira: 350 },
-  { id: 'mtn_weekly_6gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 6GB Weekly', dataAllowance: '6GB', category: 'WEEKLY', validity: '7 Days', priceNaira: 1500 },
-  { id: 'mtn_monthly_1_5gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 1.5GB Monthly', dataAllowance: '1.5GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 1000 },
-  { id: 'mtn_monthly_4_5gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 4.5GB Monthly', dataAllowance: '4.5GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 2000 },
-  { id: 'mtn_monthly_12gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 12GB Monthly', dataAllowance: '12GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 3500 },
-  { id: 'mtn_mega_40gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 40GB Mega', dataAllowance: '40GB', category: 'MEGA', validity: '30 Days', priceNaira: 10000 },
-
-  // Airtel
-  { id: 'airtel_daily_100mb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 100MB Daily', dataAllowance: '100MB', category: 'DAILY', validity: '1 Day', priceNaira: 100 },
-  { id: 'airtel_weekly_1_5gb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 1.5GB Weekly', dataAllowance: '1.5GB', category: 'WEEKLY', validity: '7 Days', priceNaira: 500 },
-  { id: 'airtel_monthly_3gb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 3GB Monthly', dataAllowance: '3GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 1500 },
-  { id: 'airtel_monthly_10gb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 10GB Monthly', dataAllowance: '10GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 3000 },
-  { id: 'airtel_mega_50gb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 50GB Mega', dataAllowance: '50GB', category: 'MEGA', validity: '30 Days', priceNaira: 11000 },
-
-  // Glo
-  { id: 'glo_daily_1gb', network: 'GLO', networkName: 'Glo Nigeria', name: 'Glo 1GB Special', dataAllowance: '1GB', category: 'DAILY', validity: '1 Day', priceNaira: 300 },
-  { id: 'glo_weekly_2_5gb', network: 'GLO', networkName: 'Glo Nigeria', name: 'Glo 2.5GB Weekly', dataAllowance: '2.5GB', category: 'WEEKLY', validity: '7 Days', priceNaira: 500 },
-  { id: 'glo_monthly_5_8gb', network: 'GLO', networkName: 'Glo Nigeria', name: 'Glo 5.8GB Monthly', dataAllowance: '5.8GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 2000 },
-  { id: 'glo_monthly_14gb', network: 'GLO', networkName: 'Glo Nigeria', name: 'Glo 14GB Monthly', dataAllowance: '14GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 4000 },
-
-  // 9mobile
-  { id: '9mobile_daily_1gb', network: '9MOBILE', networkName: '9mobile Nigeria', name: '9mobile 1GB Daily', dataAllowance: '1GB', category: 'DAILY', validity: '1 Day', priceNaira: 350 },
-  { id: '9mobile_weekly_2gb', network: '9MOBILE', networkName: '9mobile Nigeria', name: '9mobile 2GB Weekly', dataAllowance: '2GB', category: 'WEEKLY', validity: '7 Days', priceNaira: 1000 },
-  { id: '9mobile_monthly_4_5gb', network: '9MOBILE', networkName: '9mobile Nigeria', name: '9mobile 4.5GB Monthly', dataAllowance: '4.5GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 2000 },
-  { id: '9mobile_monthly_11gb', network: '9MOBILE', networkName: '9mobile Nigeria', name: '9mobile 11GB Monthly', dataAllowance: '11GB', category: 'MONTHLY', validity: '30 Days', priceNaira: 4000 },
+  { id: 'mtn_daily_110mb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 110MB Daily Plan', dataAllowance: '110MB', category: 'DAILY', dataType: 'DIRECT', validity: '1 Day', priceNaira: 100 },
+  { id: 'mtn_weekly_1_5gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 1.5GB Weekly Plan', dataAllowance: '1.5GB', category: 'WEEKLY', dataType: 'DIRECT', validity: '7 Days', priceNaira: 1000 },
+  { id: 'airtel_daily_110mb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 110MB Daily Plan', dataAllowance: '110MB', category: 'DAILY', dataType: 'DIRECT', validity: '1 Day', priceNaira: 100 },
+  { id: 'glo_monthly_4gb', network: 'GLO', networkName: 'Globacom (Glo)', name: 'Glo 4GB + 2GB Night Plan', dataAllowance: '4GB + 2GB Night', category: 'MONTHLY', dataType: 'DIRECT', validity: '30 Days', priceNaira: 1500 },
+  { id: '9mobile_monthly_4_5gb', network: '9MOBILE', networkName: '9mobile', name: '9mobile 4.5GB Monthly Plan', dataAllowance: '4.5GB', category: 'MONTHLY', dataType: 'DIRECT', validity: '30 Days', priceNaira: 2000 },
 ];
 
 export default function DataVendingPage() {
@@ -214,13 +210,13 @@ export default function DataVendingPage() {
     window.addEventListener('bx_business_switched', handleBizSwitched);
     loadWallets();
 
-    // Fetch dynamic catalog
+    // Fetch dynamic catalog tailored to active service routing
     const fetchPlans = async () => {
       try {
         setIsLoadingPlans(true);
         const res = await fetch('/api/services/data/plans');
         const data = await res.json().catch(() => null);
-        if (res.ok && data?.success && Array.isArray(data.data) && data.data.length > 0) {
+        if (res.ok && data?.success && Array.isArray(data.data)) {
           setPlans(data.data);
         }
       } catch {
@@ -256,6 +252,21 @@ export default function DataVendingPage() {
       }
     }
   };
+
+  // Compute categories dynamically from active provider catalog for selected network
+  const availableCategories = useMemo(() => {
+    const networkPlans = plans.filter(
+      (p) => p.network.toUpperCase() === selectedNetwork.toUpperCase(),
+    );
+    const present = new Set(networkPlans.map((p) => p.category));
+    return ['ALL', ...CATEGORY_ORDER.filter((cat) => present.has(cat))];
+  }, [plans, selectedNetwork]);
+
+  useEffect(() => {
+    if (selectedCategory !== 'ALL' && !availableCategories.includes(selectedCategory)) {
+      setSelectedCategory('ALL');
+    }
+  }, [availableCategories, selectedCategory]);
 
   // Filter plans based on active network and category
   const filteredPlans = useMemo(() => {
@@ -502,9 +513,9 @@ export default function DataVendingPage() {
                       <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                         3. Choose Bundle Plan
                       </label>
-                      {/* Category Pills */}
+                      {/* Category Pills (dynamically driven by active provider catalog) */}
                       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                        {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY', 'MEGA'] as const).map((cat) => (
+                        {availableCategories.map((cat) => (
                           <button
                             key={cat}
                             type="button"
@@ -515,7 +526,7 @@ export default function DataVendingPage() {
                                 : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
                             }`}
                           >
-                            {cat === 'ALL' ? 'All Plans' : cat.charAt(0) + cat.slice(1).toLowerCase()}
+                            {CATEGORY_LABELS[cat] || cat}
                           </button>
                         ))}
                       </div>
@@ -551,9 +562,16 @@ export default function DataVendingPage() {
                                   <span className="text-xs font-bold text-white tracking-wide">
                                     {p.dataAllowance}
                                   </span>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-medium">
-                                    {p.validity}
-                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {(p.dataType === 'SME' || p.category === 'SME') && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-semibold">
+                                        SME
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-medium">
+                                      {p.validity}
+                                    </span>
+                                  </div>
                                 </div>
                                 <p className="text-[11px] text-slate-400 truncate">{p.name}</p>
                               </div>

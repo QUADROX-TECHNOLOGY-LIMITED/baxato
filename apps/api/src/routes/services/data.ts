@@ -5,29 +5,70 @@ import {
   Permission,
   TelecomNetwork,
 } from '@baxato/common';
-import { dataService, type DataPlanCategory } from '../../services/data.service.js';
+import {
+  dataService,
+  type DataPlanCategory,
+  type DataDeliveryType,
+} from '../../services/data.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+
+const VALID_DATA_CATEGORIES: DataPlanCategory[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'MEGA', 'SME'];
+const VALID_DATA_TYPES: DataDeliveryType[] = ['DIRECT', 'SME'];
+
+function parseNetworkFilter(network?: string): TelecomNetwork | undefined {
+  if (!network) return undefined;
+  if (!Object.values(TelecomNetwork).includes(network as TelecomNetwork)) {
+    throw new ValidationError(
+      `Invalid network filter: '${network}'. Supported: ${Object.values(TelecomNetwork).join(', ')}`,
+    );
+  }
+  return network as TelecomNetwork;
+}
 
 export const dataRoutes: FastifyPluginAsync = async (fastify) => {
   /**
+   * GET /services/data/categories
+   * Returns available data categories and delivery types for the active provider configuration.
+   */
+  fastify.get('/categories', async (request, reply) => {
+    const query = request.query as { network?: string };
+    const networkFilter = parseNetworkFilter(query.network);
+    const availability = await dataService.getAvailableCategories(networkFilter);
+    return reply.status(200).send(createSuccessResponse(availability, request.id));
+  });
+
+  /**
    * GET /services/data/plans
-   * Returns list of available mobile data bundle plans, optionally filtered by network and validity category.
+   * Returns list of available mobile data bundle plans for the active provider configuration,
+   * optionally filtered by network, category (DAILY/WEEKLY/MONTHLY/MEGA/SME), and dataType (DIRECT/SME).
    */
   fastify.get('/plans', async (request, reply) => {
-    const query = request.query as { network?: string; category?: string };
+    const query = request.query as { network?: string; category?: string; dataType?: string };
+    const networkFilter = parseNetworkFilter(query.network);
 
-    let networkFilter: TelecomNetwork | undefined;
-    if (query.network) {
-      if (!Object.values(TelecomNetwork).includes(query.network as TelecomNetwork)) {
+    let categoryFilter: DataPlanCategory | undefined;
+    if (query.category) {
+      const upperCat = query.category.toUpperCase() as DataPlanCategory;
+      if (!VALID_DATA_CATEGORIES.includes(upperCat)) {
         throw new ValidationError(
-          `Invalid network filter: '${query.network}'. Supported: ${Object.values(TelecomNetwork).join(', ')}`,
+          `Invalid category filter: '${query.category}'. Supported: ${VALID_DATA_CATEGORIES.join(', ')}`,
         );
       }
-      networkFilter = query.network as TelecomNetwork;
+      categoryFilter = upperCat;
     }
 
-    const categoryFilter = query.category ? (query.category.toUpperCase() as DataPlanCategory) : undefined;
-    const plans = dataService.getDataPlans(networkFilter, categoryFilter);
+    let dataTypeFilter: DataDeliveryType | undefined;
+    if (query.dataType) {
+      const upperType = query.dataType.toUpperCase() as DataDeliveryType;
+      if (!VALID_DATA_TYPES.includes(upperType)) {
+        throw new ValidationError(
+          `Invalid dataType filter: '${query.dataType}'. Supported: ${VALID_DATA_TYPES.join(', ')}`,
+        );
+      }
+      dataTypeFilter = upperType;
+    }
+
+    const plans = await dataService.getDataPlans(networkFilter, categoryFilter, dataTypeFilter);
 
     return reply.status(200).send(createSuccessResponse(plans, request.id));
   });

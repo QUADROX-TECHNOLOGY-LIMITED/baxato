@@ -10,7 +10,7 @@ import {
 } from '@baxato/common';
 import { generateToken } from '../../../src/plugins/auth.plugin';
 import { inMemoryDb } from '../../test-utils/mock-db';
-import type { DataReceiptDto, DataPlan } from '../../../src/services/data.service';
+import type { DataReceiptDto, PublicDataPlanDto } from '../../../src/services/data.service';
 
 vi.mock('@baxato/database', async () => {
   const { createMockDatabase } = await import('../../test-utils/mock-db');
@@ -22,6 +22,10 @@ vi.mock('../../../src/services/providers', async (importOriginal) => {
   return {
     ...actual,
     providerRouterService: {
+      resolveDynamicRouting: vi.fn().mockResolvedValue({
+        primaryName: 'MONNIFY',
+        allowFailover: false,
+      }),
       vendService: vi.fn().mockResolvedValue({
         status: TransactionStatus.SUCCESSFUL,
         providerName: 'MONNIFY',
@@ -134,17 +138,72 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
     await app.close();
   });
 
-  describe('GET /services/data/plans', () => {
-    it('returns list of available data plans across networks', async () => {
+  describe('GET /services/data/categories & /plans', () => {
+    it('returns active provider categories without SME by default and strips internal vendor codes', async () => {
+      const catRes = await app.inject({
+        method: 'GET',
+        url: '/services/data/categories',
+      });
+      expect(catRes.statusCode).toBe(200);
+      const catJson = JSON.parse(catRes.payload) as ApiResponse<{
+        categories: string[];
+        dataTypes: string[];
+      }>;
+      expect(catJson.success).toBe(true);
+      expect(catJson.data.categories).not.toContain('SME');
+      expect(catJson.data.dataTypes).toEqual(['DIRECT']);
+
       const response = await app.inject({
         method: 'GET',
         url: '/services/data/plans',
       });
 
       expect(response.statusCode).toBe(200);
-      const json = JSON.parse(response.payload) as ApiResponse<DataPlan[]>;
+      const json = JSON.parse(response.payload) as ApiResponse<PublicDataPlanDto[]>;
       expect(json.success).toBe(true);
       expect(json.data.length).toBeGreaterThanOrEqual(16);
+      expect(json.data.some((p) => p.category === 'SME')).toBe(false);
+      json.data.forEach((p: any) => {
+        expect(p.monnifyPlanCode).toBeUndefined();
+        expect(p.vtpassVariationCode).toBeUndefined();
+        expect(p.supportedProviders).toBeUndefined();
+      });
+    });
+
+    it('dynamically exposes SME categories and Glo SME plans when VTpass is active', async () => {
+      const { providerRouterService } = await import('../../../src/services/providers');
+      (providerRouterService.resolveDynamicRouting as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        primaryName: 'VTPASS',
+        allowFailover: false,
+      });
+
+      const catRes = await app.inject({
+        method: 'GET',
+        url: '/services/data/categories?network=GLO',
+      });
+      expect(catRes.statusCode).toBe(200);
+      const catJson = JSON.parse(catRes.payload) as ApiResponse<{
+        categories: string[];
+        dataTypes: string[];
+      }>;
+      expect(catJson.data.categories).toContain('SME');
+      expect(catJson.data.dataTypes).toEqual(['DIRECT', 'SME']);
+
+      (providerRouterService.resolveDynamicRouting as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        primaryName: 'VTPASS',
+        allowFailover: false,
+      });
+
+      const smeRes = await app.inject({
+        method: 'GET',
+        url: '/services/data/plans?dataType=SME',
+      });
+      expect(smeRes.statusCode).toBe(200);
+      const smeJson = JSON.parse(smeRes.payload) as ApiResponse<PublicDataPlanDto[]>;
+      expect(smeJson.success).toBe(true);
+      expect(smeJson.data.length).toBeGreaterThanOrEqual(10);
+      expect(smeJson.data.every((p) => p.dataType === 'SME')).toBe(true);
+      expect(smeJson.data.some((p) => p.id === 'glo_sme_200mb')).toBe(true);
     });
 
     it('filters plans by network query parameter', async () => {
@@ -154,18 +213,29 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const json = JSON.parse(response.payload) as ApiResponse<DataPlan[]>;
+      const json = JSON.parse(response.payload) as ApiResponse<PublicDataPlanDto[]>;
       expect(json.success).toBe(true);
       json.data.forEach((p) => expect(p.network).toBe(TelecomNetwork.MTN));
     });
 
-    it('rejects invalid network query parameter with 400', async () => {
-      const response = await app.inject({
+    it('rejects invalid network, category, or dataType query parameter with 400', async () => {
+      const invalidNet = await app.inject({
         method: 'GET',
         url: '/services/data/plans?network=INVALID_NET',
       });
+      expect(invalidNet.statusCode).toBe(400);
 
-      expect(response.statusCode).toBe(400);
+      const invalidCat = await app.inject({
+        method: 'GET',
+        url: '/services/data/plans?category=INVALID_CAT',
+      });
+      expect(invalidCat.statusCode).toBe(400);
+
+      const invalidType = await app.inject({
+        method: 'GET',
+        url: '/services/data/plans?dataType=INVALID_TYPE',
+      });
+      expect(invalidType.statusCode).toBe(400);
     });
   });
 
@@ -180,7 +250,7 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
         },
         payload: {
           phone: '08161437292',
-          planId: 'mtn_daily_100mb',
+          planId: 'mtn_daily_110mb',
         },
       });
 
@@ -189,8 +259,8 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
       expect(json.success).toBe(true);
       expect(json.data.status).toBe(TransactionStatus.SUCCESSFUL);
       expect(json.data.network).toBe(TelecomNetwork.MTN);
-      expect(json.data.planId).toBe('mtn_daily_100mb');
-      expect(json.data.dataAllowance).toBe('100MB');
+      expect(json.data.planId).toBe('mtn_daily_110mb');
+      expect(json.data.dataAllowance).toBe('110MB');
       expect(json.data.recipientPhone).toBe('08161437292');
       expect(json.data.faceAmountNaira).toBe(100);
       expect(json.data.discountNaira).toBe(2.5);
@@ -207,7 +277,7 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
           authorization: `Bearer ${ownerToken}`,
         },
         payload: {
-          planId: 'mtn_daily_100mb',
+          planId: 'mtn_daily_110mb',
         },
       });
 
@@ -244,7 +314,7 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
         },
         payload: {
           phone: '08161437292',
-          planId: 'mtn_daily_100mb',
+          planId: 'mtn_daily_110mb',
         },
       });
 
@@ -273,7 +343,7 @@ describe('Data Domain Endpoints (/services/data/*)', () => {
 
       expect(json.success).toBe(true);
       expect(json.data.total).toBeGreaterThanOrEqual(1);
-      expect(json.data.transactions[0].planId).toBe('mtn_daily_100mb');
+      expect(json.data.transactions[0].planId).toBe('mtn_daily_110mb');
     });
   });
 });
