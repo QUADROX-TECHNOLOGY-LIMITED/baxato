@@ -15,7 +15,9 @@ All AI agents and engineers contributing to BAXATO must follow `BAXATO_GUIDELINE
    - Keep button labels short and industry-standard (`Login`, `Create Account`, `Verify`, `Send code`, `Confirm`) — never bloated phrases like `"Sign In to Merchant Console"` or `"Verify & Sign In"`.
    - Never write verbose paragraph explanations beneath obvious form inputs (e.g., no helper essays explaining WhatsApp alerts or reminding users to verify fields to unlock the submit button). Trim unnecessary text to keep page height compact.
 
-3. **Standardized Form Controls, Buttons & Minimal Iconography**
+3. **Standardized Form Controls, Centering & Base-Surface Discipline**
+   - Keep Login, 2FA, and Create Account vertically and horizontally centered across mobile and desktop (`min-h-[100dvh]`, `my-auto`), and keep OTP feedback transient and minimal (e.g. a short auto-dismissing `"Code sent"` hint, not a permanent `"A 6-digit code has been sent to..."` alert block).
+   - Use the unified base theme background (`#FFFFFF` light / `#070D18` dark) without inventing extra white-on-white or shaded card/panel backgrounds.
    - Standardize inputs, select triggers (`SearchableSelect`), and primary CTA buttons to consistent industry-standard proportions across mobile and desktop (`h-11`, `1px` border, `rounded-lg`, clean focus ring).
    - Do not place trailing arrow icons (`ArrowRight`) inside standard CTA buttons (`Login`, `Verify`, `Create Account`).
    - Do not include color/theme mode toggle icons (`ThemeToggle`) or decorative icon cards on Login or Create Account pages.

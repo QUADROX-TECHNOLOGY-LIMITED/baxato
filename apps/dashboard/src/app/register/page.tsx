@@ -19,6 +19,8 @@ import SearchableSelect from '@/components/SearchableSelect';
 import AuthShell, {
   AUTH_INPUT_CLASS,
   AUTH_PRIMARY_BUTTON_CLASS,
+  GoogleAuthButton,
+  AuthDivider,
 } from '@/components/auth/AuthShell';
 import { useClerk } from '@clerk/nextjs';
 
@@ -63,7 +65,7 @@ function InlineOtpCard({
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-[#0B1424] border border-slate-200 dark:border-slate-700"
+      className="mt-2 p-3 rounded-lg bg-transparent border border-slate-200 dark:border-slate-800"
     >
       <div className="flex items-center justify-between text-xs mb-2">
         <span className="text-slate-600 dark:text-slate-300 truncate mr-2">
@@ -88,7 +90,7 @@ function InlineOtpCard({
           placeholder={placeholder}
           value={otp}
           onChange={(e) => onOtpChange(e.target.value.replace(/\D/g, ''))}
-          className="min-w-0 flex-1 h-10 px-3 text-center tracking-[0.25em] font-mono text-base font-semibold bg-white dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/15 transition-colors"
+          className="min-w-0 flex-1 h-10 px-3 text-center tracking-[0.25em] indent-[0.25em] font-mono text-base font-semibold bg-transparent border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/15 transition-colors"
         />
         <button
           type="button"
@@ -513,7 +515,7 @@ function RegisterFormContent({
             exit={{ opacity: 0, scale: 0.96 }}
             className="text-center py-6"
           >
-            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] rounded-xl flex items-center justify-center mx-auto mb-5 border border-blue-100 dark:border-blue-900/50">
+            <div className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-800 text-[#126BEB] flex items-center justify-center mx-auto mb-5">
               <CheckCircle2 className="w-6 h-6" />
             </div>
 
@@ -550,8 +552,11 @@ function RegisterFormContent({
               </p>
             </div>
 
+            <GoogleAuthButton />
+            <AuthDivider />
+
             {errorMessage && (
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
+              <div className="p-3 rounded-lg border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -602,12 +607,12 @@ function RegisterFormContent({
                 </div>
 
                 <div
-                  className={`h-11 w-full flex items-center rounded-lg border transition-colors focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/15 dark:focus-within:border-[#38BDF8] dark:focus-within:ring-[#38BDF8]/15 ${
+                  className={`h-11 w-full flex items-center rounded-lg border bg-transparent transition-colors focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/15 dark:focus-within:border-[#38BDF8] dark:focus-within:ring-[#38BDF8]/15 ${
                     isEmailVerified
-                      ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-400 dark:border-emerald-700'
+                      ? 'border-emerald-500 dark:border-emerald-600'
                       : formData.email && !isValidEmail
-                      ? 'bg-white dark:bg-[#0D1726] border-red-400 dark:border-red-700'
-                      : 'bg-white dark:bg-[#0D1726] border-slate-300 dark:border-slate-700'
+                      ? 'border-red-400 dark:border-red-700'
+                      : 'border-slate-300 dark:border-slate-700'
                   }`}
                 >
                   <input
@@ -624,7 +629,7 @@ function RegisterFormContent({
                       type="button"
                       onClick={handleSendEmailOtp}
                       disabled={isSendingEmailOtp || !isValidEmail}
-                      className="mr-1.5 shrink-0 h-8 px-2.5 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-[#126BEB]/20 dark:hover:bg-[#126BEB]/30 text-[#126BEB] dark:text-[#38BDF8] text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+                      className="mr-1.5 shrink-0 h-8 px-2.5 rounded-md border border-slate-200 dark:border-slate-700 bg-transparent hover:border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8] text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
                     >
                       {isSendingEmailOtp ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -689,10 +694,10 @@ function RegisterFormContent({
                 </div>
 
                 <div
-                  className={`h-11 w-full flex items-center rounded-lg border transition-colors focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/15 dark:focus-within:border-[#38BDF8] dark:focus-within:ring-[#38BDF8]/15 ${
+                  className={`h-11 w-full flex items-center rounded-lg border bg-transparent transition-colors focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/15 dark:focus-within:border-[#38BDF8] dark:focus-within:ring-[#38BDF8]/15 ${
                     isPhoneVerified
-                      ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-400 dark:border-emerald-700'
-                      : 'bg-white dark:bg-[#0D1726] border-slate-300 dark:border-slate-700'
+                      ? 'border-emerald-500 dark:border-emerald-600'
+                      : 'border-slate-300 dark:border-slate-700'
                   }`}
                 >
                   <div className="h-full px-3 flex items-center gap-1.5 border-r border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-600 dark:text-slate-300 shrink-0 select-none">
@@ -714,7 +719,7 @@ function RegisterFormContent({
                       type="button"
                       onClick={handleSendPhoneOtp}
                       disabled={isSendingPhoneOtp || formData.phoneNumber.length < 10}
-                      className="mr-1.5 shrink-0 h-8 px-2.5 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-[#126BEB]/20 dark:hover:bg-[#126BEB]/30 text-[#126BEB] dark:text-[#38BDF8] text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+                      className="mr-1.5 shrink-0 h-8 px-2.5 rounded-md border border-slate-200 dark:border-slate-700 bg-transparent hover:border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8] text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
                     >
                       {isSendingPhoneOtp ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -885,7 +890,7 @@ function RegisterFormContent({
 
               {/* Password Security Checklist */}
               {formData.password && (
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 space-y-1.5">
+                <div className="p-2.5 rounded-lg bg-transparent border border-slate-200 dark:border-slate-800 space-y-1.5">
                   <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                     <div
                       className={`flex items-center gap-1.5 ${

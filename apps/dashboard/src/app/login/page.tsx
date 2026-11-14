@@ -10,12 +10,13 @@ import {
   AlertCircle,
   Loader2,
   RotateCw,
-  CheckCircle2,
 } from 'lucide-react';
 import { useClerk } from '@clerk/nextjs';
 import AuthShell, {
   AUTH_INPUT_CLASS,
   AUTH_PRIMARY_BUTTON_CLASS,
+  GoogleAuthButton,
+  AuthDivider,
 } from '@/components/auth/AuthShell';
 
 type LoginStep = 'credentials' | '2fa';
@@ -52,6 +53,13 @@ export default function LoginPage() {
       }, 150);
     }
   }, [step]);
+
+  // Auto-dismiss transient 2FA code notice cleanly
+  useEffect(() => {
+    if (!twoFactorNotice) return;
+    const timer = setTimeout(() => setTwoFactorNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [twoFactorNotice]);
 
   // Resend countdown timer
   useEffect(() => {
@@ -121,9 +129,7 @@ export default function LoginPage() {
         setStep('2fa');
         if (data.data.twoFactorMethod === 'EMAIL') {
           setResendCountdown(60);
-          setTwoFactorNotice(
-            `A 6-digit code has been sent to ${data.data.email || cleanEmail}.`
-          );
+          setTwoFactorNotice('Code sent');
         }
         return;
       }
@@ -143,7 +149,7 @@ export default function LoginPage() {
       setErrorMessage(
         twoFactorMethod === 'TOTP'
           ? 'Please enter the 6-digit authenticator code or 8-character recovery code.'
-          : 'Please enter the 6-digit code sent to your email.'
+          : 'Please enter the code sent to your email.'
       );
       return;
     }
@@ -221,9 +227,7 @@ export default function LoginPage() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.data?.requiresTwoFactor) {
         setResendCountdown(60);
-        setTwoFactorNotice(
-          `A 6-digit code has been sent to ${twoFactorEmail || email}.`
-        );
+        setTwoFactorNotice('Code sent');
       } else {
         setErrorMessage(data?.error?.message || 'Failed to send a new verification code.');
       }
@@ -317,14 +321,14 @@ export default function LoginPage() {
             </div>
 
             {isSessionExpired && !errorMessage && (
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs font-medium flex items-center gap-2.5 mb-5">
+              <div className="p-3 rounded-lg border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2.5 mb-5">
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                 <span>Your session has expired. Please login again.</span>
               </div>
             )}
 
             {errorMessage && (
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
+              <div className="p-3 rounded-lg border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -381,7 +385,10 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="mt-7 pt-5 border-t border-slate-200/80 dark:border-slate-800 text-center">
+            <AuthDivider />
+            <GoogleAuthButton />
+
+            <div className="mt-6 pt-5 border-t border-slate-200/80 dark:border-slate-800 text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Don&apos;t have an account?{' '}
                 <Link
@@ -407,28 +414,33 @@ export default function LoginPage() {
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
                 {twoFactorMethod === 'TOTP' ? (
-                  'Enter the 6-digit code from your authenticator app or an 8-character recovery code.'
+                  'Enter the code from your authenticator app or a recovery code.'
                 ) : (
                   <>
-                    Enter the 6-digit code sent to{' '}
+                    Enter the code sent to{' '}
                     <span className="text-slate-800 dark:text-slate-200 font-medium">
                       {twoFactorEmail || email}
                     </span>
-                    .
                   </>
                 )}
               </p>
             </div>
 
-            {twoFactorNotice && (
-              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-[#126BEB] dark:text-[#38BDF8] text-xs font-medium flex items-center gap-2.5 mb-5">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{twoFactorNotice}</span>
-              </div>
-            )}
+            <AnimatePresence>
+              {twoFactorNotice && (
+                <motion.p
+                  initial={{ opacity: 0, y: -2 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -2 }}
+                  className="text-center text-xs font-medium text-[#126BEB] dark:text-[#38BDF8] mb-3"
+                >
+                  {twoFactorNotice}
+                </motion.p>
+              )}
+            </AnimatePresence>
 
             {errorMessage && (
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
+              <div className="p-3 rounded-lg border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-medium flex items-center gap-2.5 mb-5">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -450,23 +462,26 @@ export default function LoginPage() {
                   value={twoFactorCode}
                   onChange={(e) => handleOtpChange(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full h-12 px-4 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0D1726] text-center font-mono text-lg tracking-[0.3em] font-semibold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/15 dark:focus:border-[#38BDF8] dark:focus:ring-[#38BDF8]/15 transition-colors disabled:opacity-60"
+                  className="w-full h-12 px-4 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent text-center font-mono text-lg tracking-[0.3em] indent-[0.3em] font-semibold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/15 dark:focus:border-[#38BDF8] dark:focus:ring-[#38BDF8]/15 transition-colors disabled:opacity-60"
                 />
               </div>
 
               {twoFactorMethod === 'EMAIL' && (
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                   <span>Didn&apos;t receive code?</span>
                   {resendCountdown > 0 ? (
                     <span>
-                      Resend in <strong className="font-medium text-slate-700 dark:text-slate-200">{resendCountdown}s</strong>
+                      Resend in{' '}
+                      <strong className="font-medium text-slate-700 dark:text-slate-200">
+                        {resendCountdown}s
+                      </strong>
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={handleResendEmailOtp}
                       disabled={isResendingOtp}
-                      className="text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline inline-flex items-center gap-1.5 disabled:opacity-50"
+                      className="text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline inline-flex items-center gap-1 disabled:opacity-50"
                     >
                       <RotateCw className={`w-3.5 h-3.5 ${isResendingOtp ? 'animate-spin' : ''}`} />
                       <span>Resend code</span>
@@ -488,7 +503,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleBackToCredentials}
-                className="w-full py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                className="w-full py-2 text-center text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 Use another account
               </button>
