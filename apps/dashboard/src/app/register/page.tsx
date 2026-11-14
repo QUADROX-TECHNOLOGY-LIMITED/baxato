@@ -160,6 +160,7 @@ function RegisterFormContent({
 
   const [formData, setFormData] = useState({
     firstName: '',
+    middleName: '',
     lastName: '',
     email: '',
     phoneNumber: '',
@@ -171,6 +172,7 @@ function RegisterFormContent({
     confirmPassword: '',
   });
 
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -420,9 +422,10 @@ function RegisterFormContent({
       formData.state.length > 0 &&
       formData.lga.length > 0 &&
       isPasswordSecure &&
-      passwordsMatch === true
+      passwordsMatch === true &&
+      acceptedTerms
     );
-  }, [formData, isEmailVerified, isPhoneVerified, isPasswordSecure, passwordsMatch]);
+  }, [formData, isEmailVerified, isPhoneVerified, isPasswordSecure, passwordsMatch, acceptedTerms]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,6 +451,11 @@ function RegisterFormContent({
       return;
     }
 
+    if (!acceptedTerms) {
+      setErrorMessage('Please accept the Terms and Conditions and Privacy Policy.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -464,6 +472,7 @@ function RegisterFormContent({
         body: JSON.stringify({
           clerkId: clerkUserId || undefined,
           firstName: formData.firstName.trim(),
+          middleName: formData.middleName.trim() || undefined,
           lastName: formData.lastName.trim(),
           email: formData.email.toLowerCase().trim(),
           phoneNumber: formData.phoneNumber,
@@ -563,8 +572,8 @@ function RegisterFormContent({
             )}
 
             <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
-              {/* First & Last Name */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* First, Middle (Optional) & Last Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                     First name <span className="text-red-500">*</span>
@@ -575,6 +584,18 @@ function RegisterFormContent({
                     placeholder="John"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className={AUTH_INPUT_CLASS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Middle name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={formData.middleName}
+                    onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
                     className={AUTH_INPUT_CLASS}
                   />
                 </div>
@@ -947,7 +968,44 @@ function RegisterFormContent({
                 </div>
               )}
 
-              <div className="pt-2">
+              <div className="pt-1 flex items-start gap-2.5">
+                <input
+                  id="accept-terms"
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-700 accent-[#126BEB] cursor-pointer shrink-0"
+                />
+                <span className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  <label htmlFor="accept-terms" className="cursor-pointer">
+                    I accept the{' '}
+                  </label>
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline"
+                  >
+                    Terms and Conditions
+                  </Link>
+                  <label htmlFor="accept-terms" className="cursor-pointer">
+                    {' '}and{' '}
+                  </label>
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline"
+                  >
+                    Privacy Policy
+                  </Link>
+                  <label htmlFor="accept-terms" className="cursor-pointer">
+                    .
+                  </label>
+                </span>
+              </div>
+
+              <div className="pt-1">
                 <button
                   type="submit"
                   disabled={isSubmitting || !isFormValid}
