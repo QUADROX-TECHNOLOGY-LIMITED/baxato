@@ -19,7 +19,9 @@ globs: apps/dashboard/**/*, apps/api/**/*
    - Use crisp, authentic native UI vector icons (e.g. Lucide icons with tailored container badges) and genuine provider logos. Never use 3D glassy orb renderings.
 6. **Mandatory KYC Gating on Wallet Funding**:
    - Unverified accounts cannot fund wallets. Clicking "Fund Wallet" must immediately trigger the KYC Identity Verification modal.
-7. **Clean Terminology**:
-   - Avoid robotic phrases like "Vending Services" or "Instant Vending". Use "Quick Services" or "Bill Payments & Top-up".
+7. **Clean Terminology & Anti-AI UI Discipline**:
+   - Avoid robotic or AI-cliché phrases like `"Vending Services"`, `"Instant Vending"`, `"Empowering High-Growth Digital Commerce & Payments"`, `"Bank-Grade"`, `"Dispatched"`, or `"Authenticating..."`. Describe BAXATO accurately as a VTU, bill payments (local & international airtime, data, electricity, cable TV, exam PINs), and developer API platform.
+   - Keep button labels concise (`Login`, `Verify`, `Send code`, `Create Account`) with no trailing arrow icons (`ArrowRight`), and keep loading overlays free of `"Authenticating..."` / filler status words.
+   - Standardize form inputs, selects, and CTA buttons (`h-11`, `1px` borders, `rounded-lg`) across mobile and desktop; remove verbose helper text below fields and remove theme/mode toggle icons (`ThemeToggle`) from Login/Register screens.
 8. **Git Workflow**:
    - Push completed, verified commits directly to GitHub.

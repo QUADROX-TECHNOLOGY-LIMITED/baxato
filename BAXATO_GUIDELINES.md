@@ -68,7 +68,21 @@ This document specifies non-negotiable guidelines, architectural constraints, an
 
 ---
 
-## 8. Deployment & Workflow
+## 8. Anti-AI Copy, Form Standardization & Auth UI Discipline
+
+- **Accurate VTU & Developer API Positioning**:
+  - Present BAXATO truthfully as a VTU, utility bill payments (local & international airtime, data bundles, electricity, cable TV, exam PINs), and developer API platform with merchant support — never generic payment-processor hype (`"Empowering High-Growth Digital Commerce & Payments"`, `"Bank-Grade Ledger"`, etc.).
+- **Concise Human Copy & Short Action Labels**:
+  - Keep copy direct and trim unnecessary helper essays under inputs to reduce page length.
+  - Use natural wording (`"sent"` instead of `"dispatched"`) and concise button labels (`Login`, `Verify`, `Send code`, `Create Account`) instead of verbose phrases like `"Sign In to Merchant Console"` or `"Verify & Sign In"`.
+  - Keep clean brand loading animations during async transitions without `"Authenticating..."` / filler loading words.
+- **Standardized Controls & Minimal Chrome**:
+  - Use unified `h-11`, `1px`-bordered, `rounded-lg` fields/selects and matching `h-11` CTA buttons across mobile and desktop.
+  - Avoid trailing arrow icons (`ArrowRight`) on primary CTA buttons and omit theme/mode toggle icons (`ThemeToggle`) and decorative card clutter on Login and Create Account pages.
+
+---
+
+## 9. Deployment & Workflow
 
 - All changes must pass TypeScript validation and unit tests (`pnpm vitest run`).
 - Once verified, commit clean changes and push directly to GitHub (`origin/main`).

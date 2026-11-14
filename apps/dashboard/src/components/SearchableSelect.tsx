@@ -65,15 +65,15 @@ export default function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-base sm:text-sm font-medium text-left transition-colors duration-150 outline-none ${
+        className={`w-full h-11 flex items-center justify-between px-3.5 rounded-lg border text-base sm:text-sm font-normal text-left transition-colors duration-150 outline-none ${
           disabled
             ? 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed'
             : isOpen
-            ? 'bg-white dark:bg-[#0D1726] border-[#126BEB] dark:border-[#1677FF] ring-2 ring-[#126BEB]/10 text-slate-900 dark:text-white'
-            : 'bg-white dark:bg-[#0D1726] border-slate-200 dark:border-[#1E2D44] hover:border-slate-300 dark:hover:border-slate-600 text-slate-900 dark:text-white'
+            ? 'bg-white dark:bg-[#0D1726] border-[#126BEB] dark:border-[#38BDF8] ring-2 ring-[#126BEB]/15 dark:ring-[#38BDF8]/15 text-slate-900 dark:text-white'
+            : 'bg-white dark:bg-[#0D1726] border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-white'
         }`}
       >
-        <span className={value ? 'text-slate-900 dark:text-white font-medium' : 'text-slate-400 dark:text-slate-500'}>
+        <span className={value ? 'text-slate-900 dark:text-white truncate' : 'text-slate-400 dark:text-slate-500 truncate'}>
           {value || placeholder}
         </span>
         <svg
@@ -97,7 +97,7 @@ export default function SearchableSelect({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute z-[100] w-full mt-1.5 bg-white dark:bg-[#0D1726] border-2 border-slate-200 dark:border-[#1E2D44] rounded-xl shadow-xl overflow-hidden"
+            className="absolute z-[100] w-full mt-1.5 bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden"
           >
             <div className="p-2 border-b border-slate-100 dark:border-[#1E2D44] bg-slate-50/70 dark:bg-[#080F1C]">
               <input
