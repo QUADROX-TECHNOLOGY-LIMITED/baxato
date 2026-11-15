@@ -22,6 +22,8 @@ import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import AccessRestricted from '@/components/dashboard/AccessRestricted';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import ElectricityReceiptModal, {
   ElectricityReceiptData,
 } from '@/components/dashboard/ElectricityReceiptModal';
@@ -383,6 +385,7 @@ export default function ElectricityPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Dynamic DISCO catalog with admin-configured discount margins
@@ -444,6 +447,7 @@ export default function ElectricityPage() {
     } catch {
     } finally {
       setIsLoadingBalance(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -932,13 +936,19 @@ export default function ElectricityPage() {
       loadWallets();
     } catch (err: any) {
       setSubmitError(err.message || 'Payment failed. Please try again.');
+      setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (isInitialLoading) {
+    return <BaxatoLoader variant="fullscreen" />;
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#070E1C]">
+      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
@@ -1523,9 +1533,16 @@ export default function ElectricityPage() {
       </div>
 
       {/* CONFIRMATION SUMMARY MODAL */}
-      {isConfirmModalOpen && selectedDisco && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white dark:bg-[#0B1528] rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+      <ModalDialog
+        isOpen={Boolean(isConfirmModalOpen && selectedDisco && !isSubmitting)}
+        onClose={() => setIsConfirmModalOpen(false)}
+        dismissible={!isSubmitting}
+        ariaLabel="Confirm Electricity Purchase"
+        maxWidthClass="max-w-md"
+        className="dark:bg-[#0B1528]"
+      >
+        {selectedDisco && (
+          <div className="p-6 space-y-4">
             <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20">
                 <Zap className="w-4 h-4" />
@@ -1616,8 +1633,8 @@ export default function ElectricityPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* ELECTRICITY RECEIPT & TOKEN MODAL */}
       <ElectricityReceiptModal

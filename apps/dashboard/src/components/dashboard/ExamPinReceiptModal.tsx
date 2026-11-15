@@ -20,7 +20,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { printExamPinReceipt } from '@/lib/receipt-printer';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
 
 export interface ExamPinItem {
   pin: string;
@@ -84,9 +84,7 @@ export default function ExamPinReceiptModal({
   const [showPins, setShowPins] = useState(true);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
-  useModalThemeSync(Boolean(isOpen && receipt));
-
-  if (!isOpen || !receipt) return null;
+  if (!receipt) return null;
 
   const isSuccess = receipt.status === 'SUCCESSFUL';
   const isPending = receipt.status === 'PROCESSING' || receipt.status === 'PENDING';
@@ -158,14 +156,14 @@ export default function ExamPinReceiptModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 overflow-y-auto"
-      onClick={onClose}
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="Exam PIN Vending Receipt"
+      maxWidthClass="max-w-lg"
+      className="dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 print:shadow-none print:border-none print:m-0"
     >
-      <div
-        className="relative w-full max-w-lg my-8 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100 print:shadow-none print:border-none print:m-0"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative overflow-hidden">
         {/* Header Bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 print:hidden">
           <div className="flex items-center gap-2">
@@ -470,6 +468,6 @@ export default function ExamPinReceiptModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }

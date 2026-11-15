@@ -23,6 +23,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -700,11 +701,8 @@ export default function TeamManagementPage() {
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                       {isLoading ? (
                         <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400">
-                            <div className="inline-flex items-center gap-2">
-                              <RefreshCw className="w-4 h-4 animate-spin text-[#126BEB]" />
-                              <span>Loading members...</span>
-                            </div>
+                          <td colSpan={5} className="p-0">
+                            <BaxatoLoader variant="section" />
                           </td>
                         </tr>
                       ) : filteredMembers.length === 0 ? (
@@ -861,11 +859,8 @@ export default function TeamManagementPage() {
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                       {isLoading ? (
                         <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400">
-                            <div className="inline-flex items-center gap-2">
-                              <RefreshCw className="w-4 h-4 animate-spin text-[#126BEB]" />
-                              <span>Loading invitations...</span>
-                            </div>
+                          <td colSpan={5} className="p-0">
+                            <BaxatoLoader variant="section" />
                           </td>
                         </tr>
                       ) : filteredInvitations.length === 0 ? (

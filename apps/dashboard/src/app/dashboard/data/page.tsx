@@ -22,6 +22,8 @@ import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import AccessRestricted from '@/components/dashboard/AccessRestricted';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import TransactionReceiptModal, {
   TransactionReceiptData,
 } from '@/components/dashboard/TransactionReceiptModal';
@@ -126,6 +128,8 @@ export default function DataVendingPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Form State
   const [phone, setPhone] = useState<string>('');
@@ -171,6 +175,8 @@ export default function DataVendingPage() {
     } catch {
     } finally {
       setIsLoadingBalance(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -363,8 +369,13 @@ export default function DataVendingPage() {
     }
   };
 
+  if (isInitialLoading) {
+    return <BaxatoLoader variant="fullscreen" />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -383,8 +394,11 @@ export default function DataVendingPage() {
           businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
-          isRefreshing={false}
-          onRefresh={loadWallets}
+          isRefreshing={isRefreshing}
+          onRefresh={() => {
+            setIsRefreshing(true);
+            loadWallets();
+          }}
         />
 
         <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-5">
@@ -534,10 +548,7 @@ export default function DataVendingPage() {
 
                     {/* Plans Grid */}
                     {isLoadingPlans ? (
-                      <div className="py-12 flex flex-col items-center justify-center text-slate-400 text-sm gap-2">
-                        <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-                        <span>Fetching latest bundle plans...</span>
-                      </div>
+                      <BaxatoLoader variant="section" />
                     ) : filteredPlans.length === 0 ? (
                       <div className="py-12 text-center text-slate-400 text-sm">
                         No bundles found for the selected category.
@@ -669,9 +680,16 @@ export default function DataVendingPage() {
       </div>
 
       {/* Confirmation Modal */}
-      {isConfirmModalOpen && activePlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl">
+      <ModalDialog
+        isOpen={Boolean(isConfirmModalOpen && activePlan && !isSubmitting)}
+        onClose={() => setIsConfirmModalOpen(false)}
+        dismissible={!isSubmitting}
+        ariaLabel="Confirm Data Recharge"
+        maxWidthClass="max-w-md"
+        className="bg-slate-900 dark:bg-slate-900 border-slate-800"
+      >
+        {activePlan && (
+          <div className="p-6 space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-base font-semibold text-white flex items-center gap-2">
                 <Wifi className="w-4 h-4 text-emerald-400" />
@@ -728,8 +746,8 @@ export default function DataVendingPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* Transaction Receipt Modal */}
       {isReceiptModalOpen && receiptData && (

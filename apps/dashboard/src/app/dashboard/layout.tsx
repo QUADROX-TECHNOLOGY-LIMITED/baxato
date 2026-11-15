@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   isTokenExpired,
@@ -27,11 +28,7 @@ export default function MerchantDashboardLayout({
 
   // Silent loading state while validating session — ZERO EXPIRED CONTENT FLASH
   if (isAuthorized !== true) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-[#070D18] flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-[#126BEB] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <BaxatoLoader variant="fullscreen" />;
   }
 
   return <>{children}</>;

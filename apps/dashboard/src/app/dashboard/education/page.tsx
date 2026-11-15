@@ -34,6 +34,8 @@ import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import AccessRestricted from '@/components/dashboard/AccessRestricted';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import ExamPinReceiptModal, {
   ExamPinReceiptData,
 } from '@/components/dashboard/ExamPinReceiptModal';
@@ -329,6 +331,7 @@ export default function EducationPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Exam Packages Catalog
@@ -387,6 +390,7 @@ export default function EducationPage() {
       // Fallback
     } finally {
       setIsLoadingBalance(false);
+      setIsInitialLoading(false);
       setIsRefreshing(false);
     }
   };
@@ -662,9 +666,11 @@ export default function EducationPage() {
       } else {
         const msg = data?.error?.message || 'Transaction could not be completed. Please try again.';
         setSubmitError(msg);
+        setIsConfirmModalOpen(false);
       }
     } catch {
       setSubmitError('Network failure occurred. Please check transaction history to verify if debited.');
+      setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -682,8 +688,13 @@ export default function EducationPage() {
   const formatNaira = (val: number) =>
     `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  if (isInitialLoading) {
+    return <BaxatoLoader variant="fullscreen" />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
+      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
       {/* Sidebar */}
       <Sidebar
         businessName={businessName}
@@ -1163,15 +1174,15 @@ export default function EducationPage() {
       </div>
 
       {/* CONFIRMATION MODAL */}
-      {isConfirmModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => !isSubmitting && setIsConfirmModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalDialog
+        isOpen={isConfirmModalOpen && !isSubmitting}
+        onClose={() => setIsConfirmModalOpen(false)}
+        dismissible={!isSubmitting}
+        ariaLabel="Confirm PIN Purchase"
+        maxWidthClass="max-w-md"
+        className="dark:bg-[#0F172A]"
+      >
+        <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                 <GraduationCap className="w-6 h-6" />
@@ -1254,9 +1265,8 @@ export default function EducationPage() {
                 )}
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </ModalDialog>
 
       {/* RECEIPT MODAL */}
       <ExamPinReceiptModal

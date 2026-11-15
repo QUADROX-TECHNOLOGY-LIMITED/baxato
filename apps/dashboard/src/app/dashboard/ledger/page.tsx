@@ -31,7 +31,8 @@ import {
   getStoredBusiness,
   clearSessionAndRedirect,
 } from '@/lib/auth-session';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 
 export interface UnifiedTransaction {
   id: string;
@@ -160,8 +161,6 @@ function LedgerContent() {
   const [selectedTransaction, setSelectedTransaction] = useState<UnifiedTransaction | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
-
-  useModalThemeSync(Boolean(selectedTransaction));
 
   // Initialize Auth Context
   useEffect(() => {
@@ -629,19 +628,11 @@ function LedgerContent() {
                   }`}
                 >
                   {isLoading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="animate-pulse">
-                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4"><div className="w-20 h-4 bg-slate-100 dark:bg-slate-800 rounded-full" /></td>
-                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-3.5 px-4 text-right"><div className="w-12 h-4 bg-slate-100 dark:bg-slate-800 rounded ml-auto" /></td>
-                      </tr>
-                    ))
+                    <tr>
+                      <td colSpan={9} className="p-0">
+                        <BaxatoLoader variant="section" />
+                      </td>
+                    </tr>
                   ) : transactions.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 px-4 text-center">
@@ -789,16 +780,18 @@ function LedgerContent() {
         </main>
       </div>
 
-      {/* Soft Transaction Detail Modal */}
-      {selectedTransaction && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 animate-in fade-in duration-150"
-          onClick={() => setSelectedTransaction(null)}
-        >
-          <div
-            className="w-full max-w-md bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {isRefreshing && !isLoading && <BaxatoLoader variant="overlay" />}
+
+      {/* Native Top-Layer Transaction Detail Modal */}
+      <ModalDialog
+        isOpen={Boolean(selectedTransaction)}
+        onClose={() => setSelectedTransaction(null)}
+        ariaLabel="Transaction Details"
+        maxWidthClass="max-w-md"
+        className="dark:bg-[#0B1528]"
+      >
+        {selectedTransaction && (
+          <div className="rounded-2xl overflow-hidden">
             {/* Header */}
             <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <h3 className="font-semibold text-base text-slate-900 dark:text-white">
@@ -1009,8 +1002,8 @@ function LedgerContent() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* KYC Modal */}
       <KycModal
@@ -1024,13 +1017,7 @@ function LedgerContent() {
 
 export default function LedgerPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#070D18]">
-          <div className="w-7 h-7 border-2 border-[#126BEB] border-t-transparent rounded-full animate-spin" />
-        </div>
-      }
-    >
+    <Suspense fallback={<BaxatoLoader variant="fullscreen" />}>
       <LedgerContent />
     </Suspense>
   );

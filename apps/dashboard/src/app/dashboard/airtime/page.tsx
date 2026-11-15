@@ -20,6 +20,8 @@ import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import AccessRestricted from '@/components/dashboard/AccessRestricted';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import TransactionReceiptModal, {
   TransactionReceiptData,
 } from '@/components/dashboard/TransactionReceiptModal';
@@ -107,6 +109,7 @@ export default function AirtimeVendingPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   // Form State
   const [phone, setPhone] = useState<string>('');
@@ -150,6 +153,7 @@ export default function AirtimeVendingPage() {
     } catch {
     } finally {
       setIsLoadingBalance(false);
+      setIsInitialLoading(false);
     }
   };
 
@@ -373,8 +377,13 @@ export default function AirtimeVendingPage() {
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
+  if (isInitialLoading) {
+    return <BaxatoLoader variant="fullscreen" />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
+      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
@@ -595,9 +604,15 @@ export default function AirtimeVendingPage() {
       </div>
 
       {/* Clean Unified Confirmation Modal */}
-      {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-sm bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4 text-slate-900 dark:text-white">
+      <ModalDialog
+        isOpen={isConfirmModalOpen && !isSubmitting}
+        onClose={() => setIsConfirmModalOpen(false)}
+        dismissible={!isSubmitting}
+        ariaLabel="Confirm Airtime Recharge"
+        maxWidthClass="max-w-sm"
+        className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
+      >
+        <div className="p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Confirm Airtime Recharge
@@ -688,9 +703,8 @@ export default function AirtimeVendingPage() {
                 )}
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </ModalDialog>
 
       {/* Sleek Enterprise BAXATO Transaction Receipt Modal with Live Auto-Pinging & PDF Export */}
       <TransactionReceiptModal

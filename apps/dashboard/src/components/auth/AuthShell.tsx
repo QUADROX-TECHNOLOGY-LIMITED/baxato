@@ -3,8 +3,8 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Headphones } from 'lucide-react';
+import BaxatoLoader from '@/components/BaxatoLoader';
 
 export const AUTH_INPUT_CLASS =
   'w-full h-11 px-3.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/15 dark:focus:border-[#38BDF8] dark:focus:ring-[#38BDF8]/15 transition-colors';
@@ -93,51 +93,12 @@ export default function AuthShell({
 }: AuthShellProps) {
   return (
     <div className="min-h-[100dvh] flex flex-col lg:flex-row bg-white dark:bg-[#070D18] text-slate-900 dark:text-slate-100 transition-colors duration-200 relative overflow-x-hidden">
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            key="auth-loading-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            role="status"
-            aria-live="polite"
-            aria-label="Loading"
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-white dark:bg-[#070D18] select-none h-[100dvh] w-screen overflow-hidden"
-          >
-            <div className="flex flex-col items-center gap-5">
-              <div className="relative w-14 h-14 flex items-center justify-center">
-                <div className="relative w-full h-full flex items-center justify-center dark:rounded-xl dark:bg-white dark:p-1.5">
-                  <div className="relative w-full h-full">
-                    <Image
-                      src="/baxato-logo.jpg"
-                      alt="BAXATO"
-                      fill
-                      priority
-                      className="object-contain"
-                    />
-                  </div>
-                </div>
-                <motion.span
-                  aria-hidden="true"
-                  className="absolute -inset-2 rounded-[20px] border-2 border-transparent border-t-[#126BEB] dark:border-t-[#38BDF8]"
-                  animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, duration: 0.85, ease: 'linear' }}
-                />
-              </div>
-
-              <div className="w-24 h-1 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                <motion.div
-                  className="h-full w-1/2 rounded-full bg-[#126BEB] dark:bg-[#38BDF8]"
-                  animate={{ x: ['-100%', '200%'] }}
-                  transition={{ repeat: Infinity, duration: 1.05, ease: 'easeInOut' }}
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isLoading && (
+        <BaxatoLoader
+          variant="fullscreen"
+          className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden"
+        />
+      )}
 
       {/* Left Desktop Showcase Panel */}
       <aside className="hidden lg:flex lg:w-1/2 lg:min-h-[100dvh] bg-white dark:bg-[#070D18] border-r border-slate-200/80 dark:border-slate-800/80 p-12 xl:p-16 flex-col justify-between">

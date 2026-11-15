@@ -35,6 +35,7 @@ export default function RootLayout({
   const content = (
     <html lang="en" className="bg-white dark:bg-[#070D18]" suppressHydrationWarning>
       <head>
+        <meta name="color-scheme" content="light dark" id="meta-color-scheme" />
         <meta name="theme-color" content="#ffffff" id="meta-theme-color" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -44,15 +45,17 @@ export default function RootLayout({
               (function() {
                 try {
                   var stored = localStorage.getItem('baxato_theme');
+                  var scheme = (stored === 'light' || stored === 'dark') ? stored : 'light dark';
+                  var metaScheme = document.getElementById('meta-color-scheme');
+                  if (metaScheme) {
+                    metaScheme.setAttribute('content', scheme);
+                  }
                   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                   var isDark = stored === 'dark' || ((!stored || stored === 'system') && prefersDark);
                   var bg = isDark ? '#070D18' : '#ffffff';
-                  if (isDark) {
-                    document.documentElement.classList.add('dark');
-                    document.documentElement.style.colorScheme = 'dark';
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                    document.documentElement.style.colorScheme = 'light';
+                  document.documentElement.classList.toggle('dark', isDark);
+                  if (!window.CSS || !window.CSS.supports || !window.CSS.supports('selector(:has(*))')) {
+                    document.documentElement.style.colorScheme = scheme;
                   }
                   document.documentElement.style.backgroundColor = bg;
                   var meta = document.getElementById('meta-theme-color');

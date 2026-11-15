@@ -26,9 +26,13 @@ export default function ThemeToggle() {
 
   const setTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
-    localStorage.setItem('baxato_theme', mode);
+    if (mode === 'system') {
+      localStorage.removeItem('baxato_theme');
+    } else {
+      localStorage.setItem('baxato_theme', mode);
+    }
     setIsOpen(false);
-    applyThemeChrome(resolveIsDark(mode));
+    applyThemeChrome(resolveIsDark(mode), mode);
   };
 
   const ActiveIcon = themeMode === 'light' ? Sun : themeMode === 'dark' ? Moon : Laptop;

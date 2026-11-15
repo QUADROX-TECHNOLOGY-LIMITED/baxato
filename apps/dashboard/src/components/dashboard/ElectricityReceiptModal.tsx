@@ -17,7 +17,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { printElectricityReceipt } from '@/lib/receipt-printer';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
 
 export interface ElectricityReceiptData {
   transactionId: string;
@@ -76,8 +76,6 @@ export default function ElectricityReceiptModal({
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-
-  useModalThemeSync(Boolean(isOpen && currentReceipt));
 
   useEffect(() => {
     setCurrentReceipt(receipt);
@@ -155,7 +153,7 @@ export default function ElectricityReceiptModal({
     };
   }, [isOpen, currentReceipt?.reference, isProcessing, pollingEndpoint, onStatusUpdated]);
 
-  if (!isOpen || !currentReceipt) return null;
+  if (!currentReceipt) return null;
 
   // Format token into groups of 4 (e.g. 1234 5678 9012 3456 7890)
   const formatToken = (tok?: string) => {
@@ -237,8 +235,14 @@ export default function ElectricityReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/35 dark:bg-black/70 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#0B1528] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-6">
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="Electricity Receipt"
+      maxWidthClass="max-w-lg"
+      className="dark:bg-[#0B1528]"
+    >
+      <div className="relative overflow-hidden">
         
         {/* Header Bar */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/40">
@@ -516,6 +520,6 @@ export default function ElectricityReceiptModal({
           </p>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }

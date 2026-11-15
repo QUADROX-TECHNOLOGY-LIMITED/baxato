@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, AlertCircle, AlertTriangle, Loader2, UserCheck, ShieldCheck } from 'lucide-react';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
 
 interface KycModalProps {
   isOpen: boolean;
@@ -45,25 +45,14 @@ export default function KycModal({
     }
   }, [initialFirstName, initialLastName, isOpen]);
 
-  // Lock background scrolling while modal is open and sync mobile bar theme chrome
-  useModalThemeSync(isOpen);
-
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+    if (!isOpen) {
       setIsVerifiedSuccess(false);
       setErrorMessage(null);
       setNin('');
       setDob('');
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleNinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
@@ -148,16 +137,18 @@ export default function KycModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 overflow-hidden">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.15 }}
-        className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-[#0A1220] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
-      >
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      dismissible={!isVerifying}
+      ariaLabel="Identity Verification"
+      maxWidthClass="max-w-sm sm:max-w-md"
+      className="dark:bg-[#0A1220]"
+    >
+      <div className="relative overflow-hidden">
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
           disabled={isVerifying}
           className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
@@ -316,7 +307,7 @@ export default function KycModal({
             )}
           </AnimatePresence>
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </ModalDialog>
   );
 }

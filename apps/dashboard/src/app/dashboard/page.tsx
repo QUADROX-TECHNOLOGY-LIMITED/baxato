@@ -29,7 +29,8 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 
 interface ServiceProviderBadge {
   name: string;
@@ -191,8 +192,6 @@ export default function DashboardOverviewPage() {
   const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [copiedWorkspaceRef, setCopiedWorkspaceRef] = useState(false);
-
-  useModalThemeSync(isFundModalOpen);
 
   const getRequestHeaders = useCallback(() => {
     const authToken = getStoredAuthToken();
@@ -767,16 +766,17 @@ export default function DashboardOverviewPage() {
         userLastName={userLastName}
       />
 
-      {/* Fund Wallet Modal */}
-      {isFundModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70"
-          onClick={() => setIsFundModalOpen(false)}
-        >
-          <div
-            className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {isRefreshing && <BaxatoLoader variant="overlay" />}
+
+      {/* Native Top-Layer Fund Wallet Modal */}
+      <ModalDialog
+        isOpen={isFundModalOpen}
+        onClose={() => setIsFundModalOpen(false)}
+        ariaLabel="Fund Wallet"
+        maxWidthClass="max-w-md"
+        className="dark:bg-[#0B1528]"
+      >
+        <div className="p-6 space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center font-bold">
@@ -854,9 +854,8 @@ export default function DashboardOverviewPage() {
             >
               Done
             </button>
-          </div>
         </div>
-      )}
+      </ModalDialog>
     </div>
   );
 }

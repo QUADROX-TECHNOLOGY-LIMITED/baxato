@@ -19,6 +19,8 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import BaxatoLoader from '@/components/BaxatoLoader';
+import ModalDialog from '@/components/ModalDialog';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -322,10 +324,7 @@ export default function WebhookEventsPage() {
             </div>
 
             {isLoading ? (
-              <div className="py-12 flex flex-col items-center justify-center space-y-2">
-                <RefreshCw className="w-5 h-5 animate-spin text-[#126BEB]" />
-                <span className="text-xs text-slate-400">Loading webhook events...</span>
-              </div>
+              <BaxatoLoader variant="section" />
             ) : filteredDeliveries.length === 0 ? (
               <div className="py-12 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
                 No webhook deliveries matching current filter.
@@ -408,9 +407,15 @@ export default function WebhookEventsPage() {
       </div>
 
       {/* Payload Viewer Modal */}
-      {selectedDelivery && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-4">
+      <ModalDialog
+        isOpen={Boolean(selectedDelivery)}
+        onClose={() => setSelectedDelivery(null)}
+        ariaLabel="Webhook Payload"
+        maxWidthClass="max-w-lg"
+        className="dark:bg-[#0B1528]"
+      >
+        {selectedDelivery && (
+          <div className="p-6 relative space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white text-sm">
@@ -421,6 +426,7 @@ export default function WebhookEventsPage() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedDelivery(null)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white"
               >
@@ -435,14 +441,15 @@ export default function WebhookEventsPage() {
             </div>
 
             <button
+              type="button"
               onClick={() => setSelectedDelivery(null)}
               className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               Close
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* KYC Modal */}
       <KycModal

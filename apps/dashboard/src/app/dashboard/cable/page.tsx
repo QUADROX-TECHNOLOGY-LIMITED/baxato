@@ -23,6 +23,8 @@ import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import AccessRestricted from '@/components/dashboard/AccessRestricted';
+import ModalDialog from '@/components/ModalDialog';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import CableReceiptModal, {
   CableReceiptData,
 } from '@/components/dashboard/CableReceiptModal';
@@ -282,6 +284,7 @@ export default function CableVendingPage() {
   // Settlement Balance
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Operator Catalog & View State
@@ -355,6 +358,7 @@ export default function CableVendingPage() {
       // Fallback
     } finally {
       setIsLoadingBalance(false);
+      setIsInitialLoading(false);
       setIsRefreshing(false);
     }
   };
@@ -637,9 +641,11 @@ export default function CableVendingPage() {
       } else {
         const msg = data?.error?.message || 'Subscription failed. Please verify smartcard.';
         setSubmitError(msg);
+        setIsConfirmModalOpen(false);
       }
     } catch {
       setSubmitError('Network failure occurred. Please check history to verify status.');
+      setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -648,8 +654,13 @@ export default function CableVendingPage() {
   const formatNaira = (val: number) =>
     `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  if (isInitialLoading) {
+    return <BaxatoLoader variant="fullscreen" />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
+      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
       {/* Sidebar */}
       <Sidebar
         businessName={businessName}
@@ -1095,15 +1106,16 @@ export default function CableVendingPage() {
       </div>
 
       {/* CONFIRMATION MODAL */}
-      {isConfirmModalOpen && selectedOperator && currentBouquet && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => !isSubmitting && setIsConfirmModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-md bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalDialog
+        isOpen={Boolean(isConfirmModalOpen && selectedOperator && currentBouquet && !isSubmitting)}
+        onClose={() => setIsConfirmModalOpen(false)}
+        dismissible={!isSubmitting}
+        ariaLabel="Confirm Subscription"
+        maxWidthClass="max-w-md"
+        className="dark:bg-[#0B1528]"
+      >
+        {selectedOperator && currentBouquet && (
+          <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500 dark:text-blue-400">
                 <Tv className="w-6 h-6" />
@@ -1187,8 +1199,8 @@ export default function CableVendingPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* RECEIPT MODAL */}
       <CableReceiptModal

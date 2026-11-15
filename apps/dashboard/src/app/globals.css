@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light dark;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
   --bg-primary: #FFFFFF;
   --bg-navbar: #FFFFFF;
   --bg-card: #FFFFFF;
@@ -16,7 +19,17 @@
   --color-link: #126BEB;
 }
 
+:root:has(> head > meta[name="color-scheme"][content="dark"]) {
+  color-scheme: dark;
+}
+
+:root:has(> head > meta[name="color-scheme"][content="light"]) {
+  color-scheme: light;
+}
+
 .dark {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
   --bg-primary: #070D18;
   --bg-navbar: #0A1220;
   --bg-card: #0A1220;
@@ -45,18 +58,138 @@ body {
   }
 }
 
-/* Custom subtle scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Legacy WebKit/Blink scrollbar fallback when standard scrollbar-color is unsupported */
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 9999px;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #334155;
+  }
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+@layer components {
+  dialog.baxato-dialog {
+    margin: auto;
+    padding: 0;
+    color: inherit;
+    opacity: 0;
+    transition-property: opacity, transform, display, overlay;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-out;
+    transition-behavior: allow-discrete;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    dialog.baxato-dialog {
+      transform: scale(0.96) translateY(8px);
+    }
+  }
+
+  dialog.baxato-dialog[open]:where(:not([data-closing])) {
+    opacity: 1;
+  }
+
+  @starting-style {
+    dialog.baxato-dialog[open]:where(:not([data-closing])) {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    dialog.baxato-dialog[open]:where(:not([data-closing])) {
+      transform: scale(1) translateY(0);
+    }
+
+    @starting-style {
+      dialog.baxato-dialog[open]:where(:not([data-closing])) {
+        transform: scale(0.96) translateY(8px);
+      }
+    }
+  }
+
+  dialog.baxato-dialog:modal {
+    overscroll-behavior: contain;
+  }
+
+  dialog.baxato-dialog::backdrop {
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background-color: rgb(255 255 255 / 0);
+    -webkit-backdrop-filter: blur(0px);
+    backdrop-filter: blur(0px);
+    transition-property: background-color, backdrop-filter, -webkit-backdrop-filter, display, overlay;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-out;
+    transition-behavior: allow-discrete;
+  }
+
+  dialog.baxato-dialog[open]:where(:not([data-closing]))::backdrop {
+    background-color: rgb(255 255 255 / 0.72);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+
+  .dark dialog.baxato-dialog[open]:where(:not([data-closing]))::backdrop {
+    background-color: rgb(7 13 24 / 0.78);
+  }
+
+  @starting-style {
+    dialog.baxato-dialog[open]:where(:not([data-closing]))::backdrop {
+      background-color: rgb(255 255 255 / 0);
+      -webkit-backdrop-filter: blur(0px);
+      backdrop-filter: blur(0px);
+    }
+
+    .dark dialog.baxato-dialog[open]:where(:not([data-closing]))::backdrop {
+      background-color: rgb(7 13 24 / 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    dialog.baxato-dialog,
+    dialog.baxato-dialog::backdrop {
+      transition-duration: 0.1s;
+    }
+  }
 }
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 9999px;
+
+@keyframes baxato-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+
+@keyframes baxato-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.baxato-loader-ring {
+  animation: baxato-spin 0.85s linear infinite;
+}
+
+.baxato-loader-bar {
+  animation: baxato-sweep 1.05s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .baxato-loader-ring {
+    animation-duration: 1.8s;
+  }
+  .baxato-loader-bar {
+    animation-duration: 2s;
+  }
 }

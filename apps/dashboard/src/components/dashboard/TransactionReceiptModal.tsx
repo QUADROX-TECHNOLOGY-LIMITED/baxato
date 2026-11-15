@@ -18,7 +18,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { printTransactionReceipt } from '@/lib/receipt-printer';
-import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
+import ModalDialog from '@/components/ModalDialog';
 
 export interface TransactionReceiptData {
   transactionId: string;
@@ -68,8 +68,6 @@ export default function TransactionReceiptModal({
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-
-  useModalThemeSync(Boolean(isOpen && currentReceipt));
 
   // Sync internal state when prop changes
   useEffect(() => {
@@ -144,7 +142,7 @@ export default function TransactionReceiptModal({
     };
   }, [isOpen, currentReceipt?.reference, isProcessing, pollingEndpoint, onStatusUpdated]);
 
-  if (!isOpen || !currentReceipt) return null;
+  if (!currentReceipt) return null;
 
   // Copy reference to clipboard
   const handleCopyReference = () => {
@@ -215,14 +213,17 @@ export default function TransactionReceiptModal({
       : null;
 
   return (
-    <>
-      {/* Modal Backdrop Overlay */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/35 dark:bg-black/70 animate-in fade-in duration-150 overflow-y-auto">
-        {/* Modal Container */}
-        <div
-          id="baxato-receipt-document"
-          className="w-full max-w-md bg-white dark:bg-[#0B1528] rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-7 shadow-2xl space-y-4 text-slate-900 dark:text-white relative overflow-hidden transition-all my-auto"
-        >
+    <ModalDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel="Transaction Receipt"
+      maxWidthClass="max-w-md"
+      className="rounded-2xl sm:rounded-3xl dark:bg-[#0B1528] text-slate-900 dark:text-white"
+    >
+      <div
+        id="baxato-receipt-document"
+        className="p-5 sm:p-7 space-y-4 relative overflow-hidden"
+      >
           {/* Subtle Top Decorative Accent */}
           <div
             className={`absolute top-0 left-0 right-0 h-1.5 ${
@@ -482,7 +483,6 @@ export default function TransactionReceiptModal({
             Thank you for using BAXATO &bull; support@baxato.com
           </div>
         </div>
-      </div>
-    </>
+    </ModalDialog>
   );
 }

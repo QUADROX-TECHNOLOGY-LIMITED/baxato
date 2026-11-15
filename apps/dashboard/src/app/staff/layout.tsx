@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Lock, LogIn } from 'lucide-react';
 import StaffSidebar from '@/components/admin/StaffSidebar';
 import StaffHeader from '@/components/admin/StaffHeader';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   isTokenExpired,
@@ -59,11 +60,7 @@ export default function StaffLayout({
 
   // Silent loading state while evaluating auth or redirecting — ABSOLUTELY ZERO CONTENT FLASH
   if (isAuthorized !== true) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-[#126BEB] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <BaxatoLoader variant="fullscreen" />;
   }
 
   // 3. Authorized View: Rendered ONLY when isAuthorized === true

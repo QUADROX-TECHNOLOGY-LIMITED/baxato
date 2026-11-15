@@ -44,6 +44,7 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
+import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -632,6 +633,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
+      {isRefreshing && !isLoading && <BaxatoLoader variant="overlay" />}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
@@ -1013,12 +1015,7 @@ export default function AnalyticsPage() {
 
             {/* Chart Canvas */}
             {isLoading ? (
-              <div className="w-full h-[260px] flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <RefreshCw className="w-6 h-6 animate-spin text-[#126BEB]" />
-                  <span className="text-xs text-slate-400">Loading live chart telemetry...</span>
-                </div>
-              </div>
+              <BaxatoLoader variant="section" className="h-[260px]" />
             ) : isZeroTxn ? (
               <div className="w-full h-[260px] flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-[#081120]/50 p-6 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] flex items-center justify-center mb-3">
