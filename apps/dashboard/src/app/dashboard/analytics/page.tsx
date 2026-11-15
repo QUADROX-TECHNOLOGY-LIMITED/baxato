@@ -3,42 +3,22 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
-  BarChart3,
   TrendingUp,
   TrendingDown,
-  Activity,
   Zap,
-  Smartphone,
+  Phone,
   Wifi,
   Tv,
   GraduationCap,
-  Clock,
-  ArrowUpRight,
-  Download,
-  RefreshCw,
   Layers,
-  ShieldCheck,
   CheckCircle2,
-  AlertCircle,
-  Calendar,
-  Filter,
-  Server,
-  Globe,
-  Cpu,
-  Receipt,
   ChevronDown,
-  Info,
   Check,
-  PieChart,
-  XCircle,
-  AlertTriangle,
-  Building,
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ListFilter,
-  SlidersHorizontal,
+  Download,
+  BarChart3,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -46,14 +26,16 @@ import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
 import {
   getStoredAuthToken,
+  isTokenExpired,
   getStoredUser,
   getStoredBusiness,
   clearSessionAndRedirect,
+  handleAuthResponse,
 } from '@/lib/auth-session';
 
 type Timeframe = 'today' | '7d' | '30d' | '90d' | 'ytd';
 type ServiceFilter = 'ALL' | 'AIRTIME' | 'DATA' | 'ELECTRICITY' | 'CABLE_TV' | 'EXAM_PIN';
-type ChannelFilter = 'ALL' | 'API' | 'CONSOLE';
+type ChannelFilter = 'ALL' | 'WEB' | 'API';
 
 interface TimelinePoint {
   bucket: string;
@@ -86,44 +68,13 @@ interface ServiceBreakdownItem {
 interface TopOperatorItem {
   operator: string;
   serviceType: string;
+  serviceLabel?: string;
   count: number;
   successfulCount: number;
   volumeNaira: number;
   formattedVolume: string;
   volumeShare: number;
   successRate: number;
-}
-
-interface FailureReasonItem {
-  reason: string;
-  count: number;
-  lostVolumeNaira: number;
-  formattedLostVolume: string;
-  percentage: number;
-}
-
-interface FailedTransactionItem {
-  id: string;
-  reference: string;
-  clientReference?: string;
-  serviceType: string;
-  recipient: string;
-  amountKobo: string;
-  amountNaira: number;
-  formattedAmount: string;
-  providerName: string;
-  operator: string;
-  errorMessage: string;
-  createdAt: string;
-}
-
-interface HourlyDensityItem {
-  hour: number;
-  label: string;
-  count: number;
-  volumeNaira: number;
-  formattedVolume: string;
-  percentage: number;
 }
 
 interface AnalyticsData {
@@ -181,91 +132,143 @@ interface AnalyticsData {
     };
   };
   topOperators: TopOperatorItem[];
-  failureDiagnostics: {
-    totalFailed: number;
-    failureRate: number;
-    topReasons: FailureReasonItem[];
-    paginatedFailures?: {
-      transactions: FailedTransactionItem[];
-      pagination: {
-        page: number;
-        pageSize: number;
-        totalCount: number;
-        totalPages: number;
-      };
-    };
-    statusDistribution: {
-      successful: number;
-      failed: number;
-      pending: number;
-      reversed: number;
-    };
-  };
-  hourlyDensity: HourlyDensityItem[];
 }
 
-/**
- * Maps telecom networks, DISCO electricity providers, pay-TV billers,
- * and exam bodies to their real logos in public/logos/
- */
-function getOperatorLogo(operator: string): { logoUrl: string | null; bg: string } {
+const TIMEFRAME_OPTIONS: Array<{ key: Timeframe; shortLabel: string; longLabel: string }> = [
+  { key: 'today', shortLabel: '24h', longLabel: 'Last 24 hours' },
+  { key: '7d', shortLabel: '7D', longLabel: 'Last 7 days' },
+  { key: '30d', shortLabel: '30D', longLabel: 'Last 30 days' },
+  { key: '90d', shortLabel: '90D', longLabel: 'Last 90 days' },
+  { key: 'ytd', shortLabel: 'YTD', longLabel: 'Year to date' },
+];
+
+const SERVICE_OPTIONS: Array<{ value: ServiceFilter; label: string; icon: any }> = [
+  { value: 'ALL', label: 'All Services', icon: Layers },
+  { value: 'AIRTIME', label: 'Airtime', icon: Phone },
+  { value: 'DATA', label: 'Data Bundles', icon: Wifi },
+  { value: 'ELECTRICITY', label: 'Electricity', icon: Zap },
+  { value: 'CABLE_TV', label: 'Cable TV', icon: Tv },
+  { value: 'EXAM_PIN', label: 'Exam PINs', icon: GraduationCap },
+];
+
+const CHANNEL_OPTIONS: Array<{ value: ChannelFilter; label: string }> = [
+  { value: 'ALL', label: 'All Channels' },
+  { value: 'WEB', label: 'Dashboard' },
+  { value: 'API', label: 'API' },
+];
+
+const SERVICE_LABELS: Record<string, string> = {
+  AIRTIME: 'Airtime',
+  DATA: 'Data Bundles',
+  ELECTRICITY: 'Electricity',
+  CABLE_TV: 'Cable TV',
+  EXAM_PIN: 'Exam PINs',
+};
+
+const SERVICE_THEME: Record<string, { hex: string; barClass: string; badgeClass: string; icon: any }> = {
+  AIRTIME: {
+    hex: '#10b981',
+    barClass: 'bg-emerald-500',
+    badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400',
+    icon: Phone,
+  },
+  DATA: {
+    hex: '#126BEB',
+    barClass: 'bg-[#126BEB]',
+    badgeClass: 'bg-blue-50 text-[#126BEB] dark:bg-blue-950/60 dark:text-[#38BDF8]',
+    icon: Wifi,
+  },
+  ELECTRICITY: {
+    hex: '#f59e0b',
+    barClass: 'bg-amber-500',
+    badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400',
+    icon: Zap,
+  },
+  CABLE_TV: {
+    hex: '#8b5cf6',
+    barClass: 'bg-purple-500',
+    badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400',
+    icon: Tv,
+  },
+  EXAM_PIN: {
+    hex: '#f43f5e',
+    barClass: 'bg-rose-500',
+    badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400',
+    icon: GraduationCap,
+  },
+};
+
+function getOperatorLogo(operator: string): { logoUrl: string | null; fullBleed?: boolean } {
   const norm = (operator || '').toUpperCase().trim();
 
-  // Telecom Carriers
-  if (norm.includes('MTN')) return { logoUrl: '/logos/telecom/mtn.svg', bg: 'bg-[#FFCC00]/10 border-amber-300 dark:border-amber-700/50' };
-  if (norm.includes('AIRTEL')) return { logoUrl: '/logos/telecom/airtel.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
-  if (norm.includes('GLO')) return { logoUrl: '/logos/telecom/glo.svg', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
-  if (norm.includes('9MOBILE') || norm.includes('ETISALAT')) return { logoUrl: '/logos/telecom/9mobile.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
+  if (norm.includes('MTN')) return { logoUrl: '/logos/telecom/mtn.svg', fullBleed: true };
+  if (norm.includes('AIRTEL')) return { logoUrl: '/logos/telecom/airtel.svg' };
+  if (norm.includes('GLO')) return { logoUrl: '/logos/telecom/glo.svg', fullBleed: true };
+  if (norm.includes('9MOBILE') || norm.includes('ETISALAT')) return { logoUrl: '/logos/telecom/9mobile.svg' };
 
-  // Cable TV Providers
-  if (norm.includes('DSTV')) return { logoUrl: '/logos/cable/dstv.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
-  if (norm.includes('GOTV')) return { logoUrl: '/logos/cable/gotv.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
-  if (norm.includes('STARTIMES')) return { logoUrl: '/logos/cable/startimes.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
-  if (norm.includes('SHOWMAX')) return { logoUrl: '/logos/cable/showmax.svg', bg: 'bg-rose-500/10 border-rose-300 dark:border-rose-900/50' };
+  if (norm.includes('DSTV')) return { logoUrl: '/logos/cable/dstv.svg' };
+  if (norm.includes('GOTV')) return { logoUrl: '/logos/cable/gotv.svg', fullBleed: true };
+  if (norm.includes('STARTIMES')) return { logoUrl: '/logos/cable/startimes.svg' };
+  if (norm.includes('SHOWMAX')) return { logoUrl: '/logos/cable/showmax.svg' };
 
-  // Electricity DISCOs
-  if (norm.includes('IKEDC') || norm.includes('IKEJA')) return { logoUrl: '/logos/electricity/ikedc.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
-  if (norm.includes('EKEDC') || norm.includes('EKO')) return { logoUrl: '/logos/electricity/ekedc.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
-  if (norm.includes('AEDC') || norm.includes('ABUJA')) return { logoUrl: '/logos/electricity/aedc.png', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
-  if (norm.includes('IBEDC') || norm.includes('IBADAN')) return { logoUrl: '/logos/electricity/ibedc.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
-  if (norm.includes('EEDC') || norm.includes('ENUGU')) return { logoUrl: '/logos/electricity/eedc.png', bg: 'bg-red-500/10 border-red-300 dark:border-red-900/50' };
-  if (norm.includes('PHED') || norm.includes('PORT')) return { logoUrl: '/logos/electricity/phed.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
-  if (norm.includes('BEDC') || norm.includes('BENIN')) return { logoUrl: '/logos/electricity/bedc.png', bg: 'bg-teal-500/10 border-teal-300 dark:border-teal-900/50' };
-  if (norm.includes('KEDCO') || norm.includes('KANO')) return { logoUrl: '/logos/electricity/kedco.png', bg: 'bg-orange-500/10 border-orange-300 dark:border-orange-900/50' };
-  if (norm.includes('KAEDCO') || norm.includes('KADUNA')) return { logoUrl: '/logos/electricity/kaedco.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
-  if (norm.includes('JED') || norm.includes('JOS')) return { logoUrl: '/logos/electricity/jed.png', bg: 'bg-cyan-500/10 border-cyan-300 dark:border-cyan-900/50' };
-  if (norm.includes('YEDC') || norm.includes('YOLA')) return { logoUrl: '/logos/electricity/yedc.png', bg: 'bg-indigo-500/10 border-indigo-300 dark:border-indigo-900/50' };
-  if (norm.includes('APLE') || norm.includes('ABA')) return { logoUrl: '/logos/electricity/aple.png', bg: 'bg-lime-500/10 border-lime-300 dark:border-lime-900/50' };
+  if (norm.includes('IKEDC') || norm.includes('IKEJA')) return { logoUrl: '/logos/electricity/ikedc.png' };
+  if (norm.includes('EKEDC') || norm.includes('EKO')) return { logoUrl: '/logos/electricity/ekedc.png' };
+  if (norm.includes('AEDC') || norm.includes('ABUJA')) return { logoUrl: '/logos/electricity/aedc.png' };
+  if (norm.includes('IBEDC') || norm.includes('IBADAN')) return { logoUrl: '/logos/electricity/ibedc.png' };
+  if (norm.includes('EEDC') || norm.includes('ENUGU')) return { logoUrl: '/logos/electricity/eedc.png' };
+  if (norm.includes('PHED') || norm.includes('PORT')) return { logoUrl: '/logos/electricity/phed.svg' };
+  if (norm.includes('BEDC') || norm.includes('BENIN')) return { logoUrl: '/logos/electricity/bedc.png' };
+  if (norm.includes('KEDCO') || norm.includes('KANO')) return { logoUrl: '/logos/electricity/kedco.png' };
+  if (norm.includes('KAEDCO') || norm.includes('KADUNA')) return { logoUrl: '/logos/electricity/kaedco.png' };
+  if (norm.includes('JED') || norm.includes('JOS')) return { logoUrl: '/logos/electricity/jed.png' };
+  if (norm.includes('YEDC') || norm.includes('YOLA')) return { logoUrl: '/logos/electricity/yedc.png' };
+  if (norm.includes('APLE') || norm.includes('ABA')) return { logoUrl: '/logos/electricity/aple.png' };
 
-  // Education Bodies
-  if (norm.includes('WAEC')) return { logoUrl: '/logos/education/waec.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
-  if (norm.includes('JAMB')) return { logoUrl: '/logos/education/jamb.png', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
-  if (norm.includes('NECO')) return { logoUrl: '/logos/education/neco.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
-  if (norm.includes('NABTEB')) return { logoUrl: '/logos/education/nabteb.png', bg: 'bg-rose-500/10 border-rose-300 dark:border-rose-900/50' };
+  if (norm.includes('WAEC')) return { logoUrl: '/logos/education/waec.png' };
+  if (norm.includes('JAMB')) return { logoUrl: '/logos/education/jamb.png' };
+  if (norm.includes('NECO')) return { logoUrl: '/logos/education/neco.png' };
+  if (norm.includes('NABTEB')) return { logoUrl: '/logos/education/nabteb.png' };
 
-  return { logoUrl: null, bg: 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700' };
+  return { logoUrl: null };
+}
+
+function escapeCsvCell(value: unknown): string {
+  const str = String(value ?? '');
+  const guarded = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
+function formatNaira(val: number): string {
+  return `₦${val.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatCompactAxisNaira(val: number): string {
+  if (val >= 1_000_000) return `₦${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `₦${(val / 1_000).toFixed(val >= 10_000 ? 0 : 1)}k`;
+  return `₦${Math.round(val).toLocaleString('en-NG')}`;
 }
 
 export default function AnalyticsPage() {
+  const router = useRouter();
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>('ALL');
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>('ALL');
   const [chartMetric, setChartMetric] = useState<'volume' | 'count'>('volume');
-  const [chartStyle, setChartStyle] = useState<'curve' | 'bar'>('curve');
-  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
-  const [hoveredDonutIndex, setHoveredDonutIndex] = useState<number | null>(null);
-
-  // Failure Diagnostics view tab & pagination
-  const [failureTab, setFailureTab] = useState<'reasons' | 'transactions'>('reasons');
-  const [failurePage, setFailurePage] = useState<number>(1);
+  const [chartStyle, setChartStyle] = useState<'line' | 'bar'>('line');
+  const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
+  const [activeDonutIndex, setActiveDonutIndex] = useState<number | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'service' | 'channel' | null>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
 
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isFetchingBackground, setIsFetchingBackground] = useState<boolean>(false);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const hasLoadedOnceRef = useRef<boolean>(false);
 
-  // SWR In-Memory Cache to make timeframe switching instant (0ms response)
   const cacheRef = useRef<Map<string, AnalyticsData>>(new Map());
 
   const [businessName, setBusinessName] = useState<string>(() => {
@@ -282,102 +285,165 @@ export default function AnalyticsPage() {
     }
     return '';
   });
-  const [kycStatus, setKycStatus] = useState<string>('UNVERIFIED');
+  const [userFirstName, setUserFirstName] = useState<string>('');
+  const [userLastName, setUserLastName] = useState<string>('');
+  const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
 
-  // Fetch real analytics telemetry with in-memory caching
-  const fetchAnalytics = useCallback(async (customBizId?: string, targetFailurePage: number = 1) => {
+  const getRequestHeaders = useCallback((customBizId?: string) => {
     const token = getStoredAuthToken();
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
       clearSessionAndRedirect('expired');
-      return;
+      return null;
     }
-
     const storedBiz = getStoredBusiness();
-    const activeBizId = customBizId || storedBiz?.id || 'biz';
-    const cacheKey = `${activeBizId}_${timeframe}_${serviceFilter}_${channelFilter}_${targetFailurePage}`;
+    const activeBizId = customBizId || storedBiz?.id;
+    return {
+      Authorization: `Bearer ${token}`,
+      ...(activeBizId ? { 'x-business-id': activeBizId } : {}),
+    };
+  }, []);
 
-    // SWR: Check cache first for instantaneous visual update
-    if (cacheRef.current.has(cacheKey)) {
-      setAnalyticsData(cacheRef.current.get(cacheKey)!);
-      setIsLoading(false);
-      setIsFetchingBackground(true);
-    } else {
-      setIsFetchingBackground(true);
-    }
+  const syncUserProfile = useCallback(async () => {
+    const headers = getRequestHeaders();
+    if (!headers) return;
 
     try {
-      const params = new URLSearchParams();
-      params.set('timeframe', timeframe);
-      if (serviceFilter !== 'ALL') params.set('serviceType', serviceFilter);
-      if (channelFilter !== 'ALL') params.set('channel', channelFilter);
-      params.set('failurePage', targetFailurePage.toString());
-      params.set('failureLimit', '10');
-
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-      };
-      if (activeBizId && activeBizId !== 'biz') {
-        headers['x-business-id'] = activeBizId;
-      }
-
-      const res = await fetch(`/api/analytics?${params.toString()}`, { headers });
+      const res = await fetch('/api/users/me', {
+        headers: { Authorization: headers.Authorization },
+      });
       const json = await res.json().catch(() => null);
+      if (handleAuthResponse(res, json)) return;
 
-      if (res.ok && json?.success && json.data) {
-        setAnalyticsData(json.data);
-        cacheRef.current.set(cacheKey, json.data);
-      } else {
-        console.warn('Analytics fetch error:', json?.error);
-      }
-    } catch (err) {
-      console.error('Failed to load analytics:', err);
-    } finally {
-      setIsLoading(false);
-      setIsFetchingBackground(false);
-      setIsRefreshing(false);
-    }
-  }, [timeframe, serviceFilter, channelFilter]);
-
-  // Initial load and auth check
-  useEffect(() => {
-    const token = getStoredAuthToken();
-    if (!token) {
-      clearSessionAndRedirect('expired');
-      return;
-    }
-
-    try {
-      const storedUser = getStoredUser();
-      const storedBiz = getStoredBusiness();
-
-      if (storedUser) {
-        if (storedBiz?.role) setUserRole(storedBiz.role);
-        else if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
-        if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
-      }
-      if (storedBiz?.name) {
-        setBusinessName(storedBiz.name);
+      const u = json?.data?.user;
+      if (res.ok && u) {
+        if (u.firstName) {
+          setMerchantName(u.firstName);
+          setUserFirstName(u.firstName);
+        }
+        if (u.lastName) setUserLastName(u.lastName);
+        if (u.kycStatus) setKycStatus(u.kycStatus);
       }
     } catch {}
+  }, [getRequestHeaders]);
 
-    fetchAnalytics(undefined, failurePage);
-  }, [fetchAnalytics, failurePage]);
+  const fetchAnalytics = useCallback(
+    async (customBizId?: string) => {
+      const headers = getRequestHeaders(customBizId);
+      if (!headers) return;
 
-  // Reactive Workspace Switcher listener (Zero-Reload)
+      const storedBiz = getStoredBusiness();
+      const activeBizId = customBizId || storedBiz?.id || 'biz';
+      const cacheKey = `${activeBizId}_${timeframe}_${serviceFilter}_${channelFilter}`;
+
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached) {
+        setAnalyticsData(cached);
+        setIsLoading(false);
+        setIsUpdating(true);
+      } else if (!hasLoadedOnceRef.current) {
+        setIsLoading(true);
+      } else {
+        setIsUpdating(true);
+      }
+
+      try {
+        const params = new URLSearchParams();
+        params.set('timeframe', timeframe);
+        if (serviceFilter !== 'ALL') params.set('serviceType', serviceFilter);
+        if (channelFilter !== 'ALL') params.set('channel', channelFilter);
+
+        const res = await fetch(`/api/analytics?${params.toString()}`, { headers });
+        const json = await res.json().catch(() => null);
+        if (handleAuthResponse(res, json)) return;
+
+        if (res.ok && json?.success && json.data) {
+          setAnalyticsData(json.data);
+          cacheRef.current.set(cacheKey, json.data);
+        }
+      } catch {
+        // Keep last visible state cleanly
+      } finally {
+        hasLoadedOnceRef.current = true;
+        setIsLoading(false);
+        setIsUpdating(false);
+        setIsRefreshing(false);
+      }
+    },
+    [getRequestHeaders, timeframe, serviceFilter, channelFilter],
+  );
+
+  // Close dropdowns on outside click or Escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterBarRef.current && !filterBarRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Auth & workspace initialization
+  useEffect(() => {
+    const token = getStoredAuthToken();
+    if (!token || isTokenExpired(token)) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
+    const storedUser = getStoredUser();
+    const storedBiz = getStoredBusiness();
+
+    if (storedUser?.role === 'SUPER_ADMIN') {
+      router.replace('/admin');
+      return;
+    }
+    if (storedUser?.role === 'STAFF') {
+      router.replace('/staff/overview');
+      return;
+    }
+
+    if (storedBiz?.role) setUserRole(storedBiz.role);
+    else if (storedUser?.role) setUserRole(storedUser.role);
+
+    if (storedUser?.firstName) {
+      setMerchantName(storedUser.firstName);
+      setUserFirstName(storedUser.firstName);
+    }
+    if (storedUser?.lastName) setUserLastName(storedUser.lastName);
+    if (storedUser?.kycStatus) setKycStatus(storedUser.kycStatus);
+    if (storedBiz?.name) setBusinessName(storedBiz.name);
+
+    void syncUserProfile();
+  }, [router, syncUserProfile]);
+
+  useEffect(() => {
+    setActivePointIndex(null);
+    setActiveDonutIndex(null);
+    void fetchAnalytics();
+  }, [fetchAnalytics]);
+
   useEffect(() => {
     const handleBusinessSwitched = (e: any) => {
-      const biz = e.detail?.business;
+      const biz = e?.detail?.business || getStoredBusiness();
       if (biz?.name) setBusinessName(biz.name);
       if (biz?.role) setUserRole(biz.role);
-      // Clear cache on workspace switch so fresh data loads
       cacheRef.current.clear();
+      hasLoadedOnceRef.current = false;
       setIsLoading(true);
-      setFailurePage(1);
-      fetchAnalytics(biz?.id, 1);
+      void fetchAnalytics(biz?.id);
     };
 
     window.addEventListener('bx_business_switched', handleBusinessSwitched);
@@ -387,260 +453,203 @@ export default function AnalyticsPage() {
   const handleRefresh = () => {
     setIsRefreshing(true);
     cacheRef.current.clear();
-    fetchAnalytics(undefined, failurePage);
-    showToast('Analytics refreshed successfully');
+    void fetchAnalytics();
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const formatNaira = (val: number) => {
-    return `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const handleKycSuccess = (updatedUser: any) => {
+    setKycStatus('VERIFIED');
+    if (updatedUser?.firstName) {
+      setMerchantName(updatedUser.firstName);
+      setUserFirstName(updatedUser.firstName);
+    }
+    if (updatedUser?.lastName) setUserLastName(updatedUser.lastName);
   };
 
   const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
   const canExportReports = isOwnerOrAdmin || userRole === 'FINANCE';
 
-  // Human-readable timeframe label
-  const timeframeLabel = useMemo(() => {
-    switch (timeframe) {
-      case 'today':
-        return 'Last 24 Hours';
-      case '7d':
-        return 'Last 7 Days';
-      case '90d':
-        return 'Last 90 Days';
-      case 'ytd':
-        return 'Year to Date';
-      case '30d':
-      default:
-        return 'Last 30 Days';
-    }
-  }, [timeframe]);
+  const activeTimeframeObj =
+    TIMEFRAME_OPTIONS.find((t) => t.key === timeframe) || TIMEFRAME_OPTIONS[2];
+  const activeServiceObj =
+    SERVICE_OPTIONS.find((s) => s.value === serviceFilter) || SERVICE_OPTIONS[0];
+  const activeChannelObj =
+    CHANNEL_OPTIONS.find((c) => c.value === channelFilter) || CHANNEL_OPTIONS[0];
 
-  // Export Analytics to CSV
   const handleExportCSV = () => {
     if (!analyticsData) return;
 
     const sum = analyticsData.summary;
     const csvRows: (string | number)[][] = [
-      ['BAXATO MERCHANT ANALYTICS REPORT'],
-      ['Workspace', businessName],
-      ['Timeframe', timeframeLabel],
+      ['BAXATO ANALYTICS SUMMARY'],
+      ['Workspace', businessName || 'Workspace'],
+      ['Timeframe', activeTimeframeObj.longLabel],
       ['Date Range', `${analyticsData.startDate} to ${analyticsData.endDate}`],
-      ['Generated At', new Date().toISOString()],
       [],
-      ['EXECUTIVE SUMMARY KPI'],
+      ['SUMMARY'],
       ['Metric', 'Value'],
-      ['Gross Vended Volume (NGN)', sum.totalVolumeNaira.toFixed(2)],
-      ['Successful Volume (NGN)', sum.successfulVolumeNaira.toFixed(2)],
-      ['Total Transactions', sum.totalCount],
-      ['Successful Transactions', sum.successfulCount],
+      ['Completed Volume (NGN)', sum.successfulVolumeNaira.toFixed(2)],
+      ['Completed Transactions', sum.successfulCount],
+      ['Total Attempts', sum.totalCount],
       ['Failed Transactions', sum.failedCount],
-      ['Pending Transactions', sum.pendingCount],
-      ['Reversed Transactions', sum.reversedCount],
       ['Success Rate (%)', `${sum.successRate}%`],
-      ['Volume Growth vs Prior Period (%)', `${sum.volumeGrowthRate}%`],
-      ['Count Growth vs Prior Period (%)', `${sum.countGrowthRate}%`],
-      ['Average Order Value (NGN)', sum.avgTicketNaira.toFixed(2)],
-      ['Merchant Discount / Margin (NGN)', sum.totalDiscountNaira.toFixed(2)],
-      ['Commission Wallet Earned (NGN)', sum.commissionEarnedNaira.toFixed(2)],
+      ['Average Order (NGN)', sum.avgTicketNaira.toFixed(2)],
+      ['Discounts Earned (NGN)', sum.totalDiscountNaira.toFixed(2)],
       [],
-      ['PRODUCT / SERVICE PERFORMANCE'],
-      ['Service Category', 'Volume (NGN)', 'Volume Share (%)', 'Count', 'Success Rate (%)', 'Margin (NGN)'],
+      ['SERVICE BREAKDOWN'],
+      ['Service', 'Completed Volume (NGN)', 'Share (%)', 'Completed', 'Success Rate (%)', 'Discounts (NGN)'],
       ...analyticsData.serviceBreakdown.map((s) => [
         s.label,
         s.volumeNaira.toFixed(2),
         `${s.volumeShare}%`,
-        s.count,
+        s.successfulCount,
         `${s.successRate}%`,
         s.discountNaira.toFixed(2),
       ]),
       [],
-      ['CHANNELS PERFORMANCE'],
-      ['Channel', 'Volume (NGN)', 'Volume Share (%)', 'Count', 'Success Rate (%)'],
+      ['CHANNELS'],
+      ['Channel', 'Completed Volume (NGN)', 'Share (%)', 'Completed', 'Success Rate (%)'],
       [
-        'REST API',
-        analyticsData.channelBreakdown.api.volumeNaira.toFixed(2),
-        `${analyticsData.channelBreakdown.api.volumeShare}%`,
-        analyticsData.channelBreakdown.api.count,
-        `${analyticsData.channelBreakdown.api.successRate}%`,
-      ],
-      [
-        'Web Console',
+        'Dashboard',
         analyticsData.channelBreakdown.console.volumeNaira.toFixed(2),
         `${analyticsData.channelBreakdown.console.volumeShare}%`,
-        analyticsData.channelBreakdown.console.count,
+        analyticsData.channelBreakdown.console.successfulCount,
         `${analyticsData.channelBreakdown.console.successRate}%`,
       ],
+      [
+        'API',
+        analyticsData.channelBreakdown.api.volumeNaira.toFixed(2),
+        `${analyticsData.channelBreakdown.api.volumeShare}%`,
+        analyticsData.channelBreakdown.api.successfulCount,
+        `${analyticsData.channelBreakdown.api.successRate}%`,
+      ],
       [],
-      ['DAILY / HOURLY TIMELINE BREAKDOWN'],
-      ['Bucket Label', 'Total Volume (NGN)', 'Successful Volume (NGN)', 'Total Count', 'Success Count', 'Failed Count', 'Success Rate (%)'],
+      ['TREND'],
+      ['Period', 'Completed Volume (NGN)', 'Completed Count', 'Failed Count', 'Success Rate (%)'],
       ...analyticsData.timeline.map((t) => [
         t.label,
-        t.volumeNaira.toFixed(2),
         t.successfulVolumeNaira.toFixed(2),
-        t.count,
         t.successfulCount,
         t.failedCount,
         `${t.successRate}%`,
       ]),
     ];
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      csvRows.map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
-
-    const encodedUri = encodeURI(csvContent);
+    const csvText = csvRows
+      .map((row) => row.map((cell) => escapeCsvCell(cell)).join(','))
+      .join('\n');
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `baxato_analytics_${timeframe}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.download = `baxato-analytics-${timeframe}-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
-    showToast('Analytics summary exported as CSV');
+    URL.revokeObjectURL(url);
   };
 
-  // Visual Palette configuration for services
-  const serviceTheme: Record<string, { color: string; hex: string; bg: string; badge: string; icon: any }> = {
-    AIRTIME: {
-      color: 'text-emerald-500',
-      hex: '#10b981',
-      bg: 'bg-emerald-500',
-      badge: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900',
-      icon: Smartphone,
-    },
-    DATA: {
-      color: 'text-blue-500',
-      hex: '#3b82f6',
-      bg: 'bg-blue-500',
-      badge: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900',
-      icon: Wifi,
-    },
-    ELECTRICITY: {
-      color: 'text-amber-500',
-      hex: '#f59e0b',
-      bg: 'bg-amber-500',
-      badge: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900',
-      icon: Zap,
-    },
-    CABLE_TV: {
-      color: 'text-purple-500',
-      hex: '#8b5cf6',
-      bg: 'bg-purple-500',
-      badge: 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900',
-      icon: Tv,
-    },
-    EXAM_PIN: {
-      color: 'text-rose-500',
-      hex: '#f43f5e',
-      bg: 'bg-rose-500',
-      badge: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900',
-      icon: GraduationCap,
-    },
-  };
-
-  // SVG Master Chart Calculations
+  // Chart calculations strictly using completed volume/count
   const timelinePoints = analyticsData?.timeline || [];
+  const hasCompletedActivity = (analyticsData?.summary?.successfulCount || 0) > 0;
+
   const maxChartValue = useMemo(() => {
-    if (timelinePoints.length === 0) return 100;
+    if (timelinePoints.length === 0) return 1;
     const max = Math.max(
-      ...timelinePoints.map((p) => (chartMetric === 'volume' ? p.volumeNaira : p.count)),
+      ...timelinePoints.map((p) =>
+        chartMetric === 'volume' ? p.successfulVolumeNaira : p.successfulCount,
+      ),
       0,
     );
-    return max > 0 ? max : 100;
+    return max > 0 ? max : 1;
   }, [timelinePoints, chartMetric]);
 
-  const chartWidth = 760;
-  const chartHeight = 220;
-  const paddingX = 40;
-  const paddingY = 25;
+  const chartWidth = 680;
+  const chartHeight = 200;
+  const padLeft = 12;
+  const padRight = 12;
+  const padTop = 16;
+  const padBottom = 16;
 
-  const points = useMemo(() => {
+  const chartPoints = useMemo(() => {
     if (timelinePoints.length === 0) return [];
+    const usableW = chartWidth - padLeft - padRight;
+    const usableH = chartHeight - padTop - padBottom;
     return timelinePoints.map((p, idx) => {
-      const x = paddingX + (idx / Math.max(timelinePoints.length - 1, 1)) * (chartWidth - paddingX * 2);
-      const val = chartMetric === 'volume' ? p.volumeNaira : p.count;
-      const y = chartHeight - paddingY - (val / maxChartValue) * (chartHeight - paddingY * 2);
-      return { x, y, raw: p };
+      const x =
+        timelinePoints.length === 1
+          ? padLeft + usableW / 2
+          : padLeft + (idx / (timelinePoints.length - 1)) * usableW;
+      const val = chartMetric === 'volume' ? p.successfulVolumeNaira : p.successfulCount;
+      const y = chartHeight - padBottom - (val / maxChartValue) * usableH;
+      return { x, y, val, raw: p };
     });
   }, [timelinePoints, chartMetric, maxChartValue]);
 
   const svgPathD = useMemo(() => {
-    if (points.length === 0) return '';
-    return points.reduce((acc, curr, idx) => {
+    if (chartPoints.length <= 1) return '';
+    return chartPoints.reduce((acc, curr, idx) => {
       if (idx === 0) return `M ${curr.x} ${curr.y}`;
-      const prev = points[idx - 1];
-      const cx1 = prev.x + (curr.x - prev.x) / 2;
-      const cy1 = prev.y;
-      const cx2 = prev.x + (curr.x - prev.x) / 2;
-      const cy2 = curr.y;
-      return `${acc} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${curr.x} ${curr.y}`;
+      const prev = chartPoints[idx - 1];
+      const cx = prev.x + (curr.x - prev.x) / 2;
+      return `${acc} C ${cx} ${prev.y}, ${cx} ${curr.y}, ${curr.x} ${curr.y}`;
     }, '');
-  }, [points]);
+  }, [chartPoints]);
 
   const svgAreaD = useMemo(() => {
-    if (points.length === 0 || !svgPathD) return '';
-    const first = points[0];
-    const last = points[points.length - 1];
-    return `${svgPathD} L ${last.x} ${chartHeight - paddingY} L ${first.x} ${chartHeight - paddingY} Z`;
-  }, [svgPathD, points]);
+    if (chartPoints.length === 0 || !svgPathD) return '';
+    const first = chartPoints[0];
+    const last = chartPoints[chartPoints.length - 1];
+    return `${svgPathD} L ${last.x} ${chartHeight - padBottom} L ${first.x} ${chartHeight - padBottom} Z`;
+  }, [svgPathD, chartPoints]);
 
-  // Donut Chart Segment Calculations
+  const xTickLabels = useMemo(() => {
+    if (timelinePoints.length === 0) return [];
+    const maxTicks = 5;
+    if (timelinePoints.length <= maxTicks) return timelinePoints;
+    const step = Math.ceil((timelinePoints.length - 1) / (maxTicks - 1));
+    return timelinePoints.filter((_, idx) => idx % step === 0 || idx === timelinePoints.length - 1);
+  }, [timelinePoints]);
+
+  // Donut segments strictly by completed service volume
   const donutSegments = useMemo(() => {
     if (!analyticsData || analyticsData.serviceBreakdown.length === 0) return [];
-    const radius = 64;
-    const circumference = 2 * Math.PI * radius;
-    let accumulatedOffset = 0;
+    const totalVol = analyticsData.summary.successfulVolumeNaira;
+    if (totalVol <= 0) return [];
 
-    const totalVol = analyticsData.summary.totalVolumeNaira || 1;
+    const radius = 58;
+    const circumference = 2 * Math.PI * radius;
+    let accumulated = 0;
 
     return analyticsData.serviceBreakdown.map((item, idx) => {
       const pct = (item.volumeNaira / totalVol) * 100;
       const strokeLength = (pct / 100) * circumference;
-      const offset = circumference - accumulatedOffset;
-      accumulatedOffset += strokeLength;
+      const dashOffset = -accumulated;
+      accumulated += strokeLength;
 
-      const meta = serviceTheme[item.serviceType] || {
+      const theme = SERVICE_THEME[item.serviceType] || {
         hex: '#64748b',
-        color: 'text-slate-400',
-        badge: '',
+        barClass: 'bg-slate-500',
+        badgeClass: 'bg-slate-100 text-slate-700',
+        icon: Layers,
       };
 
       return {
         ...item,
         percentage: Number(pct.toFixed(1)),
         strokeDasharray: `${strokeLength} ${circumference}`,
-        strokeDashoffset: -accumulatedOffset + strokeLength,
-        colorHex: meta.hex,
+        strokeDashoffset: dashOffset,
+        colorHex: theme.hex,
         index: idx,
       };
     });
   }, [analyticsData]);
 
-  // Active Summary values
   const summary = analyticsData?.summary;
-  const isZeroTxn = (summary?.totalCount || 0) === 0;
-
-  // Paginated Failures Data
-  const paginatedFailures = analyticsData?.failureDiagnostics?.paginatedFailures;
-  const failurePagination = paginatedFailures?.pagination || { page: 1, pageSize: 10, totalCount: 0, totalPages: 1 };
-  const failedTransactions = paginatedFailures?.transactions || [];
+  const activePoint = activePointIndex !== null ? chartPoints[activePointIndex] : null;
+  const activeDonut = activeDonutIndex !== null ? donutSegments[activeDonutIndex] : null;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <Check className="w-4 h-4 text-emerald-400 dark:text-emerald-600 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Sidebar Navigation */}
+    <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -651,7 +660,6 @@ export default function AnalyticsPage() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -660,324 +668,339 @@ export default function AnalyticsPage() {
           businessName={businessName}
           kycStatus={kycStatus}
           userRole={userRole}
-          isRefreshing={isRefreshing || isFetchingBackground}
+          isRefreshing={isRefreshing || isUpdating}
           onRefresh={handleRefresh}
+          sticky={false}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 sm:space-y-8">
-          {/* Identity Verification Warning Banner (if unverified) */}
+        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full min-w-0 space-y-6">
           <KycBanner
             kycStatus={kycStatus}
             userRole={userRole}
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 
-          {/* Navigation Breadcrumb & Back to Dashboard Button */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {/* Top Navigation & Page Title */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#126BEB] dark:hover:text-[#38BDF8] hover:border-[#126BEB]/40 shadow-xs transition-all font-semibold"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Dashboard</span>
               </Link>
-              <span className="text-slate-300 dark:text-slate-700">/</span>
-              <span className="text-slate-800 dark:text-slate-200 font-bold">Analytics & Intelligence</span>
-            </div>
 
-            {/* In-flight SWR subtle indicator */}
-            {isFetchingBackground && !isLoading && (
-              <div className="inline-flex items-center gap-1.5 text-[11px] text-[#126BEB] dark:text-[#38BDF8] font-semibold animate-pulse">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Updating live telemetry...</span>
-              </div>
-            )}
-          </div>
-
-          {/* Top Page Control Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center border border-[#126BEB]/20 shadow-xs">
-                  <BarChart3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                    Analytics & Business Intelligence
-                  </h1>
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                    Live transaction velocity, service margins, error telemetry, and trading volume for <span className="font-semibold text-slate-800 dark:text-slate-200">{businessName || 'Workspace'}</span>.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Timeframe & Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-              {/* Timeframe Pill Selector */}
-              <div className="inline-flex p-1 bg-slate-200/70 dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold shadow-inner">
-                {(
-                  [
-                    { key: 'today', label: '24h' },
-                    { key: '7d', label: '7D' },
-                    { key: '30d', label: '30D' },
-                    { key: '90d', label: '90D' },
-                    { key: 'ytd', label: 'YTD' },
-                  ] as { key: Timeframe; label: string }[]
-                ).map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => {
-                      if (timeframe !== item.key) {
-                        setTimeframe(item.key);
-                        setFailurePage(1);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
-                      timeframe === item.key
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Service Filter Dropdown */}
-              <div className="relative">
-                <select
-                  value={serviceFilter}
-                  onChange={(e) => {
-                    setServiceFilter(e.target.value as ServiceFilter);
-                    setFailurePage(1);
-                  }}
-                  aria-label="Filter analytics by service type"
-                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#126BEB]/30 cursor-pointer"
-                >
-                  <option value="ALL">All Services</option>
-                  <option value="AIRTIME">Airtime</option>
-                  <option value="DATA">Data Bundles</option>
-                  <option value="ELECTRICITY">Electricity</option>
-                  <option value="CABLE_TV">Cable TV</option>
-                  <option value="EXAM_PIN">Exam PINs</option>
-                </select>
-              </div>
-
-              {/* Channel Filter Dropdown */}
-              <div className="relative">
-                <select
-                  value={channelFilter}
-                  onChange={(e) => {
-                    setChannelFilter(e.target.value as ChannelFilter);
-                    setFailurePage(1);
-                  }}
-                  aria-label="Filter analytics by channel"
-                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#126BEB]/30 cursor-pointer"
-                >
-                  <option value="ALL">All Channels</option>
-                  <option value="API">API Gateway</option>
-                  <option value="CONSOLE">Web Console</option>
-                </select>
-              </div>
-
-              {/* Refresh Button */}
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing || isFetchingBackground}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
-                title="Refresh real metrics"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isFetchingBackground ? 'animate-spin text-[#126BEB]' : ''}`} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
-
-              {/* Export CSV Button */}
               {canExportReports && (
                 <button
+                  type="button"
                   onClick={handleExportCSV}
-                  disabled={isLoading || isZeroTxn}
-                  className="px-3.5 py-2 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isLoading || !analyticsData || (summary?.totalCount ?? 0) === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                   <span>Export CSV</span>
                 </button>
               )}
             </div>
+
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+              Analytics
+            </h1>
           </div>
 
-          {/* 5 Executive KPI Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* KPI 1: Gross Vended Volume */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-[#126BEB]/40 transition-all">
-              <div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">
-                  <span>Gross Volume</span>
-                  {summary && summary.volumeGrowthRate !== 0 && (
-                    <span
-                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                        summary.volumeGrowthRate > 0
-                          ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'
-                          : 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900'
-                      }`}
-                    >
-                      {summary.volumeGrowthRate > 0 ? (
-                        <TrendingUp className="w-3 h-3" />
-                      ) : (
-                        <TrendingDown className="w-3 h-3" />
-                      )}
-                      {summary.volumeGrowthRate > 0 ? `+${summary.volumeGrowthRate}%` : `${summary.volumeGrowthRate}%`}
-                    </span>
-                  )}
-                </div>
-                {isLoading ? (
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse w-3/4 my-1" />
-                ) : (
-                  <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {summary?.formattedTotalVolume || '₦0.00'}
-                  </div>
-                )}
-              </div>
-              <p className="text-[10.5px] text-slate-400 mt-2 truncate">
-                Fulfilled: <span className="font-semibold text-slate-700 dark:text-slate-300">{summary?.formattedSuccessfulVolume || '₦0.00'}</span>
-              </p>
+          {/* Filter Strip */}
+          <div
+            ref={filterBarRef}
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 min-w-0"
+          >
+            {/* Timeframe Selector */}
+            <div
+              role="group"
+              aria-label="Timeframe"
+              className="grid grid-cols-5 sm:inline-flex p-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#0B1528] text-xs font-medium"
+            >
+              {TIMEFRAME_OPTIONS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => {
+                    if (timeframe !== item.key) {
+                      setTimeframe(item.key);
+                    }
+                  }}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    timeframe === item.key
+                      ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white font-semibold border border-slate-200/80 dark:border-transparent'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  {item.shortLabel}
+                </button>
+              ))}
             </div>
 
-            {/* KPI 2: Total Transactions */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-[#126BEB]/40 transition-all">
-              <div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">
-                  <span>Total Transactions</span>
-                  {summary && (
-                    <span
-                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                        summary.successRate >= 90
-                          ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'
-                          : summary.successRate >= 60
-                          ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'
-                          : 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900'
-                      }`}
-                    >
-                      {summary.successRate}% Success
-                    </span>
-                  )}
-                </div>
-                {isLoading ? (
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse w-1/2 my-1" />
-                ) : (
-                  <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {(summary?.totalCount || 0).toLocaleString()}
-                  </div>
-                )}
-              </div>
-              <p className="text-[10.5px] text-slate-400 mt-2 truncate">
-                {summary ? `${summary.successfulCount} success • ${summary.failedCount} failed` : 'Throughput'}
-              </p>
-            </div>
-
-            {/* KPI 3: Merchant Margin / Discounts */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-[#126BEB]/40 transition-all">
-              <div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">
-                  <span>Net Margin / Discount</span>
-                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                    Earned
+            {/* Service & Channel Selectors */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2.5 min-w-0">
+              {/* Service Dropdown */}
+              <div className="relative min-w-0 sm:w-44">
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={openDropdown === 'service'}
+                  onClick={() => setOpenDropdown(openDropdown === 'service' ? null : 'service')}
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 truncate min-w-0">
+                    <activeServiceObj.icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate">{activeServiceObj.label}</span>
                   </span>
-                </div>
-                {isLoading ? (
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse w-2/3 my-1" />
-                ) : (
-                  <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
-                    {summary?.formattedTotalDiscount || '₦0.00'}
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+
+                {openDropdown === 'service' && (
+                  <div
+                    role="listbox"
+                    aria-label="Filter by service"
+                    className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1"
+                  >
+                    {SERVICE_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const isSelected = serviceFilter === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setServiceFilter(opt.value);
+                            setOpenDropdown(null);
+                          }}
+                          className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{opt.label}</span>
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-              <p className="text-[10.5px] text-slate-400 mt-2 truncate">
-                Direct discounts saved on vends
-              </p>
+
+              {/* Channel Dropdown */}
+              <div className="relative min-w-0 sm:w-36">
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={openDropdown === 'channel'}
+                  onClick={() => setOpenDropdown(openDropdown === 'channel' ? null : 'channel')}
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <span className="truncate">{activeChannelObj.label}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+
+                {openDropdown === 'channel' && (
+                  <div
+                    role="listbox"
+                    aria-label="Filter by channel"
+                    className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1"
+                  >
+                    {CHANNEL_OPTIONS.map((opt) => {
+                      const isSelected = channelFilter === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setChannelFilter(opt.value);
+                            setOpenDropdown(null);
+                          }}
+                          className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <span className="truncate">{opt.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary KPI Grid */}
+          <div
+            className={`grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity duration-150 ${
+              isUpdating ? 'opacity-70' : ''
+            }`}
+          >
+            {/* Card 1: Completed Volume */}
+            <div className="min-w-0 p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-3">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                  Volume
+                </span>
+                {summary && summary.volumeGrowthRate !== 0 && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 tabular-nums ${
+                      summary.volumeGrowthRate > 0
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800/60'
+                        : 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/50 dark:text-rose-400 dark:border-rose-800/60'
+                    }`}
+                  >
+                    {summary.volumeGrowthRate > 0 ? (
+                      <TrendingUp className="w-3 h-3" aria-hidden="true" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3" aria-hidden="true" />
+                    )}
+                    <span>
+                      {summary.volumeGrowthRate > 0
+                        ? `+${summary.volumeGrowthRate}%`
+                        : `${summary.volumeGrowthRate}%`}
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              <div>
+                {isLoading ? (
+                  <div className="h-7 w-28 bg-slate-200 dark:bg-slate-800 rounded-md animate-pulse" />
+                ) : (
+                  <div className="text-lg sm:text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white truncate">
+                    {summary?.formattedSuccessfulVolume || '₦0.00'}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                  {activeTimeframeObj.longLabel}
+                </p>
+              </div>
             </div>
 
-            {/* KPI 4: Average Order Value */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-[#126BEB]/40 transition-all">
+            {/* Card 2: Completed Transactions */}
+            <div className="min-w-0 p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-3">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                  Transactions
+                </span>
+                {summary && summary.totalCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800/60 shrink-0 tabular-nums">
+                    <CheckCircle2 className="w-3 h-3" aria-hidden="true" />
+                    <span>{summary.successRate}%</span>
+                  </span>
+                )}
+              </div>
+
               <div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">
-                  <span>Avg. Ticket Size</span>
-                  <Activity className="w-3.5 h-3.5 text-slate-400" />
-                </div>
                 {isLoading ? (
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse w-2/3 my-1" />
+                  <div className="h-7 w-20 bg-slate-200 dark:bg-slate-800 rounded-md animate-pulse" />
                 ) : (
-                  <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                  <div className="text-lg sm:text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white truncate">
+                    {(summary?.successfulCount || 0).toLocaleString()}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate tabular-nums">
+                  {summary && summary.totalCount > summary.successfulCount
+                    ? `${summary.successfulCount} of ${summary.totalCount} completed`
+                    : 'Completed'}
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Average Order */}
+            <div className="min-w-0 p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-3">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                Average Order
+              </span>
+
+              <div>
+                {isLoading ? (
+                  <div className="h-7 w-24 bg-slate-200 dark:bg-slate-800 rounded-md animate-pulse" />
+                ) : (
+                  <div className="text-lg sm:text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white truncate">
                     {summary?.formattedAvgTicket || '₦0.00'}
                   </div>
                 )}
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                  Per transaction
+                </p>
               </div>
-              <p className="text-[10.5px] text-slate-400 mt-2 truncate">
-                Average per successful vend
-              </p>
             </div>
 
-            {/* KPI 5: API Throughput Velocity */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-[#126BEB]/40 transition-all">
+            {/* Card 4: Discounts */}
+            <div className="min-w-0 p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-3">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                Discounts Saved
+              </span>
+
               <div>
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">
-                  <span>API Traffic Share</span>
-                  <span className="text-[10px] font-bold text-slate-400">
-                    {analyticsData?.channelBreakdown?.console?.volumeShare || 0}% Console
-                  </span>
-                </div>
                 {isLoading ? (
-                  <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse w-1/2 my-1" />
+                  <div className="h-7 w-24 bg-slate-200 dark:bg-slate-800 rounded-md animate-pulse" />
                 ) : (
-                  <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                    {analyticsData?.channelBreakdown?.api?.volumeShare || 0}%
+                  <div className="text-lg sm:text-2xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white truncate">
+                    {summary?.formattedTotalDiscount || '₦0.00'}
                   </div>
                 )}
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
-                <div
-                  className="bg-[#126BEB] h-full rounded-full transition-all duration-500"
-                  style={{ width: `${analyticsData?.channelBreakdown?.api?.volumeShare || 0}%` }}
-                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate tabular-nums">
+                  {(summary?.commissionEarnedNaira || 0) > 0
+                    ? `Commission: ${summary?.formattedCommissionEarned}`
+                    : 'On completed orders'}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Section 1: Master Interactive Visualizer (Curve vs Grouped Bars) */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>Vending Velocity & Trajectory</span>
-                  <span className="text-xs font-normal text-slate-400">
-                    • {timeframeLabel} Window
-                  </span>
+          {/* Transaction Trend Chart */}
+          <section
+            className={`min-w-0 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 space-y-4 transition-opacity duration-150 ${
+              isUpdating ? 'opacity-70' : ''
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                  Transaction Trend
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Accurate, real-time disbursement trajectory across all bill vending services.
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums truncate">
+                  {activePoint
+                    ? `${activePoint.raw.label} — ${formatNaira(activePoint.raw.successfulVolumeNaira)} (${activePoint.raw.successfulCount} completed)`
+                    : activeTimeframeObj.longLabel}
                 </p>
               </div>
 
-              {/* Chart Controls: Metric & Style Toggle */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Metric Selector */}
-                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#060D18] rounded-xl border border-slate-200 dark:border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-xs">
                   <button
+                    type="button"
                     onClick={() => setChartMetric('volume')}
-                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
                       chartMetric === 'volume'
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
+                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Volume (₦)
+                    Volume
                   </button>
                   <button
+                    type="button"
                     onClick={() => setChartMetric('count')}
-                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
                       chartMetric === 'count'
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
+                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
@@ -985,605 +1008,487 @@ export default function AnalyticsPage() {
                   </button>
                 </div>
 
-                {/* Chart Style Toggle (Curve vs Bars) */}
-                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#060D18] rounded-xl border border-slate-200 dark:border-slate-800/80 text-xs">
+                <div className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-xs">
                   <button
-                    onClick={() => setChartStyle('curve')}
-                    className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
-                      chartStyle === 'curve'
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
+                    type="button"
+                    onClick={() => setChartStyle('line')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                      chartStyle === 'line'
+                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Area Curve
+                    Line
                   </button>
                   <button
+                    type="button"
                     onClick={() => setChartStyle('bar')}
-                    className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all ${
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
                       chartStyle === 'bar'
-                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs font-bold'
+                        ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Grouped Bars
+                    Bars
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Chart Canvas */}
             {isLoading ? (
-              <div className="w-full h-[260px] rounded-2xl bg-slate-100/80 dark:bg-slate-800/40 animate-pulse p-6 flex items-end gap-3">
+              <div className="w-full h-[210px] sm:h-[230px] rounded-xl bg-slate-100 dark:bg-slate-800/40 animate-pulse p-5 flex items-end gap-2.5">
                 {[38, 62, 48, 84, 56, 92, 68, 76, 44, 70, 58, 80].map((pct, i) => (
                   <div
                     key={i}
                     style={{ height: `${pct}%` }}
-                    className="flex-1 rounded-t-lg bg-slate-200/90 dark:bg-slate-700/60"
+                    className="flex-1 rounded-t-md bg-slate-200 dark:bg-slate-700/60"
                   />
                 ))}
               </div>
-            ) : isZeroTxn ? (
-              <div className="w-full h-[260px] flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-[#081120]/50 p-6 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] flex items-center justify-center mb-3">
-                  <BarChart3 className="w-6 h-6" />
-                </div>
-                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                  No Transactions Recorded For This Period
-                </h3>
-                <p className="text-xs text-slate-400 max-w-sm mt-1">
-                  Once airtime, data, electricity, cable TV, or exam PINs are vended via your API keys or console, live volume curves will display here in real time.
+            ) : !hasCompletedActivity ? (
+              <div className="py-12 text-center border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+                <BarChart3 className="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto" />
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                  No completed transactions
                 </p>
-                <div className="flex items-center gap-2 mt-4">
-                  <Link
-                    href="/dashboard/airtime"
-                    className="px-3 py-1.5 rounded-lg bg-[#126BEB] text-white text-xs font-bold shadow-xs hover:bg-[#0B5CC7]"
-                  >
-                    Vend Airtime Now
-                  </Link>
-                  <Link
-                    href="/dashboard/developer"
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-300"
-                  >
-                    View API Docs
-                  </Link>
-                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Activity for this period will appear here.
+                </p>
               </div>
             ) : (
-              <div className="relative w-full h-[260px] select-none pt-4">
-                {/* Horizontal Gridlines */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-2">
-                  <div className="w-full border-b border-dashed border-slate-200 dark:border-slate-800/60 flex justify-between text-[10px] text-slate-400 pr-2">
-                    <span>{chartMetric === 'volume' ? formatNaira(maxChartValue) : `${maxChartValue} txns`}</span>
-                  </div>
-                  <div className="w-full border-b border-dashed border-slate-200 dark:border-slate-800/60 flex justify-between text-[10px] text-slate-400 pr-2">
+              <div className="space-y-2 min-w-0">
+                <div className="grid grid-cols-[auto_1fr] gap-2 sm:gap-3 items-stretch min-w-0">
+                  {/* Y-axis labels */}
+                  <div className="flex flex-col justify-between py-2 text-[10px] sm:text-[11px] tabular-nums text-slate-400 dark:text-slate-500 text-right select-none shrink-0">
                     <span>
                       {chartMetric === 'volume'
-                        ? formatNaira(maxChartValue * 0.66)
-                        : `${Math.round(maxChartValue * 0.66)} txns`}
+                        ? formatCompactAxisNaira(maxChartValue)
+                        : maxChartValue.toLocaleString()}
                     </span>
-                  </div>
-                  <div className="w-full border-b border-dashed border-slate-200 dark:border-slate-800/60 flex justify-between text-[10px] text-slate-400 pr-2">
                     <span>
                       {chartMetric === 'volume'
-                        ? formatNaira(maxChartValue * 0.33)
-                        : `${Math.round(maxChartValue * 0.33)} txns`}
+                        ? formatCompactAxisNaira(maxChartValue * 0.5)
+                        : Math.round(maxChartValue * 0.5).toLocaleString()}
                     </span>
-                  </div>
-                  <div className="w-full border-b border-slate-200 dark:border-slate-800 flex justify-between text-[10px] text-slate-400 pr-2">
                     <span>0</span>
                   </div>
-                </div>
 
-                {chartStyle === 'curve' ? (
-                  /* SVG Curve Mode */
-                  <svg
-                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                    className="w-full h-full overflow-visible"
-                    preserveAspectRatio="none"
+                  {/* Chart SVG Canvas */}
+                  <div
+                    className="relative h-[190px] sm:h-[220px] min-w-0 select-none"
+                    onMouseLeave={() => setActivePointIndex(null)}
                   >
-                    <defs>
-                      <linearGradient id="analyticsBlueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#126BEB" stopOpacity="0.32" />
-                        <stop offset="100%" stopColor="#126BEB" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
+                    <div className="absolute inset-0 flex flex-col justify-between py-3 pointer-events-none">
+                      <div className="w-full border-b border-dashed border-slate-200 dark:border-slate-800" />
+                      <div className="w-full border-b border-dashed border-slate-200 dark:border-slate-800" />
+                      <div className="w-full border-b border-slate-200 dark:border-slate-800" />
+                    </div>
 
-                    {/* Filled Gradient Area */}
-                    {svgAreaD && <path d={svgAreaD} fill="url(#analyticsBlueGrad)" />}
+                    <svg
+                      viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                      className="block w-full h-full"
+                      preserveAspectRatio="none"
+                      role="img"
+                      aria-label="Completed transactions trend chart"
+                    >
+                      <defs>
+                        <linearGradient id="baxatoTrendFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#126BEB" stopOpacity="0.22" />
+                          <stop offset="100%" stopColor="#126BEB" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
 
-                    {/* Smooth Line Curve */}
-                    {svgPathD && (
-                      <path
-                        d={svgPathD}
-                        fill="none"
-                        stroke="#126BEB"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    )}
-
-                    {/* Interactive Points */}
-                    {points.map((pt, idx) => {
-                      const isHovered = hoveredPointIndex === idx;
-                      return (
-                        <g key={idx} className="cursor-pointer">
-                          {isHovered && (
-                            <line
-                              x1={pt.x}
-                              y1={paddingY}
-                              x2={pt.x}
-                              y2={chartHeight - paddingY}
+                      {chartStyle === 'line' ? (
+                        <>
+                          {svgAreaD && <path d={svgAreaD} fill="url(#baxatoTrendFill)" />}
+                          {svgPathD && (
+                            <path
+                              d={svgPathD}
+                              fill="none"
                               stroke="#126BEB"
-                              strokeWidth="1.5"
-                              strokeDasharray="3 3"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              vectorEffect="non-scaling-stroke"
                             />
                           )}
-                          <circle
-                            cx={pt.x}
-                            cy={pt.y}
-                            r={isHovered ? 6 : 4}
-                            className={`transition-all duration-150 ${
-                              isHovered
-                                ? 'fill-[#126BEB] stroke-white dark:stroke-[#0B1528] stroke-2 shadow-lg'
-                                : 'fill-white dark:fill-[#0B1528] stroke-[#126BEB] stroke-2'
-                            }`}
-                            onMouseEnter={() => setHoveredPointIndex(idx)}
-                            onMouseLeave={() => setHoveredPointIndex(null)}
-                          />
-                        </g>
-                      );
-                    })}
-                  </svg>
-                ) : (
-                  /* SVG Grouped Bar Mode */
-                  <svg
-                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                    className="w-full h-full overflow-visible"
-                    preserveAspectRatio="none"
-                  >
-                    {timelinePoints.map((pt, idx) => {
-                      const barWidth = Math.max(4, Math.min(24, (chartWidth - paddingX * 2) / timelinePoints.length - 6));
-                      const x = paddingX + idx * ((chartWidth - paddingX * 2) / timelinePoints.length) + 4;
-                      const val = chartMetric === 'volume' ? pt.volumeNaira : pt.count;
-                      const h = (val / maxChartValue) * (chartHeight - paddingY * 2);
-                      const y = chartHeight - paddingY - h;
-                      const isHovered = hoveredPointIndex === idx;
 
-                      return (
-                        <g
-                          key={idx}
-                          className="cursor-pointer"
-                          onMouseEnter={() => setHoveredPointIndex(idx)}
-                          onMouseLeave={() => setHoveredPointIndex(null)}
-                        >
+                          {activePoint && (
+                            <line
+                              x1={activePoint.x}
+                              y1={padTop}
+                              x2={activePoint.x}
+                              y2={chartHeight - padBottom}
+                              stroke="#126BEB"
+                              strokeWidth="1"
+                              strokeDasharray="3 3"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          )}
+                        </>
+                      ) : (
+                        timelinePoints.map((pt, idx) => {
+                          const usableW = chartWidth - padLeft - padRight;
+                          const slotW = usableW / Math.max(timelinePoints.length, 1);
+                          const barW = Math.max(4, Math.min(24, slotW * 0.6));
+                          const x = padLeft + idx * slotW + (slotW - barW) / 2;
+                          const val =
+                            chartMetric === 'volume' ? pt.successfulVolumeNaira : pt.successfulCount;
+                          const usableH = chartHeight - padTop - padBottom;
+                          const h = val > 0 ? Math.max(3, (val / maxChartValue) * usableH) : 0;
+                          const y = chartHeight - padBottom - h;
+                          const isActive = activePointIndex === idx;
+
+                          return (
+                            <rect
+                              key={idx}
+                              x={x}
+                              y={y}
+                              width={barW}
+                              height={h}
+                              rx={3}
+                              fill={isActive ? '#38BDF8' : '#126BEB'}
+                            />
+                          );
+                        })
+                      )}
+
+                      {/* Interactive hit strips matching active chart geometry */}
+                      {chartPoints.map((pt, idx) => {
+                        const usableW = chartWidth - padLeft - padRight;
+                        const count = chartPoints.length;
+                        let hitX = 0;
+                        let hitW = chartWidth;
+
+                        if (chartStyle === 'bar') {
+                          const slotW = usableW / Math.max(count, 1);
+                          hitX = idx === 0 ? 0 : padLeft + idx * slotW;
+                          hitW =
+                            idx === 0
+                              ? padLeft + slotW
+                              : idx === count - 1
+                              ? slotW + padRight
+                              : slotW;
+                        } else if (count > 1) {
+                          const step = usableW / (count - 1);
+                          hitX = idx === 0 ? 0 : pt.x - step / 2;
+                          hitW =
+                            idx === 0
+                              ? padLeft + step / 2
+                              : idx === count - 1
+                              ? padRight + step / 2
+                              : step;
+                        }
+
+                        return (
                           <rect
-                            x={x}
-                            y={y}
-                            width={barWidth}
-                            height={Math.max(2, h)}
-                            rx={4}
-                            fill={isHovered ? '#38BDF8' : '#126BEB'}
-                            className="transition-colors duration-150"
+                            key={`hit-${idx}`}
+                            x={Math.max(0, hitX)}
+                            y={0}
+                            width={Math.max(6, hitW)}
+                            height={chartHeight}
+                            fill="transparent"
+                            className="cursor-pointer"
+                            onMouseEnter={() => setActivePointIndex(idx)}
+                            onClick={() =>
+                              setActivePointIndex((cur) => (cur === idx ? null : idx))
+                            }
                           />
-                        </g>
-                      );
-                    })}
-                  </svg>
-                )}
+                        );
+                      })}
+                    </svg>
 
-                {/* Floating Tooltip */}
-                {hoveredPointIndex !== null && points[hoveredPointIndex] && (
-                  <div
-                    className="absolute pointer-events-none z-20 px-3.5 py-2.5 bg-slate-900/95 dark:bg-white/95 text-white dark:text-slate-900 rounded-xl shadow-xl border border-white/10 dark:border-slate-800 text-xs backdrop-blur-sm -translate-x-1/2 -translate-y-full transition-all duration-75"
-                    style={{
-                      left: `${(points[hoveredPointIndex].x / chartWidth) * 100}%`,
-                      top: `${Math.max(10, (points[hoveredPointIndex].y / chartHeight) * 100 - 15)}%`,
-                    }}
-                  >
-                    <div className="font-bold text-[11px] opacity-80 mb-0.5">
-                      {points[hoveredPointIndex].raw.label}
-                    </div>
-                    <div className="text-sm font-black text-[#38BDF8] dark:text-[#126BEB]">
-                      {formatNaira(points[hoveredPointIndex].raw.volumeNaira)}
-                    </div>
-                    <div className="text-[10px] text-slate-300 dark:text-slate-600 mt-0.5 flex items-center gap-2">
-                      <span>{points[hoveredPointIndex].raw.count} transactions</span>
-                      <span>•</span>
-                      <span className="text-emerald-400 dark:text-emerald-600 font-semibold">
-                        {points[hoveredPointIndex].raw.successRate}% Success
-                      </span>
-                    </div>
-                    {points[hoveredPointIndex].raw.failedCount > 0 && (
-                      <div className="text-[10px] text-rose-400 dark:text-rose-600 mt-0.5">
-                        {points[hoveredPointIndex].raw.failedCount} failed
-                      </div>
+                    {/* Circular point indicator in HTML coordinates to avoid SVG preserveAspectRatio distortion */}
+                    {chartStyle === 'line' && activePoint && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#126BEB] ring-2 ring-white dark:ring-[#0B1528]"
+                        style={{
+                          left: `${(activePoint.x / chartWidth) * 100}%`,
+                          top: `${(activePoint.y / chartHeight) * 100}%`,
+                        }}
+                      />
                     )}
+                  </div>
+                </div>
+
+                {xTickLabels.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 pl-9 sm:pl-11 text-[10px] sm:text-[11px] tabular-nums text-slate-400 dark:text-slate-500">
+                    {xTickLabels.map((pt, idx) => (
+                      <span key={idx} className="truncate">
+                        {pt.label}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
             )}
+          </section>
 
-            {/* X-Axis Tick Labels */}
-            {timelinePoints.length > 0 && (
-              <div className="flex justify-between items-center text-[10.5px] font-semibold text-slate-400 dark:text-slate-500 px-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 overflow-x-auto">
-                {timelinePoints
-                  .filter((_, idx) => {
-                    const step = Math.ceil(timelinePoints.length / 8);
-                    return idx % step === 0 || idx === timelinePoints.length - 1;
-                  })
-                  .map((p, idx) => (
-                    <span key={idx} className="truncate px-1">
-                      {p.label}
-                    </span>
-                  ))}
-              </div>
-            )}
-          </div>
+          {/* Service Mix & Category Breakdown */}
+          <div
+            className={`grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 min-w-0 transition-opacity duration-150 ${
+              isUpdating ? 'opacity-70' : ''
+            }`}
+          >
+            {/* Donut Mix */}
+            <section className="lg:col-span-5 min-w-0 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-4">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                Service Share
+              </h2>
 
-          {/* Section 2: Product / Service Performance (Donut + Table Breakdown) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Donut Chart & Revenue Share (col-span-5) */}
-            <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <PieChart className="w-4 h-4 text-[#126BEB]" />
-                  <span>Service Revenue Share</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Proportion of vending turnover generated across each utility category.
-                </p>
-              </div>
-
-              {donutSegments.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  No service vends recorded in this period.
+              {isLoading ? (
+                <div className="py-8 flex flex-col items-center gap-4">
+                  <div className="w-36 h-36 rounded-full border-[14px] border-slate-100 dark:border-slate-800 animate-pulse" />
+                  <div className="h-4 w-40 bg-slate-200 dark:bg-slate-800 rounded animate-pulse" />
+                </div>
+              ) : donutSegments.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                  No completed transactions in this period.
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center my-4">
-                  {/* SVG Donut Canvas */}
-                  <div className="relative w-48 h-48">
-                    <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+                <div className="flex flex-col items-center gap-5 py-2">
+                  <div className="relative w-40 h-40 aspect-square shrink-0">
+                    <svg viewBox="0 0 148 148" className="block w-full h-full -rotate-90">
                       {donutSegments.map((seg, idx) => (
                         <circle
-                          key={idx}
-                          cx="80"
-                          cy="80"
-                          r="64"
+                          key={seg.serviceType}
+                          cx="74"
+                          cy="74"
+                          r="58"
                           fill="none"
                           stroke={seg.colorHex}
-                          strokeWidth={hoveredDonutIndex === idx ? '22' : '18'}
+                          strokeWidth={activeDonutIndex === idx ? '18' : '15'}
                           strokeDasharray={seg.strokeDasharray}
                           strokeDashoffset={seg.strokeDashoffset}
-                          className="transition-all duration-200 cursor-pointer"
-                          onMouseEnter={() => setHoveredDonutIndex(idx)}
-                          onMouseLeave={() => setHoveredDonutIndex(null)}
+                          className="transition-all duration-150 cursor-pointer"
+                          onMouseEnter={() => setActiveDonutIndex(idx)}
+                          onMouseLeave={() => setActiveDonutIndex(null)}
+                          onClick={() =>
+                            setActiveDonutIndex((cur) => (cur === idx ? null : idx))
+                          }
                         />
                       ))}
                     </svg>
 
-                    {/* Donut Center Display */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-4">
-                      {hoveredDonutIndex !== null && donutSegments[hoveredDonutIndex] ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-4">
+                      {activeDonut ? (
                         <>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-[120px]">
-                            {donutSegments[hoveredDonutIndex].label}
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-full">
+                            {activeDonut.label}
                           </span>
-                          <span className="text-base font-black text-slate-900 dark:text-white mt-0.5">
-                            {donutSegments[hoveredDonutIndex].percentage}%
+                          <span className="text-base font-bold tabular-nums text-slate-900 dark:text-white">
+                            {activeDonut.percentage}%
                           </span>
-                          <span className="text-[10px] text-[#126BEB] font-semibold mt-0.5">
-                            {formatNaira(donutSegments[hoveredDonutIndex].volumeNaira)}
+                          <span className="text-[11px] font-medium tabular-nums text-[#126BEB] dark:text-[#38BDF8] truncate max-w-full">
+                            {activeDonut.formattedVolume}
                           </span>
                         </>
                       ) : (
                         <>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Total Volume
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            Completed
                           </span>
-                          <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white mt-0.5">
-                            {summary?.formattedTotalVolume || '₦0.00'}
-                          </span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">
-                            {summary?.totalCount || 0} vends
+                          <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white truncate max-w-full mt-0.5">
+                            {summary?.formattedSuccessfulVolume || '₦0.00'}
                           </span>
                         </>
                       )}
                     </div>
                   </div>
 
-                  {/* Legend Pills */}
-                  <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                  <div className="w-full flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     {donutSegments.map((seg, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs cursor-pointer transition-all ${
-                          hoveredDonutIndex === idx
-                            ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 shadow-xs'
-                            : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400'
+                      <button
+                        key={seg.serviceType}
+                        type="button"
+                        onMouseEnter={() => setActiveDonutIndex(idx)}
+                        onMouseLeave={() => setActiveDonutIndex(null)}
+                        onClick={() =>
+                          setActiveDonutIndex((cur) => (cur === idx ? null : idx))
+                        }
+                        className={`inline-flex items-center gap-1.5 text-xs cursor-pointer transition-opacity ${
+                          activeDonutIndex !== null && activeDonutIndex !== idx
+                            ? 'opacity-50'
+                            : 'opacity-100'
                         }`}
-                        onMouseEnter={() => setHoveredDonutIndex(idx)}
-                        onMouseLeave={() => setHoveredDonutIndex(null)}
                       >
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: seg.colorHex }} />
-                        <span className="font-semibold text-[11px]">{seg.label}</span>
-                        <span className="text-[10px] opacity-70">({seg.percentage}%)</span>
-                      </div>
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: seg.colorHex }}
+                        />
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
+                          {seg.label}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400 tabular-nums">
+                          {seg.percentage}%
+                        </span>
+                      </button>
                     ))}
                   </div>
                 </div>
               )}
+            </section>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>Active biller categories</span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  {donutSegments.length} Integrated
-                </span>
-              </div>
-            </div>
+            {/* Category Breakdown List */}
+            <section className="lg:col-span-7 min-w-0 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 space-y-3">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                By Service
+              </h2>
 
-            {/* Granular Service Performance Table (col-span-7) */}
-            <div className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#126BEB]" />
-                  <span>Category Performance & Margins</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Detailed breakdown of transaction volume, customer success rates, and discounts earned.
-                </p>
-              </div>
-
-              {analyticsData?.serviceBreakdown.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  No service transactions found matching active filters.
+              {isLoading ? (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="py-3 flex items-center justify-between gap-3 animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800" />
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded" />
+                          <div className="h-3 w-16 bg-slate-100 dark:bg-slate-800/70 rounded" />
+                        </div>
+                      </div>
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : (analyticsData?.serviceBreakdown?.length || 0) === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                  No service activity in this period.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {analyticsData?.serviceBreakdown.map((item) => {
-                    const meta = serviceTheme[item.serviceType] || {
-                      icon: Smartphone,
-                      badge: 'bg-slate-100 text-slate-700',
-                      bg: 'bg-slate-500',
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                  {analyticsData!.serviceBreakdown.map((item) => {
+                    const theme = SERVICE_THEME[item.serviceType] || {
+                      icon: Layers,
+                      badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+                      barClass: 'bg-slate-500',
                     };
-                    const Icon = meta.icon;
+                    const Icon = theme.icon;
 
                     return (
-                      <div
-                        key={item.serviceType}
-                        className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#071120]/50 hover:bg-slate-100/60 dark:hover:bg-[#091529] transition-all"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`p-2 rounded-lg ${meta.badge}`}>
+                      <div key={item.serviceType} className="py-3 first:pt-1 last:pb-1 space-y-2 min-w-0">
+                        <div className="flex items-center justify-between gap-3 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${theme.badgeClass}`}
+                            >
                               <Icon className="w-4 h-4" />
                             </div>
-                            <div>
-                              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            <div className="min-w-0">
+                              <div className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white truncate">
                                 {item.label}
-                              </span>
-                              <span className="text-[10.5px] text-slate-400">
-                                {item.count} vends ({item.successfulCount} fulfilled)
-                              </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums truncate">
+                                {item.successfulCount} completed • Avg {item.formattedAvgTicket}
+                              </div>
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <span className="text-xs font-black text-slate-900 dark:text-white block">
+                          <div className="text-right shrink-0">
+                            <div className="text-xs sm:text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
                               {item.formattedVolume}
-                            </span>
-                            <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                              <span className="font-bold text-[#126BEB] dark:text-[#38BDF8]">
-                                {item.volumeShare}% share
-                              </span>
-                              <span>•</span>
-                              <span
-                                className={`font-semibold ${
-                                  item.successRate >= 90
-                                    ? 'text-emerald-500'
-                                    : item.successRate >= 60
-                                    ? 'text-amber-500'
-                                    : 'text-rose-500'
-                                }`}
-                              >
-                                {item.successRate}% Success
-                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                              {item.volumeShare}%
+                              {item.discountNaira > 0 ? ` • Saved ${item.formattedDiscount}` : ''}
                             </div>
                           </div>
                         </div>
 
-                        {/* Progress Meter Bar */}
-                        <div className="w-full bg-slate-200/70 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${meta.bg} transition-all duration-700`}
-                            style={{ width: `${item.volumeShare}%` }}
+                            className={`h-full rounded-full ${theme.barClass}`}
+                            style={{ width: `${Math.min(100, Math.max(0, item.volumeShare))}%` }}
                           />
-                        </div>
-
-                        {/* Sub-row with Margin & AOV */}
-                        <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400">
-                          <span>
-                            Avg. Ticket: <span className="font-semibold text-slate-700 dark:text-slate-300">{item.formattedAvgTicket}</span>
-                          </span>
-                          <span>
-                            Discount Earned: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{item.formattedDiscount}</span>
-                          </span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
+            </section>
           </div>
 
-          {/* Section 3: Channel Integration & Carrier Distribution with Real Brand Logos */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Integration Channels (API vs Console) (col-span-5) */}
-            <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-5">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Server className="w-4 h-4 text-[#126BEB]" />
-                  <span>Channel Origin & Integration</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Comparison between programmatic REST API calls and manual Web Console vends.
-                </p>
+          {/* Providers & Channels */}
+          <div
+            className={`grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 min-w-0 transition-opacity duration-150 ${
+              isUpdating ? 'opacity-70' : ''
+            }`}
+          >
+            {/* Top Operators */}
+            <section className="lg:col-span-7 min-w-0 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 space-y-3">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                Top Operators
+              </h2>
 
-                {/* API vs Console Card */}
-                <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-[#0F1E36] to-[#081222] border border-slate-700/60 text-white space-y-4">
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-                    <span>Traffic Split</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                      {analyticsData?.channelBreakdown?.api?.successRate || 100}% API Reliability
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-center">
-                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-400 block font-bold">
-                        REST API
-                      </span>
-                      <span className="text-xl font-black text-white mt-1 block">
-                        {analyticsData?.channelBreakdown?.api?.volumeShare || 0}%
-                      </span>
-                      <span className="text-[10px] text-slate-300 mt-0.5 block">
-                        {formatNaira(analyticsData?.channelBreakdown?.api?.volumeNaira || 0)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        {analyticsData?.channelBreakdown?.api?.count || 0} calls
-                      </span>
+              {isLoading ? (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="py-3 flex items-center justify-between gap-3 animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800" />
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 w-28 bg-slate-200 dark:bg-slate-800 rounded" />
+                          <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800/70 rounded" />
+                        </div>
+                      </div>
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
                     </div>
-
-                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-400 block font-bold">
-                        Web Console
-                      </span>
-                      <span className="text-xl font-black text-white mt-1 block">
-                        {analyticsData?.channelBreakdown?.console?.volumeShare || 0}%
-                      </span>
-                      <span className="text-[10px] text-slate-300 mt-0.5 block">
-                        {formatNaira(analyticsData?.channelBreakdown?.console?.volumeNaira || 0)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        {analyticsData?.channelBreakdown?.console?.count || 0} vends
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Dual color progress meter */}
-                  <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden flex">
-                    <div
-                      className="bg-[#126BEB] h-full"
-                      style={{ width: `${analyticsData?.channelBreakdown?.api?.volumeShare || 0}%` }}
-                      title="API traffic"
-                    />
-                    <div
-                      className="bg-indigo-400 h-full"
-                      style={{ width: `${analyticsData?.channelBreakdown?.console?.volumeShare || 0}%` }}
-                      title="Console traffic"
-                    />
-                  </div>
+                  ))}
                 </div>
-
-                {/* API Automation Notice */}
-                <div className="mt-4 p-3.5 rounded-xl border border-blue-200/60 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20 text-xs space-y-1.5">
-                  <div className="font-bold text-[#126BEB] dark:text-[#38BDF8] flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 shrink-0" />
-                    <span>Automate with BAXATO REST API</span>
-                  </div>
-                  <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
-                    Integrate your FinTech or business app using our developer SDK and API keys for instant sub-second airtime, data, and utility token dispatch.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Manage API Credentials
-                </span>
-                <Link
-                  href="/dashboard/developer"
-                  className="text-xs font-bold text-[#126BEB] dark:text-[#38BDF8] hover:underline flex items-center gap-1"
-                >
-                  <span>Go to Developer Portal</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Carrier / Operator Breakdown with Real Logos (col-span-7) */}
-            <div className="lg:col-span-7 p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-[#126BEB]" />
-                  <span>Top Carriers & Utility Providers</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Turnover volume distributed by telecommunications network (MTN, Airtel, Glo, 9mobile) and DISCO electricity entities.
-                </p>
-              </div>
-
-              {analyticsData?.topOperators.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  No operator traffic recorded in this period.
+              ) : (analyticsData?.topOperators?.length || 0) === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                  No operator activity in this period.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {analyticsData?.topOperators.map((op, idx) => {
-                    const { logoUrl, bg } = getOperatorLogo(op.operator);
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                  {analyticsData!.topOperators.map((op, idx) => {
+                    const { logoUrl, fullBleed } = getOperatorLogo(op.operator);
+                    const serviceName =
+                      op.serviceLabel || SERVICE_LABELS[op.serviceType] || op.serviceType;
 
                     return (
                       <div
-                        key={idx}
-                        className="p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/50 dark:bg-[#071120]/40 flex items-center justify-between gap-3 hover:bg-slate-100/60 dark:hover:bg-[#091529] transition-all"
+                        key={`${op.operator}-${op.serviceType}-${idx}`}
+                        className="py-3 first:pt-1 last:pb-1 flex items-center justify-between gap-3 min-w-0"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          {/* Official Carrier / Biller Logo */}
-                          <div className={`w-10 h-10 rounded-xl ${bg} border p-1.5 flex items-center justify-center shrink-0 shadow-xs`}>
+                          <div
+                            className={`w-9 h-9 rounded-lg relative shrink-0 overflow-hidden border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center ${
+                              fullBleed ? 'bg-transparent' : 'bg-white'
+                            }`}
+                          >
                             {logoUrl ? (
-                              <img
+                              <Image
                                 src={logoUrl}
                                 alt={op.operator}
-                                className="w-full h-full object-contain"
+                                fill
+                                sizes="36px"
+                                className={fullBleed ? 'object-cover' : 'object-contain p-1'}
                               />
                             ) : (
-                              <span className="font-black text-xs text-slate-700 dark:text-slate-300">
+                              <span className="text-[11px] font-bold text-slate-600">
                                 {op.operator.slice(0, 3).toUpperCase()}
                               </span>
                             )}
                           </div>
 
                           <div className="min-w-0">
-                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                            <div className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white truncate">
                               {op.operator}
-                            </span>
-                            <span className="text-[10.5px] text-slate-400">
-                              {op.serviceType} • {op.count} vends
-                            </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate tabular-nums">
+                              {serviceName} • {op.successfulCount} completed
+                            </div>
                           </div>
                         </div>
 
                         <div className="text-right shrink-0">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                          <div className="text-xs sm:text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
                             {op.formattedVolume}
-                          </span>
-                          <div className="flex items-center justify-end gap-1.5 text-[10px]">
-                            <span className="font-bold text-[#126BEB] dark:text-[#38BDF8]">
-                              {op.volumeShare}%
-                            </span>
-                            <span>•</span>
-                            <span
-                              className={`font-semibold ${
-                                op.successRate >= 90
-                                  ? 'text-emerald-500'
-                                  : op.successRate >= 60
-                                  ? 'text-amber-500'
-                                  : 'text-rose-500'
-                              }`}
-                            >
-                              {op.successRate}% Success
-                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                            {op.volumeShare}%
                           </div>
                         </div>
                       </div>
@@ -1591,344 +1496,105 @@ export default function AnalyticsPage() {
                   })}
                 </div>
               )}
-            </div>
-          </div>
+            </section>
 
-          {/* Section 4: Comprehensive Transaction Health & Failure Diagnostics with Pagination */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#126BEB]" />
-                  <span>Transaction Health & Failure Diagnostics</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Granular root-cause analysis and itemized failure records for the <span className="font-semibold text-slate-800 dark:text-slate-200">{timeframeLabel}</span> window.
-                </p>
-              </div>
+            {/* Channels */}
+            <section className="lg:col-span-5 min-w-0 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 space-y-4">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                Channels
+              </h2>
 
-              {/* Status Breakdown Pills */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-900 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{summary?.successfulCount || 0} Successful</span>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 flex items-center gap-1">
-                  <XCircle className="w-3.5 h-3.5" />
-                  <span>{summary?.failedCount || 0} Failed</span>
-                </span>
-                {(summary?.pendingCount || 0) > 0 && (
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-200 dark:border-amber-900 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{summary?.pendingCount} Processing</span>
-                  </span>
-                )}
-                {(summary?.reversedCount || 0) > 0 && (
-                  <span className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 text-xs font-bold border border-purple-200 dark:border-purple-900 flex items-center gap-1">
-                    <Receipt className="w-3.5 h-3.5" />
-                    <span>{summary?.reversedCount} Reversed</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Diagnostic View Tabs: Root Cause Aggregation vs Itemized Log with Pagination */}
-            <div className="flex items-center gap-2 pt-2 border-b border-slate-100 dark:border-slate-800/80">
-              <button
-                onClick={() => setFailureTab('reasons')}
-                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
-                  failureTab === 'reasons'
-                    ? 'border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8]'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Categorized Root Causes</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                  {analyticsData?.failureDiagnostics?.topReasons.length || 0}
-                </span>
-              </button>
-
-              <button
-                onClick={() => setFailureTab('transactions')}
-                className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
-                  failureTab === 'transactions'
-                    ? 'border-[#126BEB] text-[#126BEB] dark:text-[#38BDF8]'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Failed Transactions Log</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
-                  {failurePagination.totalCount}
-                </span>
-              </button>
-            </div>
-
-            {/* Tab 1: Root Cause Reasons Table */}
-            {failureTab === 'reasons' && (
-              <>
-                {analyticsData?.failureDiagnostics?.topReasons.length === 0 ? (
-                  <div className="p-6 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-center">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                    <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                      Zero Upstream Failures Recorded
-                    </h4>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                      All transactions during the {timeframeLabel} window fulfilled with 100% gateway success.
-                    </p>
+              {isLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full" />
+                  <div className="h-14 w-full bg-slate-100 dark:bg-slate-800/70 rounded-lg" />
+                  <div className="h-14 w-full bg-slate-100 dark:bg-slate-800/70 rounded-lg" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Split Progress Bar */}
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden flex">
+                    <div
+                      className="bg-[#126BEB] h-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(0, analyticsData?.channelBreakdown?.console?.volumeShare || 0),
+                        )}%`,
+                      }}
+                    />
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(0, analyticsData?.channelBreakdown?.api?.volumeShare || 0),
+                        )}%`,
+                      }}
+                    />
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                          <th className="py-2.5 px-3">Failure Reason / Provider Response</th>
-                          <th className="py-2.5 px-3">Occurrences</th>
-                          <th className="py-2.5 px-3">Unfulfilled Volume</th>
-                          <th className="py-2.5 px-3 text-right">% of Failures</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                        {analyticsData?.failureDiagnostics.topReasons.map((reason, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50 transition-colors">
-                            <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                              <div className="flex items-center gap-2">
-                                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                <span className="truncate max-w-lg">{reason.reason}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 font-bold text-slate-700 dark:text-slate-300">
-                              {reason.count}
-                            </td>
-                            <td className="py-3 px-3 font-semibold text-rose-600 dark:text-rose-400">
-                              {reason.formattedLostVolume}
-                            </td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-600 dark:text-slate-400">
-                              {reason.percentage}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
 
-            {/* Tab 2: Paginated Individual Failed Transactions Log */}
-            {failureTab === 'transactions' && (
-              <div className="space-y-4">
-                {failedTransactions.length === 0 ? (
-                  <div className="p-6 rounded-xl bg-slate-50 dark:bg-[#071120] text-center text-xs text-slate-400">
-                    No failed transactions found for this timeframe.
-                  </div>
-                ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                            <th className="py-2.5 px-3">Reference</th>
-                            <th className="py-2.5 px-3">Service / Operator</th>
-                            <th className="py-2.5 px-3">Recipient</th>
-                            <th className="py-2.5 px-3">Amount</th>
-                            <th className="py-2.5 px-3">Failure Reason</th>
-                            <th className="py-2.5 px-3 text-right">Date & Time</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                          {failedTransactions.map((tx) => {
-                            const { logoUrl, bg } = getOperatorLogo(tx.operator);
-
-                            return (
-                              <tr key={tx.id} className="hover:bg-slate-50/50 dark:hover:bg-[#0C1527]/50 transition-colors">
-                                <td className="py-3 px-3 font-mono font-bold text-slate-900 dark:text-slate-100">
-                                  {tx.reference}
-                                </td>
-                                <td className="py-3 px-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-6 h-6 rounded-lg ${bg} border p-0.5 flex items-center justify-center shrink-0`}>
-                                      {logoUrl ? (
-                                        <img src={logoUrl} alt={tx.operator} className="w-full h-full object-contain" />
-                                      ) : (
-                                        <span className="text-[9px] font-black">{tx.operator.slice(0, 2)}</span>
-                                      )}
-                                    </div>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                      {tx.serviceType}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
-                                  {tx.recipient}
-                                </td>
-                                <td className="py-3 px-3 font-bold text-rose-600 dark:text-rose-400">
-                                  {tx.formattedAmount}
-                                </td>
-                                <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-xs truncate" title={tx.errorMessage}>
-                                  {tx.errorMessage}
-                                </td>
-                                <td className="py-3 px-3 text-right text-[11px] text-slate-400 whitespace-nowrap">
-                                  {new Date(tx.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pagination Bar */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
-                      <div>
-                        Showing page <span className="font-bold text-slate-800 dark:text-slate-200">{failurePagination.page}</span> of{' '}
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{failurePagination.totalPages}</span> ({failurePagination.totalCount} total failed vends)
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {/* Dashboard Channel */}
+                    <div className="py-3 first:pt-1 flex items-center justify-between gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#126BEB] shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white">
+                            Dashboard
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                            {(analyticsData?.channelBreakdown?.console?.successfulCount || 0).toLocaleString()} completed
+                          </div>
+                        </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            if (failurePage > 1) {
-                              const p = failurePage - 1;
-                              setFailurePage(p);
-                              fetchAnalytics(undefined, p);
-                            }
-                          }}
-                          disabled={failurePage <= 1 || isFetchingBackground}
-                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                          <span>Previous</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            if (failurePage < failurePagination.totalPages) {
-                              const p = failurePage + 1;
-                              setFailurePage(p);
-                              fetchAnalytics(undefined, p);
-                            }
-                          }}
-                          disabled={failurePage >= failurePagination.totalPages || isFetchingBackground}
-                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-semibold"
-                        >
-                          <span>Next</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="text-right shrink-0">
+                        <div className="text-xs sm:text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                          {analyticsData?.channelBreakdown?.console?.formattedVolume || '₦0.00'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {analyticsData?.channelBreakdown?.console?.volumeShare || 0}%
+                        </div>
                       </div>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* Section 5: Hourly Trading Activity Pattern Matrix (Clearly labeled for clarity) */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[#126BEB]" />
-                  <span>
-                    {timeframe === 'today'
-                      ? "Today's 24-Hour Trading Velocity"
-                      : `Hourly Activity Pattern (${timeframeLabel} Aggregate)`}
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {timeframe === 'today'
-                    ? 'Disbursement throughput across each hour of today in West Africa Time (WAT).'
-                    : `Aggregated distribution by time of day (00:00 - 23:00 WAT) revealing your customers' prime purchasing hours across the ${timeframeLabel} window.`}
-                </p>
-              </div>
-
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] dark:text-[#38BDF8] text-xs font-bold border border-blue-200 dark:border-blue-900/60">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#126BEB] animate-pulse" />
-                <span>WAT Timezone (UTC+1)</span>
-              </div>
-            </div>
-
-            {/* 24-Column Density Matrix */}
-            <div className="grid grid-cols-6 sm:grid-cols-12 md:grid-cols-24 gap-1.5 pt-2">
-              {(analyticsData?.hourlyDensity || []).map((slot) => {
-                const count = slot.count;
-                const isPeak = slot.percentage > 8;
-                const hasActivity = count > 0;
-
-                return (
-                  <div
-                    key={slot.hour}
-                    className="flex flex-col items-center group relative cursor-pointer"
-                  >
-                    {/* Activity Column Bar */}
-                    <div className="w-full h-20 bg-slate-100 dark:bg-slate-800/80 rounded-md flex flex-col justify-end p-0.5 overflow-hidden">
-                      <div
-                        className={`w-full rounded-sm transition-all duration-300 ${
-                          isPeak
-                            ? 'bg-[#126BEB]'
-                            : hasActivity
-                            ? 'bg-blue-400 dark:bg-blue-500'
-                            : 'bg-transparent'
-                        }`}
-                        style={{ height: `${Math.max(hasActivity ? 15 : 0, slot.percentage * 3)}%` }}
-                      />
-                    </div>
-
-                    {/* Hour Label */}
-                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 mt-1">
-                      {slot.label.slice(0, 2)}h
-                    </span>
-
-                    {/* Hover Floating Tooltip */}
-                    <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute bottom-full mb-1 z-30 px-2.5 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[10px] whitespace-nowrap shadow-lg transition-opacity duration-150">
-                      <div className="font-bold">{slot.label} WAT</div>
-                      <div>{slot.count} transactions ({slot.percentage}% of window)</div>
-                      <div className="text-[#38BDF8] dark:text-[#126BEB] font-bold">
-                        {slot.formattedVolume}
+                    {/* API Channel */}
+                    <div className="py-3 last:pb-1 flex items-center justify-between gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white">
+                            API
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                            {(analyticsData?.channelBreakdown?.api?.successfulCount || 0).toLocaleString()} completed
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-xs sm:text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                          {analyticsData?.channelBreakdown?.api?.formattedVolume || '₦0.00'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {analyticsData?.channelBreakdown?.api?.volumeShare || 0}%
+                        </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section 6: Live Ledger Deep Inspection Quick Link */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/80 dark:from-[#091528] dark:via-[#070D18] dark:to-[#0B1528] border border-blue-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0 border border-[#126BEB]/20">
-                <Receipt className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Need itemized receipt accounting and token lookups?
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Inspect granular audit logs, provider references, customer phone numbers, and electricity tokens in Transaction History.
-                </p>
-              </div>
-            </div>
-
-            <Link
-              href="/dashboard/ledger"
-              className="px-4 py-2.5 rounded-xl bg-white dark:bg-[#0F1E36] text-slate-900 dark:text-white font-bold text-xs border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-[#152744] transition-colors shrink-0 flex items-center gap-1.5 shadow-xs"
-            >
-              <span>Open Transaction History</span>
-              <ArrowUpRight className="w-4 h-4 text-[#126BEB]" />
-            </Link>
+                </div>
+              )}
+            </section>
           </div>
         </main>
       </div>
 
-      {/* KYC Verification Modal */}
+      {/* Identity Verification Modal */}
       <KycModal
         isOpen={isKycModalOpen}
         onClose={() => setIsKycModalOpen(false)}
-        onSuccess={() => setKycStatus('VERIFIED')}
+        onSuccess={handleKycSuccess}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
       />
     </div>
   );
