@@ -55,6 +55,7 @@ export interface DiscoOption {
   coverage: string;
   discountBps: number; // 120 = 1.2%
   minAmountNaira: number;
+  enabled?: boolean;
 }
 
 const ALL_DISCOS: DiscoOption[] = [
@@ -364,6 +365,7 @@ export interface MeterMismatch {
   meterNumber: string;
   requestedMeterType: MeterType;
   detectedMeterType: MeterType;
+  alternateAvailable?: boolean;
   suggestionDiscoId?: string;
   customerName?: string;
   customerAddress?: string;
@@ -517,40 +519,66 @@ export default function ElectricityPage() {
 
     void syncUserProfile();
 
-    // Fetch dynamic DISCO directory with admin-configured discount rates and minimum amounts
+    // Read initial URL ?provider= parameter
+    let initialProviderParam: string | null = null;
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const candidate = params.get('provider');
+        if (candidate && ALL_DISCOS.some((d) => d.id === candidate)) {
+          initialProviderParam = candidate;
+          setSelectedOptionId(candidate);
+        }
+      }
+    } catch {}
+
+    // Fetch dynamic DISCO directory with availability flags, discount rates, and minimum amounts
     const loadDiscosCatalog = async () => {
       try {
         const res = await fetch('/api/services/electricity/discos', { cache: 'no-store' });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.success && Array.isArray(data.data)) {
-          setDiscosList((prev) =>
-            prev.map((disco) => {
-              const matched = data.data.find((d: any) => d.code === disco.code);
-              if (matched) {
-                return {
-                  ...disco,
-                  discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : disco.discountBps,
-                  minAmountNaira: typeof matched.minimumAmountNaira === 'number' ? matched.minimumAmountNaira : disco.minAmountNaira,
-                };
+          const nextList = ALL_DISCOS.map((disco) => {
+            const matched = data.data.find((d: any) => d.code === disco.code);
+            if (matched) {
+              const isOptionEnabled =
+                disco.meterType === 'PREPAID'
+                  ? matched.prepaidEnabled !== false
+                  : matched.postpaidEnabled !== false;
+              return {
+                ...disco,
+                enabled: isOptionEnabled,
+                discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : disco.discountBps,
+                minAmountNaira: typeof matched.minimumAmountNaira === 'number' ? matched.minimumAmountNaira : disco.minAmountNaira,
+              };
+            }
+            return disco;
+          });
+          setDiscosList(nextList);
+
+          const activeParam =
+            typeof window !== 'undefined'
+              ? new URLSearchParams(window.location.search).get('provider')
+              : initialProviderParam;
+          if (activeParam) {
+            const matchedSelected = nextList.find((d) => d.id === activeParam);
+            if (matchedSelected && matchedSelected.enabled === false) {
+              setSelectedOptionId(null);
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('provider');
+                window.history.replaceState({}, '', url.toString());
               }
-              return disco;
-            }),
-          );
+              showToast({
+                type: 'error',
+                message: `${matchedSelected.shortName} ${matchedSelected.meterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'} electricity is currently unavailable.`,
+              });
+            }
+          }
         }
       } catch {}
     };
     loadDiscosCatalog();
-
-    // Sync provider from URL if present
-    try {
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const providerParam = params.get('provider');
-        if (providerParam && ALL_DISCOS.some((d) => d.id === providerParam)) {
-          setSelectedOptionId(providerParam);
-        }
-      }
-    } catch {}
 
     return () => {
       window.removeEventListener('bx_business_switched', handleBizSwitched);
@@ -674,6 +702,7 @@ export default function ElectricityPage() {
           meterNumber: info.meterNumber || cleanMeter,
           requestedMeterType: info.requestedMeterType || targetDisco.meterType,
           detectedMeterType: info.detectedMeterType,
+          alternateAvailable: info.alternateAvailable !== false,
           suggestionDiscoId: info.suggestionDiscoId,
           customerName: info.customerName,
           customerAddress: info.customerAddress,
@@ -738,7 +767,13 @@ export default function ElectricityPage() {
       (d) => d.code === selectedDisco?.code && d.meterType === mismatch.detectedMeterType,
     );
 
-    if (!targetDisco) return;
+    if (!targetDisco || targetDisco.enabled === false || mismatch.alternateAvailable === false) {
+      showToast({
+        type: 'error',
+        message: `${selectedDisco?.shortName ?? 'Selected'} ${mismatch.detectedMeterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'} electricity is currently unavailable.`,
+      });
+      return;
+    }
 
     clearPendingVerification();
     setSelectedOptionId(targetDisco.id);
@@ -768,6 +803,14 @@ export default function ElectricityPage() {
 
   // Navigate into Dedicated Biller Page
   const handleSelectBiller = (option: DiscoOption) => {
+    if (option.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${option.shortName} ${option.meterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'} electricity is currently unavailable.`,
+      });
+      return;
+    }
+
     clearPendingVerification();
     setSelectedOptionId(option.id);
     setMeterNumber('');
@@ -791,7 +834,7 @@ export default function ElectricityPage() {
     const targetDisco = discosList.find(
       (d) => d.code === ben.disco && d.meterType === ben.meterType,
     );
-    if (!targetDisco) {
+    if (!targetDisco || targetDisco.enabled === false) {
       showToast({
         type: 'error',
         message: 'Selected electricity provider is currently unavailable.',
@@ -1239,12 +1282,18 @@ export default function ElectricityPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {filteredDiscos.map((opt) => {
                   const isPrepaid = opt.meterType === 'PREPAID';
+                  const isUnavailable = opt.enabled === false;
                   return (
                     <button
                       key={opt.id}
                       type="button"
+                      aria-disabled={isUnavailable || undefined}
                       onClick={() => handleSelectBiller(opt)}
-                      className="group relative p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] text-left transition-colors duration-150 cursor-pointer flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
+                      className={`group relative p-3 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                        isUnavailable
+                          ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                          : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                      }`}
                     >
                       <div>
                         {/* Top: Crisp White-Backed Logo & Meter Tag */}
@@ -1274,7 +1323,7 @@ export default function ElectricityPage() {
                         </div>
 
                         {/* Title & Coverage */}
-                        <h3 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors truncate">
+                        <h3 className={`font-bold text-xs text-slate-900 dark:text-white truncate ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
                           {opt.shortName}
                         </h3>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
@@ -1284,7 +1333,11 @@ export default function ElectricityPage() {
 
                       {/* Footer: Discount (if set) & Action */}
                       <div className="pt-2 mt-2.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[11px]">
-                        {opt.discountBps > 0 ? (
+                        {isUnavailable ? (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                            Unavailable
+                          </span>
+                        ) : opt.discountBps > 0 ? (
                           <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                             {(opt.discountBps / 100).toFixed(1)}% off
                           </span>
@@ -1292,9 +1345,11 @@ export default function ElectricityPage() {
                           <span className="text-slate-400 dark:text-slate-500">Meter</span>
                         )}
 
-                        <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
-                          Pay
-                        </span>
+                        {!isUnavailable && (
+                          <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                            Pay
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -1496,31 +1551,44 @@ export default function ElectricityPage() {
                     )}
 
                     {/* Meter Type Mismatch Notice & Switch */}
-                    {meterMismatch && selectedDisco && (
-                      <div className="p-3.5 rounded-lg bg-amber-500/10 dark:bg-amber-950/35 border border-amber-500/30 text-xs space-y-2.5">
-                        <div className="flex items-start gap-2.5">
-                          <ArrowRightLeft className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-amber-900 dark:text-amber-200">
-                              Meter registered as {meterMismatch.detectedMeterType}
-                            </p>
-                            <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5">
-                              {meterMismatch.customerName
-                                ? `#${meterMismatch.meterNumber} (${meterMismatch.customerName}) belongs to ${selectedDisco.shortName} ${meterMismatch.detectedMeterType}.`
-                                : meterMismatch.responseMessage}
-                            </p>
+                    {meterMismatch && selectedDisco && (() => {
+                      const alternateDisco = discosList.find(
+                        (d) => d.code === selectedDisco.code && d.meterType === meterMismatch.detectedMeterType,
+                      );
+                      const isAlternateDisabled =
+                        meterMismatch.alternateAvailable === false || alternateDisco?.enabled === false;
+                      return (
+                        <div className="p-3.5 rounded-lg bg-amber-500/10 dark:bg-amber-950/35 border border-amber-500/30 text-xs space-y-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <ArrowRightLeft className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-amber-900 dark:text-amber-200">
+                                Meter registered as {meterMismatch.detectedMeterType}
+                              </p>
+                              <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                                {meterMismatch.customerName
+                                  ? `#${meterMismatch.meterNumber} (${meterMismatch.customerName}) belongs to ${selectedDisco.shortName} ${meterMismatch.detectedMeterType}.`
+                                  : meterMismatch.responseMessage}
+                              </p>
+                            </div>
                           </div>
-                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchMeterType(meterMismatch)}
-                          className="w-full h-9 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer"
-                        >
-                          Switch to {selectedDisco.shortName} {meterMismatch.detectedMeterType}
-                        </button>
-                      </div>
-                    )}
+                          {isAlternateDisabled ? (
+                            <p className="text-[11px] font-medium text-amber-900 dark:text-amber-200">
+                              {selectedDisco.shortName} {meterMismatch.detectedMeterType} is currently unavailable.
+                            </p>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchMeterType(meterMismatch)}
+                              className="w-full h-9 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+                            >
+                              Switch to {selectedDisco.shortName} {meterMismatch.detectedMeterType}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Verified Customer Information */}
                     {verifiedMeter && (

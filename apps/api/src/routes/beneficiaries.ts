@@ -11,7 +11,7 @@ import {
 } from '../services/beneficiary.service.js';
 import { requireTenantPermission } from '../plugins/rbac.plugin.js';
 
-const SUPPORTED_SERVICE_TYPES: readonly BeneficiaryServiceType[] = ['AIRTIME', 'DATA', 'ELECTRICITY'];
+const SUPPORTED_SERVICE_TYPES: readonly BeneficiaryServiceType[] = ['AIRTIME', 'DATA', 'ELECTRICITY', 'CABLE_TV'];
 
 export const beneficiaryRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -34,7 +34,7 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (fastify) => {
           : undefined;
 
       if (rawServiceType && !SUPPORTED_SERVICE_TYPES.includes(rawServiceType as BeneficiaryServiceType)) {
-        throw new ValidationError('Invalid serviceType. Supported: AIRTIME, DATA, ELECTRICITY.');
+        throw new ValidationError('Invalid serviceType. Supported: AIRTIME, DATA, ELECTRICITY, CABLE_TV.');
       }
 
       const items = await beneficiaryService.listBeneficiaries(
@@ -47,7 +47,7 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * POST /beneficiaries
-   * Saves a phone or electricity meter beneficiary for the active business (max 5 FIFO per category).
+   * Saves a phone, electricity meter, or cable smartcard beneficiary for the active business (max 5 FIFO per category).
    */
   fastify.post(
     '/',
@@ -66,6 +66,9 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (fastify) => {
         meter?: string;
         disco?: string;
         meterType?: string;
+        smartcardNumber?: string;
+        smartcard?: string;
+        operator?: string;
         label?: string;
         serviceType?: string;
       };
@@ -76,7 +79,31 @@ export const beneficiaryRoutes: FastifyPluginAsync = async (fastify) => {
           : undefined;
 
       if (rawServiceType && !SUPPORTED_SERVICE_TYPES.includes(rawServiceType as BeneficiaryServiceType)) {
-        throw new ValidationError('Invalid serviceType. Supported: AIRTIME, DATA, ELECTRICITY.');
+        throw new ValidationError('Invalid serviceType. Supported: AIRTIME, DATA, ELECTRICITY, CABLE_TV.');
+      }
+
+      const rawSmartcard = body.smartcardNumber ?? body.smartcard;
+      const isCable =
+        rawServiceType === 'CABLE_TV' ||
+        (typeof rawSmartcard === 'string' && rawSmartcard.trim().length > 0 && !body.phoneNumber && !body.phone && !body.meterNumber && !body.meter);
+
+      if (isCable) {
+        if (!rawSmartcard || typeof rawSmartcard !== 'string') {
+          throw new ValidationError('Smartcard / IUC number is required.');
+        }
+        if (!body.operator || typeof body.operator !== 'string') {
+          throw new ValidationError('Cable operator (DSTV, GOTV, or STARTIMES) is required.');
+        }
+
+        const saved = await beneficiaryService.saveCableBeneficiary({
+          businessId,
+          userId: request.user?.id,
+          smartcardNumber: rawSmartcard,
+          operator: body.operator,
+          label: body.label,
+        });
+
+        return reply.status(201).send(createSuccessResponse(saved, request.id));
       }
 
       const rawMeter = body.meterNumber ?? body.meter;

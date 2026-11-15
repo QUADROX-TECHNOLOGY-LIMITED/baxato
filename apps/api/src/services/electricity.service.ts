@@ -30,6 +30,10 @@ import { ledgerService } from './ledger.service.js';
 import { idempotencyService } from './idempotency.service.js';
 import { webhookDispatcherService } from './webhook-dispatcher.service.js';
 import {
+  serviceControlsService,
+  type SystemSettingsState,
+} from './service-controls.service.js';
+import {
   providerRouterService,
   ProviderRouterService,
 } from './providers/index.js';
@@ -265,6 +269,7 @@ export interface ElectricityValidationDto {
   requestedMeterType?: ElectricityMeterType;
   detectedMeterType?: ElectricityMeterType;
   suggestionDiscoId?: string;
+  alternateAvailable?: boolean;
   meterNumber: string;
   disco: DiscoCode;
   discoName: string;
@@ -410,18 +415,40 @@ export class ElectricityService {
   /**
    * Retrieves list of all supported DISCOs with real-time operational availability.
    */
-  public getDiscos(adminDiscounts?: Record<string, number>) {
+  public getDiscos(adminDiscounts?: Record<string, number>, controls?: SystemSettingsState) {
     return Object.values(DISCO_CONFIGS).map((d) => {
       const discountBps = adminDiscounts?.[d.code] ?? adminDiscounts?.default ?? d.discountBps;
+      const supportsPrepaid = !!d.prepaidPaymentCode;
+      const supportsPostpaid = !!d.postpaidPaymentCode;
+      const prepaidEnabled =
+        supportsPrepaid &&
+        (!controls ||
+          !serviceControlsService.isElectricityOptionDisabled(
+            controls,
+            d.code,
+            ElectricityMeterType.PREPAID,
+          ));
+      const postpaidEnabled =
+        supportsPostpaid &&
+        (!controls ||
+          !serviceControlsService.isElectricityOptionDisabled(
+            controls,
+            d.code,
+            ElectricityMeterType.POSTPAID,
+          ));
+      const isAvailable = prepaidEnabled || postpaidEnabled;
+
       return {
         code: d.code,
         name: d.name,
         shortName: d.shortName,
         coverageRegion: d.coverageRegion,
-        supportsPrepaid: !!d.prepaidPaymentCode,
-        supportsPostpaid: !!d.postpaidPaymentCode,
-        isAvailable: true,
-        status: 'ACTIVE',
+        supportsPrepaid,
+        supportsPostpaid,
+        prepaidEnabled,
+        postpaidEnabled,
+        isAvailable,
+        status: isAvailable ? 'ACTIVE' : 'UNAVAILABLE',
         discountBps,
         discountPercent: (discountBps / 100).toFixed(1) + '%',
         minimumAmountKobo: d.minKobo.toString(),
@@ -430,6 +457,45 @@ export class ElectricityService {
         maximumAmountNaira: koboToNaira(d.maxKobo),
       };
     });
+  }
+
+  /**
+   * Retrieves flat catalog of individual DisCo + meterType options for admin settings toggles.
+   */
+  public getAdminCatalogOptions() {
+    const options: Array<{
+      id: string;
+      disco: DiscoCode;
+      name: string;
+      shortName: string;
+      meterType: ElectricityMeterType;
+      coverageRegion: string;
+    }> = [];
+
+    for (const d of Object.values(DISCO_CONFIGS)) {
+      if (d.prepaidPaymentCode) {
+        options.push({
+          id: `${d.code}_${ElectricityMeterType.PREPAID}`,
+          disco: d.code,
+          name: d.name,
+          shortName: d.shortName,
+          meterType: ElectricityMeterType.PREPAID,
+          coverageRegion: d.coverageRegion,
+        });
+      }
+      if (d.postpaidPaymentCode) {
+        options.push({
+          id: `${d.code}_${ElectricityMeterType.POSTPAID}`,
+          disco: d.code,
+          name: d.name,
+          shortName: d.shortName,
+          meterType: ElectricityMeterType.POSTPAID,
+          coverageRegion: d.coverageRegion,
+        });
+      }
+    }
+
+    return options;
   }
 
   /**
@@ -468,6 +534,16 @@ export class ElectricityService {
     const config = DISCO_CONFIGS[input.disco];
     if (!config) {
       throw new ValidationError(`Unsupported DISCO: '${input.disco}'.`);
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.ELECTRICITY) {
+      throw new ValidationError('Electricity service is currently unavailable. Please try again later.');
+    }
+    if (serviceControlsService.isElectricityOptionDisabled(controls, input.disco, input.meterType)) {
+      throw new ValidationError(
+        `${config.shortName} ${input.meterType.toLowerCase()} electricity is currently unavailable.`,
+      );
     }
 
     // 0. Fast In-Memory Cache Lookup (serves repeat queries in < 1ms)
@@ -592,6 +668,11 @@ export class ElectricityService {
           const detectedLabel = alternateType === ElectricityMeterType.PREPAID ? 'Prepaid' : 'Postpaid';
           const requestedLabel = input.meterType === ElectricityMeterType.PREPAID ? 'Prepaid' : 'Postpaid';
           const suggestionDiscoId = `${input.disco}_${alternateType}`;
+          const alternateAvailable = !serviceControlsService.isElectricityOptionDisabled(
+            controls,
+            input.disco,
+            alternateType,
+          );
 
           const mismatchDto: ElectricityValidationDto = {
             isValid: false,
@@ -599,6 +680,7 @@ export class ElectricityService {
             requestedMeterType: input.meterType,
             detectedMeterType: alternateType,
             suggestionDiscoId,
+            alternateAvailable,
             meterNumber: cleanMeter,
             disco: input.disco,
             discoName: config.name,
@@ -678,6 +760,16 @@ export class ElectricityService {
     const config = DISCO_CONFIGS[input.disco];
     if (!config) {
       throw new ValidationError(`Unsupported DISCO: '${input.disco}'.`);
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.ELECTRICITY) {
+      throw new ValidationError('Electricity service is currently unavailable. Please try again later.');
+    }
+    if (serviceControlsService.isElectricityOptionDisabled(controls, input.disco, input.meterType)) {
+      throw new ValidationError(
+        `${config.shortName} ${input.meterType.toLowerCase()} electricity is currently unavailable.`,
+      );
     }
 
     if (input.amountKobo < config.minKobo) {

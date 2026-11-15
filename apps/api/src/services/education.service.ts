@@ -31,6 +31,10 @@ import { ledgerService } from './ledger.service.js';
 import { idempotencyService } from './idempotency.service.js';
 import { webhookDispatcherService } from './webhook-dispatcher.service.js';
 import {
+  serviceControlsService,
+  type SystemSettingsState,
+} from './service-controls.service.js';
+import {
   providerRouterService,
   ProviderRouterService,
 } from './providers/index.js';
@@ -271,13 +275,16 @@ export class EducationService {
   /**
    * Retrieves catalog of all education examination packages with dynamic pricing.
    */
-  public getPackages(businessId?: string) {
+  public getPackages(businessId?: string, controls?: SystemSettingsState) {
     return Object.values(EXAM_PACKAGES).map((p) => {
       const customMarkup = businessId
         ? this.tenantCustomMarkups.get(`${businessId}:${p.packageCode}`)
         : undefined;
       const effectiveMarkupKobo = customMarkup !== undefined ? customMarkup : p.defaultMarkupKobo;
       const effectivePriceKobo = p.baseCostKobo + effectiveMarkupKobo;
+      const enabled = controls
+        ? !serviceControlsService.isEducationPackageDisabled(controls, p.packageCode, p.examBody)
+        : true;
 
       return {
         packageCode: p.packageCode,
@@ -303,8 +310,22 @@ export class EducationService {
         identifierType: p.identifierType,
         instructions: p.instructions,
         portalUrl: p.portalUrl,
+        enabled,
       };
     });
+  }
+
+  /**
+   * Retrieves unfiltered package catalog for admin settings toggles.
+   */
+  public getAdminCatalogPackages() {
+    return Object.values(EXAM_PACKAGES).map((p) => ({
+      packageCode: p.packageCode,
+      examBody: p.examBody,
+      serviceType: p.serviceType,
+      name: p.name,
+      baseCostNaira: koboToNaira(p.baseCostKobo),
+    }));
   }
 
   /**
@@ -317,6 +338,16 @@ export class EducationService {
     packageCode?: string;
   }): Promise<CandidateValidationDto> {
     const cleanId = input.candidateId.replace(/[\s\-]/g, '');
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.EDUCATION) {
+      throw new ValidationError('Exam PIN service is currently unavailable. Please try again later.');
+    }
+    const targetPackageCode = input.packageCode || (input.examBody === ExamBody.JAMB ? 'JAMB_DIRECT_ENTRY' : input.examBody);
+    const targetPkg = input.packageCode ? EXAM_PACKAGES[input.packageCode] : undefined;
+    if (serviceControlsService.isEducationPackageDisabled(controls, targetPackageCode, input.examBody)) {
+      throw new ValidationError(`${targetPkg?.name || input.examBody} is currently unavailable.`);
+    }
 
     if (input.examBody === ExamBody.JAMB) {
       if (!/^\d{10}$/.test(cleanId)) {
@@ -375,6 +406,14 @@ export class EducationService {
     const pkg = EXAM_PACKAGES[input.packageCode];
     if (!pkg) {
       throw new NotFoundError(`Education exam package '${input.packageCode}' not found.`);
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.EDUCATION) {
+      throw new ValidationError('Exam PIN service is currently unavailable. Please try again later.');
+    }
+    if (serviceControlsService.isEducationPackageDisabled(controls, pkg.packageCode, pkg.examBody)) {
+      throw new ValidationError(`${pkg.name} is currently unavailable.`);
     }
 
     const cleanCandidateId = input.candidateId.replace(/[\s\-]/g, '');

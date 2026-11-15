@@ -6,6 +6,7 @@ import {
   ExamBody,
 } from '@baxato/common';
 import { educationService, EXAM_PACKAGES } from '../../services/education.service.js';
+import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const educationRoutes: FastifyPluginAsync = async (fastify) => {
@@ -15,7 +16,8 @@ export const educationRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.get('/packages', async (request, reply) => {
     const businessId = request.businessId;
-    const packages = educationService.getPackages(businessId);
+    const controls = await serviceControlsService.getSettings();
+    const packages = educationService.getPackages(businessId, controls);
     return reply.status(200).send(createSuccessResponse(packages, request.id));
   });
 

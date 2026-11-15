@@ -22,8 +22,10 @@ interface BeneficiaryItem {
   meterNumber: string | null;
   disco: string | null;
   meterType: 'PREPAID' | 'POSTPAID' | null;
+  smartcardNumber: string | null;
+  operator: 'DSTV' | 'GOTV' | 'STARTIMES' | null;
   label: string | null;
-  serviceType: 'AIRTIME' | 'DATA' | 'ELECTRICITY' | null;
+  serviceType: 'AIRTIME' | 'DATA' | 'ELECTRICITY' | 'CABLE_TV' | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -387,5 +389,81 @@ describe('Saved Beneficiaries Endpoints (/beneficiaries)', () => {
       headers: { authorization: `Bearer ${ownerAToken}` },
     });
     expect(phonesAfterRes.json<ApiResponse<BeneficiaryItem[]>>().data).toHaveLength(1);
+  });
+
+  it('saves, filters, deduplicates, and FIFO-caps Cable TV smartcard beneficiaries separately', async () => {
+    const firstCable = await app.inject({
+      method: 'POST',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+      payload: {
+        serviceType: 'CABLE_TV',
+        smartcardNumber: '1041-541-234',
+        operator: 'dstv',
+        label: 'Lounge Decoder',
+      },
+    });
+    expect(firstCable.statusCode).toBe(201);
+    const firstJson = firstCable.json<ApiResponse<BeneficiaryItem>>();
+    expect(firstJson.data.smartcardNumber).toBe('1041541234');
+    expect(firstJson.data.operator).toBe('DSTV');
+    expect(firstJson.data.serviceType).toBe('CABLE_TV');
+
+    // Duplicate (smartcardNumber, operator) updates label in-place
+    const updatedCable = await app.inject({
+      method: 'POST',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+      payload: {
+        serviceType: 'CABLE_TV',
+        smartcardNumber: '1041541234',
+        operator: 'DSTV',
+        label: 'Adekunle Samson',
+      },
+    });
+    expect(updatedCable.statusCode).toBe(201);
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries?serviceType=CABLE_TV',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    expect(listRes.statusCode).toBe(200);
+    const items = listRes.json<ApiResponse<BeneficiaryItem[]>>().data;
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Adekunle Samson');
+
+    // Saving 5 more evicts the oldest Cable TV smartcard cleanly
+    const extraCards = ['2000000001', '2000000002', '2000000003', '2000000004', '2000000005'];
+    for (let idx = 0; idx < extraCards.length; idx++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: { authorization: `Bearer ${ownerAToken}` },
+        payload: {
+          serviceType: 'CABLE_TV',
+          smartcardNumber: extraCards[idx],
+          operator: 'GOTV',
+          label: `Decoder ${idx + 1}`,
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const id = res.json<ApiResponse<BeneficiaryItem>>().data.id;
+      const inMem = inMemoryDb.beneficiaries.find((b) => b.id === id);
+      if (inMem) {
+        const ts = new Date(Date.now() + (idx + 1) * 1000);
+        inMem.createdAt = ts;
+        inMem.updatedAt = ts;
+      }
+    }
+
+    const cappedRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries?serviceType=CABLE_TV',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    const capped = cappedRes.json<ApiResponse<BeneficiaryItem[]>>().data;
+    expect(capped).toHaveLength(5);
+    expect(capped.map((c) => c.smartcardNumber)).not.toContain('1041541234');
   });
 });

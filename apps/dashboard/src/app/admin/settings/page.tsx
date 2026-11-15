@@ -31,6 +31,10 @@ export default function SuperAdminSettingsPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [planFilterNetwork, setPlanFilterNetwork] = useState<string>('ALL');
   const [planSearchQuery, setPlanSearchQuery] = useState<string>('');
+  const [electricityMeterFilter, setElectricityMeterFilter] = useState<'ALL' | 'PREPAID' | 'POSTPAID'>('ALL');
+  const [electricitySearchQuery, setElectricitySearchQuery] = useState<string>('');
+  const [educationBodyFilter, setEducationBodyFilter] = useState<'ALL' | 'JAMB' | 'WAEC' | 'NECO' | 'NABTEB'>('ALL');
+  const [educationSearchQuery, setEducationSearchQuery] = useState<string>('');
 
   const fetchSettings = async () => {
     try {
@@ -145,6 +149,15 @@ export default function SuperAdminSettingsPage() {
   const disabledDataNetworks: string[] = Array.isArray(settings?.disabledNetworks?.DATA)
     ? settings.disabledNetworks.DATA
     : [];
+  const disabledElectricityOptions: string[] = Array.isArray(settings?.disabledNetworks?.ELECTRICITY)
+    ? settings.disabledNetworks.ELECTRICITY
+    : [];
+  const disabledCableOperators: string[] = Array.isArray(settings?.disabledNetworks?.CABLE)
+    ? settings.disabledNetworks.CABLE
+    : [];
+  const disabledEducationPackages: string[] = Array.isArray(settings?.disabledNetworks?.EDUCATION)
+    ? settings.disabledNetworks.EDUCATION
+    : [];
   const disabledDataPlans: string[] = Array.isArray(settings?.disabledDataPlans)
     ? settings.disabledDataPlans
     : [];
@@ -161,11 +174,100 @@ export default function SuperAdminSettingsPage() {
         disabledNetworks: {
           AIRTIME: service === 'AIRTIME' ? nextList : disabledAirtimeNetworks,
           DATA: service === 'DATA' ? nextList : disabledDataNetworks,
+          ELECTRICITY: disabledElectricityOptions,
+          CABLE: disabledCableOperators,
+          EDUCATION: disabledEducationPackages,
         },
       },
       `${networkName} ${service.toLowerCase()} ${isCurrentlyDisabled ? 'enabled' : 'disabled'}.`,
     );
   };
+
+  const handleToggleServiceOption = (
+    section: 'ELECTRICITY' | 'CABLE' | 'EDUCATION',
+    optionCode: string,
+    optionLabel: string,
+  ) => {
+    const currentList =
+      section === 'ELECTRICITY'
+        ? disabledElectricityOptions
+        : section === 'CABLE'
+          ? disabledCableOperators
+          : disabledEducationPackages;
+    const isCurrentlyDisabled = currentList.includes(optionCode);
+    const nextList = isCurrentlyDisabled
+      ? currentList.filter((item) => item !== optionCode)
+      : [...currentList, optionCode];
+
+    handleUpdateSettings(
+      {
+        disabledNetworks: {
+          AIRTIME: disabledAirtimeNetworks,
+          DATA: disabledDataNetworks,
+          ELECTRICITY: section === 'ELECTRICITY' ? nextList : disabledElectricityOptions,
+          CABLE: section === 'CABLE' ? nextList : disabledCableOperators,
+          EDUCATION: section === 'EDUCATION' ? nextList : disabledEducationPackages,
+        },
+      },
+      `${optionLabel} ${isCurrentlyDisabled ? 'enabled' : 'disabled'}.`,
+    );
+  };
+
+  const filteredElectricityOptions = useMemo(() => {
+    const allOptions: Array<{
+      id: string;
+      disco: string;
+      name: string;
+      shortName: string;
+      meterType: 'PREPAID' | 'POSTPAID';
+      coverageRegion: string;
+    }> = Array.isArray(settings?.catalogControls?.electricityOptions)
+      ? settings.catalogControls.electricityOptions
+      : [];
+
+    const query = electricitySearchQuery.trim().toLowerCase();
+    return allOptions.filter((opt) => {
+      if (electricityMeterFilter !== 'ALL' && opt.meterType !== electricityMeterFilter) {
+        return false;
+      }
+      if (!query) return true;
+      return `${opt.id} ${opt.disco} ${opt.shortName} ${opt.name} ${opt.coverageRegion} ${opt.meterType}`
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [settings?.catalogControls?.electricityOptions, electricityMeterFilter, electricitySearchQuery]);
+
+  const cableOperators: Array<{
+    code: string;
+    name: string;
+    shortName: string;
+    customerField: string;
+  }> = Array.isArray(settings?.catalogControls?.cableOperators)
+    ? settings.catalogControls.cableOperators
+    : [];
+
+  const filteredEducationPackages = useMemo(() => {
+    const allPackages: Array<{
+      packageCode: string;
+      examBody: string;
+      serviceType: string;
+      name: string;
+      baseCostNaira: number;
+    }> = Array.isArray(settings?.catalogControls?.educationPackages)
+      ? settings.catalogControls.educationPackages
+      : [];
+
+    const query = educationSearchQuery.trim().toLowerCase();
+    return allPackages.filter((pkg) => {
+      if (educationBodyFilter !== 'ALL' && pkg.examBody !== educationBodyFilter) {
+        return false;
+      }
+      if (!query) return true;
+      return `${pkg.packageCode} ${pkg.examBody} ${pkg.name}`
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [settings?.catalogControls?.educationPackages, educationBodyFilter, educationSearchQuery]);
 
   const handleToggleDataPlan = (planId: string, planLabel: string) => {
     const isCurrentlyDisabled = disabledDataPlans.includes(planId);
@@ -544,6 +646,295 @@ export default function SuperAdminSettingsPage() {
                     }`}
                   >
                     {isPlanDisabled ? 'Enable' : 'Disable'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ELECTRICITY DISCO PREPAID & POSTPAID CONTROLS */}
+      <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              Electricity Meter Options
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Disable or restore individual electricity DisCo prepaid or postpaid options across checkout and API.
+            </p>
+          </div>
+
+          <search className="w-full sm:w-64 relative">
+            <label htmlFor="admin-elec-search" className="sr-only">
+              Search electricity DisCo or meter type
+            </label>
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              id="admin-elec-search"
+              type="search"
+              value={electricitySearchQuery}
+              onChange={(e) => setElectricitySearchQuery(e.target.value)}
+              placeholder="Search DisCo (e.g. IBEDC prepaid)"
+              className="w-full h-9 pl-8 pr-8 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+            />
+            {electricitySearchQuery && (
+              <button
+                type="button"
+                onClick={() => setElectricitySearchQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </search>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {(['ALL', 'PREPAID', 'POSTPAID'] as const).map((mType) => {
+            const active = electricityMeterFilter === mType;
+            return (
+              <button
+                key={mType}
+                type="button"
+                onClick={() => setElectricityMeterFilter(mType)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
+                  active
+                    ? 'bg-[#126BEB] text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {mType === 'ALL' ? 'All Meter Types' : mType === 'PREPAID' ? 'Prepaid' : 'Postpaid'}
+              </button>
+            );
+          })}
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 flex items-center justify-center text-xs text-slate-500 gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading electricity options...</span>
+          </div>
+        ) : filteredElectricityOptions.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+            No matching electricity options found.
+          </div>
+        ) : (
+          <div className="max-h-[420px] overflow-y-auto overscroll-contain space-y-2 pr-1">
+            {filteredElectricityOptions.map((opt) => {
+              const isDisabled = disabledElectricityOptions.includes(opt.id);
+              const label = `${opt.shortName} ${opt.meterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'}`;
+              return (
+                <div
+                  key={opt.id}
+                  className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs transition ${
+                    isDisabled
+                      ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40'
+                      : 'bg-slate-50/70 dark:bg-[#0A1324] border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {opt.shortName}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                        {opt.meterType}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                        {opt.coverageRegion}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {opt.name}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleToggleServiceOption('ELECTRICITY', opt.id, label)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold shrink-0 transition cursor-pointer disabled:opacity-50 ${
+                      isDisabled
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/60'
+                    }`}
+                  >
+                    {isDisabled ? 'Enable' : 'Disable'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* CABLE TV OPERATOR CONTROLS */}
+      <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 shadow-xs">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Tv className="w-4 h-4 text-blue-500" />
+            Cable TV Operator Controls
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Enable or disable individual pay-TV providers across customer validation and subscription checkout.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div className="py-6 flex items-center justify-center text-xs text-slate-500 gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading cable operators...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {cableOperators.map((op) => {
+              const isDisabled = disabledCableOperators.includes(op.code);
+              return (
+                <button
+                  key={op.code}
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => handleToggleServiceOption('CABLE', op.code, `${op.shortName} Cable TV`)}
+                  className={`p-3.5 rounded-xl border text-left transition flex items-center justify-between gap-2 cursor-pointer disabled:opacity-50 ${
+                    isDisabled
+                      ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50'
+                      : 'bg-emerald-50/40 dark:bg-emerald-950/10 border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-400'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                      {op.shortName}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
+                      {op.customerField}
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase shrink-0 ${
+                      isDisabled
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    }`}
+                  >
+                    {isDisabled ? 'Disabled' : 'Enabled'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* EXAM PIN PACKAGE CONTROLS */}
+      <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-emerald-500" />
+              Exam PIN Packages
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Disable or enable individual examination PIN packages across checkout and candidate validation.
+            </p>
+          </div>
+
+          <search className="w-full sm:w-64 relative">
+            <label htmlFor="admin-edu-search" className="sr-only">
+              Search exam PIN packages
+            </label>
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              id="admin-edu-search"
+              type="search"
+              value={educationSearchQuery}
+              onChange={(e) => setEducationSearchQuery(e.target.value)}
+              placeholder="Search packages (e.g. JAMB, WAEC)"
+              className="w-full h-9 pl-8 pr-8 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+            />
+            {educationSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setEducationSearchQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </search>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {(['ALL', 'JAMB', 'WAEC', 'NECO', 'NABTEB'] as const).map((body) => {
+            const active = educationBodyFilter === body;
+            return (
+              <button
+                key={body}
+                type="button"
+                onClick={() => setEducationBodyFilter(body)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
+                  active
+                    ? 'bg-[#126BEB] text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {body === 'ALL' ? 'All Exam Bodies' : body}
+              </button>
+            );
+          })}
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 flex items-center justify-center text-xs text-slate-500 gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading exam packages...</span>
+          </div>
+        ) : filteredEducationPackages.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+            No matching exam PIN packages found.
+          </div>
+        ) : (
+          <div className="max-h-[380px] overflow-y-auto overscroll-contain space-y-2 pr-1">
+            {filteredEducationPackages.map((pkg) => {
+              const isDisabled = disabledEducationPackages.includes(pkg.packageCode);
+              return (
+                <div
+                  key={pkg.packageCode}
+                  className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs transition ${
+                    isDisabled
+                      ? 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40'
+                      : 'bg-slate-50/70 dark:bg-[#0A1324] border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                        {pkg.examBody}
+                      </span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {pkg.name}
+                      </span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
+                        ₦{pkg.baseCostNaira.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleToggleServiceOption('EDUCATION', pkg.packageCode, pkg.name)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold shrink-0 transition cursor-pointer disabled:opacity-50 ${
+                      isDisabled
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/60'
+                    }`}
+                  >
+                    {isDisabled ? 'Enable' : 'Disable'}
                   </button>
                 </div>
               );

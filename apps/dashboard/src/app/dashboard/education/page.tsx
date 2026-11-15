@@ -4,30 +4,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  GraduationCap,
   ArrowLeft,
   Wallet,
-  RefreshCw,
   Search,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
-  ShieldCheck,
-  Check,
-  Copy,
-  ExternalLink,
-  Lock,
-  Layers,
-  Sparkles,
-  Info,
-  Building,
-  UserCheck,
-  Receipt,
-  Eye,
-  EyeOff,
-  Clock,
-  AlertTriangle,
   FileText,
+  X,
+  RotateCw,
+  Loader2,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -73,38 +58,13 @@ export interface ExamPackageItem {
   identifierType: 'PROFILE_CODE' | 'PHONE';
   instructions: string;
   portalUrl: string;
+  enabled?: boolean;
 }
 
 export interface CandidateValidationState {
   isValid: boolean;
   candidateName?: string;
   responseMessage?: string;
-}
-
-export interface HistoryItem {
-  id: string;
-  reference: string;
-  clientReference?: string;
-  providerReference?: string;
-  type: string;
-  status: 'SUCCESSFUL' | 'PROCESSING' | 'PENDING' | 'FAILED' | 'REVERSED';
-  amountNaira: number;
-  feeNaira: number;
-  currency: string;
-  recipient: string;
-  metadata?: {
-    packageCode?: string;
-    packageName?: string;
-    examBody?: string;
-    candidateId?: string;
-    candidateName?: string;
-    instructions?: string;
-    portalUrl?: string;
-    quantity?: number;
-    pins?: Array<{ pin: string; serialNumber?: string }>;
-  };
-  pins?: Array<{ pin: string; serialNumber?: string }>;
-  createdAt: string;
 }
 
 // Fallback catalog in case backend connection is loading
@@ -335,23 +295,27 @@ export default function EducationPage() {
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Exam Packages Catalog
+  // Exam Packages Catalog & View Selection
   const [packagesList, setPackagesList] = useState<ExamPackageItem[]>(INITIAL_PACKAGES);
-  const [isLoadingPackages, setIsLoadingPackages] = useState<boolean>(false);
   const [selectedBodyFilter, setSelectedBodyFilter] = useState<'ALL' | 'JAMB' | 'WAEC' | 'NECO' | 'NABTEB'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPackageCode, setSelectedPackageCode] = useState<string>('JAMB_UTME_NO_MOCK');
+  const [selectedPackageCode, setSelectedPackageCode] = useState<string | null>(null);
 
-  // Vending Form State
+  // Form Inputs
   const [candidateId, setCandidateId] = useState('');
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [quantity, setQuantity] = useState<number>(1);
 
-  // Validation State (for JAMB 10-digit profile code)
+  // JAMB Candidate Profile Code Validation State
   const [isValidating, setIsValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<CandidateValidationState | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastVerifiedKeyRef = useRef<string>('');
+  const lastAttemptedKeyRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const candidateInputRef = useRef<HTMLInputElement | null>(null);
 
   // Purchase & Confirmation State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -361,26 +325,47 @@ export default function EducationPage() {
   const [receiptData, setReceiptData] = useState<ExamPinReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  const isVerified = kycStatus === 'VERIFIED';
-
   // Load Exam Packages from Backend
-  const loadPackages = async () => {
+  const loadPackages = async (requestedPackage?: string | null) => {
     try {
-      setIsLoadingPackages(true);
       const authToken = getStoredAuthToken();
       const res = await fetch('/api/services/education/packages', {
         headers: {
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
+        cache: 'no-store',
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && Array.isArray(data.data) && data.data.length > 0) {
-        setPackagesList(data.data);
+        const nextPackages: ExamPackageItem[] = data.data.map((pkg: ExamPackageItem) => ({
+          ...pkg,
+          enabled: pkg.enabled !== false,
+        }));
+        setPackagesList(nextPackages);
+
+        const activeParam =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('package') || requestedPackage || ''
+            : requestedPackage || '';
+
+        if (activeParam) {
+          const matched = nextPackages.find((p) => p.packageCode === activeParam);
+          if (matched && matched.enabled === false) {
+            setSelectedPackageCode(null);
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('package');
+              window.history.replaceState({}, '', url.toString());
+            }
+            showToast({
+              type: 'error',
+              message: `${matched.name} is currently unavailable.`,
+            });
+          }
+        }
       }
     } catch {
-      // Keep initial catalog
-    } finally {
-      setIsLoadingPackages(false);
+      // Keep fallback local catalog
     }
   };
 
@@ -396,7 +381,18 @@ export default function EducationPage() {
     if (biz?.name) setBusinessName(biz.name);
     setIsInitialLoading(false);
 
-    loadPackages();
+    let initialPackage: string | null = null;
+    try {
+      if (typeof window !== 'undefined') {
+        const pkgParam = new URLSearchParams(window.location.search).get('package');
+        if (pkgParam && INITIAL_PACKAGES.some((p) => p.packageCode === pkgParam)) {
+          initialPackage = pkgParam;
+          setSelectedPackageCode(pkgParam);
+        }
+      }
+    } catch {}
+
+    void loadPackages(initialPackage);
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
@@ -404,8 +400,27 @@ export default function EducationPage() {
       if (b?.role) setUserRole(b.role);
     };
 
+    const handlePopState = () => {
+      const nextParam = new URLSearchParams(window.location.search).get('package');
+      if (nextParam && INITIAL_PACKAGES.some((p) => p.packageCode === nextParam)) {
+        setSelectedPackageCode(nextParam);
+      } else {
+        setSelectedPackageCode(null);
+      }
+    };
+
     window.addEventListener('bx_business_switched', handleBizSwitched);
-    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('bx_business_switched', handleBizSwitched);
+      window.removeEventListener('popstate', handlePopState);
+      if (autoVerifyTimeoutRef.current) {
+        clearTimeout(autoVerifyTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   const canExecuteServices =
@@ -414,25 +429,20 @@ export default function EducationPage() {
     userRole === 'DEVELOPER' ||
     userRole === 'SUPPORT';
 
-  // Active Selected Package
-  const currentPackage = useMemo(() => {
-    return (
-      packagesList.find((p) => p.packageCode === selectedPackageCode) ||
-      packagesList[0] ||
-      INITIAL_PACKAGES[0]
-    );
-  }, [packagesList, selectedPackageCode]);
-
-  // Reset form and validation when changing package
-  const handleSelectPackage = (pkg: ExamPackageItem) => {
-    setSelectedPackageCode(pkg.packageCode);
-    setCandidateId('');
-    setCandidateName('');
-    setCandidateEmail('');
-    setQuantity(1);
-    setValidationResult(null);
-    setValidationError(null);
+  const handleRefreshBalance = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadWallets();
+    } finally {
+      setIsRefreshing(false);
+    }
   };
+
+  // Active Selected Package (null => View 1 catalog)
+  const currentPackage = useMemo(() => {
+    if (!selectedPackageCode) return null;
+    return packagesList.find((p) => p.packageCode === selectedPackageCode) || null;
+  }, [packagesList, selectedPackageCode]);
 
   // Filtered packages
   const filteredPackages = useMemo(() => {
@@ -448,22 +458,101 @@ export default function EducationPage() {
     });
   }, [packagesList, selectedBodyFilter, searchQuery]);
 
-  // Profile Code / Candidate Validation
-  const handleValidateCandidate = async () => {
-    const cleanId = candidateId.replace(/[\s\-]/g, '');
-    if (!cleanId) {
-      const msg = 'Please enter a Candidate Profile Code or Phone number.';
-      setValidationError(msg);
-      showToast({ type: 'error', title: 'Candidate validation failed', message: msg });
+  const clearPendingVerification = () => {
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsValidating(false);
+  };
+
+  // Select Package into View 2
+  const handleSelectPackage = (pkg: ExamPackageItem) => {
+    if (pkg.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${pkg.name} is currently unavailable.`,
+      });
       return;
     }
 
-    if (currentPackage.examBody === 'JAMB' && !/^\d{10}$/.test(cleanId)) {
-      const msg = 'JAMB Profile Code must be exactly 10 numeric digits.';
-      setValidationError(msg);
-      showToast({ type: 'error', title: 'Candidate validation failed', message: msg });
+    clearPendingVerification();
+    setSelectedPackageCode(pkg.packageCode);
+    setCandidateId('');
+    setCandidateName('');
+    setCandidateEmail('');
+    setQuantity(1);
+    setValidationResult(null);
+    setValidationError(null);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('package', pkg.packageCode);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  const handleBackToCatalog = () => {
+    clearPendingVerification();
+    setSelectedPackageCode(null);
+    setCandidateId('');
+    setCandidateName('');
+    setCandidateEmail('');
+    setQuantity(1);
+    setValidationResult(null);
+    setValidationError(null);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('package');
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  // Profile Code Validation (with AbortController)
+  const executeCandidateValidation = async (
+    rawId: string,
+    targetPackage: ExamPackageItem,
+  ) => {
+    if (targetPackage.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${targetPackage.name} is currently unavailable.`,
+      });
       return;
     }
+
+    const cleanId = rawId.replace(/\D/g, '');
+    if (!cleanId) {
+      setValidationError('Enter a valid 10-digit profile code.');
+      return;
+    }
+
+    if (targetPackage.examBody === 'JAMB' && !/^\d{10}$/.test(cleanId)) {
+      const msg = 'JAMB Profile Code must be exactly 10 digits.';
+      setValidationError(msg);
+      return;
+    }
+
+    const verificationKey = `${targetPackage.packageCode}:${cleanId}`;
+    if (verificationKey === lastVerifiedKeyRef.current && validationResult?.isValid) {
+      return;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    lastAttemptedKeyRef.current = verificationKey;
 
     setIsValidating(true);
     setValidationError(null);
@@ -473,93 +562,169 @@ export default function EducationPage() {
       const authToken = getStoredAuthToken();
       const res = await fetch('/api/services/education/validate', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({
-          examBody: currentPackage.examBody,
+          examBody: targetPackage.examBody,
           candidateId: cleanId,
-          packageCode: currentPackage.packageCode,
+          packageCode: targetPackage.packageCode,
         }),
       });
 
       const data = await res.json().catch(() => null);
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
 
       if (res.ok && data?.success) {
         setValidationResult({
           isValid: true,
           candidateName: data.data.candidateName || 'Verified Candidate',
-          responseMessage: data.data.responseMessage || 'Candidate profile validated.',
+          responseMessage: data.data.responseMessage || 'Candidate profile verified.',
         });
         if (data.data.candidateName) {
           setCandidateName(data.data.candidateName);
         }
+        lastVerifiedKeyRef.current = verificationKey;
       } else {
-        const errorMsg = data?.error?.message || 'Candidate validation failed. Verify profile code.';
+        const errorMsg = data?.error?.message || 'Candidate verification failed. Check the profile code.';
         setValidationError(errorMsg);
-        showToast({ type: 'error', title: 'Candidate validation failed', message: errorMsg });
+        showToast({ type: 'error', title: 'Candidate verification failed', message: errorMsg });
+        lastVerifiedKeyRef.current = '';
       }
-    } catch {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
       const errMsg = 'Network error while validating candidate. Please try again.';
       setValidationError(errMsg);
-      showToast({ type: 'error', title: 'Candidate validation failed', message: errMsg });
+      showToast({ type: 'error', title: 'Candidate verification failed', message: errMsg });
+      lastVerifiedKeyRef.current = '';
     } finally {
-      setIsValidating(false);
+      if (!controller.signal.aborted) {
+        setIsValidating(false);
+      }
     }
+  };
+
+  const handleValidateCandidate = () => {
+    if (!currentPackage) return;
+    void executeCandidateValidation(candidateId, currentPackage);
+  };
+
+  const handleCancelVerification = () => {
+    clearPendingVerification();
+    lastAttemptedKeyRef.current = '';
+    candidateInputRef.current?.focus();
+  };
+
+  const handleCandidateIdChange = (val: string) => {
+    if (!currentPackage) return;
+    const isProfileCode = currentPackage.identifierType === 'PROFILE_CODE';
+    const clean = val.replace(/\D/g, '').slice(0, isProfileCode ? 10 : 11);
+
+    setCandidateId(clean);
+    setValidationResult(null);
+    setValidationError(null);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+
+    if (isProfileCode && clean.length === 10) {
+      autoVerifyTimeoutRef.current = setTimeout(() => {
+        void executeCandidateValidation(clean, currentPackage);
+      }, 450);
+    }
+  };
+
+  const handleCandidateIdBlur = () => {
+    if (!currentPackage || currentPackage.identifierType !== 'PROFILE_CODE' || isValidating) {
+      return;
+    }
+    const clean = candidateId.replace(/\D/g, '');
+    if (clean.length !== 10) return;
+
+    const key = `${currentPackage.packageCode}:${clean}`;
+    if (key === lastVerifiedKeyRef.current || key === lastAttemptedKeyRef.current) {
+      return;
+    }
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    void executeCandidateValidation(clean, currentPackage);
   };
 
   // Compute Total Cost
   const totalCostNaira = useMemo(() => {
+    if (!currentPackage) return 0;
     return currentPackage.baseCostNaira * quantity;
   }, [currentPackage, quantity]);
-
-  const totalRetailNaira = useMemo(() => {
-    return currentPackage.suggestedPriceNaira * quantity;
-  }, [currentPackage, quantity]);
-
-  const totalEstimatedProfit = useMemo(() => {
-    return Math.max(0, totalRetailNaira - totalCostNaira);
-  }, [totalRetailNaira, totalCostNaira]);
 
   const hasSufficientBalance = walletBalance >= totalCostNaira;
 
   // Validation before opening confirmation
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentPackage) return;
 
-    const cleanId = candidateId.replace(/[\s\-]/g, '');
+    if (currentPackage.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${currentPackage.name} is currently unavailable.`,
+      });
+      return;
+    }
+
+    const cleanId = candidateId.replace(/\D/g, '');
     if (!cleanId) {
-      showToast({ type: 'error', message: 'Candidate Profile Code or Phone is required.' });
+      const msg =
+        currentPackage.identifierType === 'PROFILE_CODE'
+          ? 'Enter the 10-digit candidate profile code.'
+          : 'Enter the recipient phone number.';
+      setValidationError(msg);
+      showToast({ type: 'error', message: msg });
+      candidateInputRef.current?.focus();
       return;
     }
 
     if (currentPackage.examBody === 'JAMB') {
       if (!/^\d{10}$/.test(cleanId)) {
-        showToast({ type: 'error', message: 'JAMB Profile Code must be exactly 10 numeric digits.' });
+        const msg = 'JAMB Profile Code must be exactly 10 numeric digits.';
+        setValidationError(msg);
+        showToast({ type: 'error', message: msg });
+        candidateInputRef.current?.focus();
         return;
       }
       if (currentPackage.requiresValidation && !validationResult?.isValid) {
-        showToast({
-          type: 'error',
-          message: 'Please validate the JAMB profile code first before purchasing.',
-        });
+        const msg = 'Validate the JAMB profile code before purchasing.';
+        setValidationError(msg);
+        showToast({ type: 'error', message: msg });
         return;
       }
-    } else {
-      if (cleanId.length < 10) {
-        showToast({
-          type: 'error',
-          message: 'Recipient phone number must be at least 10 or 11 digits.',
-        });
-        return;
-      }
+    } else if (cleanId.length < 10) {
+      const msg = 'Recipient phone number must be 10 or 11 digits.';
+      setValidationError(msg);
+      showToast({ type: 'error', message: msg });
+      candidateInputRef.current?.focus();
+      return;
     }
 
     if (!hasSufficientBalance) {
       showToast({
         type: 'error',
-        message: `Insufficient wallet balance. Total cost is ₦${totalCostNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}.`,
+        message: `Insufficient wallet balance. Total cost is ₦${totalCostNaira.toLocaleString()}, while balance is ₦${walletBalance.toLocaleString()}.`,
       });
       return;
     }
@@ -569,11 +734,13 @@ export default function EducationPage() {
 
   // Execute Exam PIN Purchase
   const handleExecutePurchase = async () => {
+    if (!currentPackage) return;
     setIsSubmitting(true);
 
-    const cleanId = candidateId.replace(/[\s\-]/g, '');
+    const cleanId = candidateId.replace(/\D/g, '');
     const clientRef = `BX-EDU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : clientRef;
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : clientRef;
 
     try {
       const authToken = getStoredAuthToken();
@@ -592,20 +759,22 @@ export default function EducationPage() {
         body: JSON.stringify({
           packageCode: currentPackage.packageCode,
           candidateId: cleanId,
-          candidateName: candidateName || undefined,
-          candidateEmail: candidateEmail || undefined,
+          candidateName: candidateName.trim() || undefined,
+          candidateEmail: candidateEmail.trim() || undefined,
           quantity,
           clientReference: clientRef,
         }),
       });
 
       const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
 
       if (res.ok && data?.success) {
         setIsConfirmModalOpen(false);
         const receipt = data.data;
 
-        // Set receipt modal data
         setReceiptData({
           transactionId: receipt.transactionId,
           reference: receipt.reference,
@@ -631,17 +800,18 @@ export default function EducationPage() {
         });
 
         setIsReceiptModalOpen(true);
-
-        // Trigger explicit sync in addition to live SSE push
         loadWallets();
 
-        // Reset inputs
         setCandidateId('');
         setCandidateName('');
         setCandidateEmail('');
+        setQuantity(1);
         setValidationResult(null);
+        setValidationError(null);
+        lastVerifiedKeyRef.current = '';
+        lastAttemptedKeyRef.current = '';
       } else {
-        const msg = data?.error?.message || 'Transaction could not be completed. Please try again.';
+        const msg = data?.error?.message || 'Purchase could not be completed. Please try again.';
         setIsConfirmModalOpen(false);
         showToast({ type: 'error', title: 'Exam PIN purchase failed', message: msg });
       }
@@ -650,7 +820,7 @@ export default function EducationPage() {
       showToast({
         type: 'error',
         title: 'Exam PIN purchase failed',
-        message: 'Network failure occurred. Please check transaction history to verify if debited.',
+        message: 'Network failure occurred. Check transaction history to confirm status.',
       });
     } finally {
       setIsSubmitting(false);
@@ -663,7 +833,7 @@ export default function EducationPage() {
     if (b.includes('waec')) return '/logos/education/waec.png';
     if (b.includes('neco')) return '/logos/education/neco.png';
     if (b.includes('nabteb')) return '/logos/education/nabteb.png';
-    return '/favicon.ico';
+    return '/logos/categories/education.svg';
   };
 
   const formatNaira = (val: number) =>
@@ -674,8 +844,9 @@ export default function EducationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
+    <div className="min-h-screen bg-[#FFFFFF] dark:bg-[#070D18]">
       {isSubmitting && <BaxatoLoader variant="overlay" />}
+
       {/* Sidebar */}
       <Sidebar
         businessName={businessName}
@@ -695,522 +866,569 @@ export default function EducationPage() {
           businessName={businessName}
           kycStatus={kycStatus}
           isRefreshing={isRefreshing}
-          onRefresh={() => {
-            setIsRefreshing(true);
-            loadWallets();
-          }}
+          onRefresh={handleRefreshBalance}
           sticky={false}
         />
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-6">
+        <main className="flex-1 px-4 py-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
           {!canExecuteServices ? (
-            <AccessRestricted description="Exam PIN vending is restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+            <AccessRestricted description="Exam PIN purchases are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
           ) : (
             <>
-              {/* KYC Banner */}
               <KycBanner
                 kycStatus={kycStatus}
+                userRole={userRole}
                 onOpenKycModal={() => setIsKycModalOpen(true)}
               />
 
-          {/* Navigation Action: Back to Dashboard & Exam PIN History */}
-          <div className="flex items-center justify-between">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
-              <span>Back to Dashboard</span>
-            </Link>
-
-            <Link
-              href="/dashboard/ledger?service=EXAM_PIN"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-500" />
-              <span>Exam PIN History</span>
-            </Link>
-          </div>
-
-          {/* Page Top Header with Balance & Stats */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/dashboard"
-                  className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </Link>
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    <GraduationCap className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                      Examination PINs & Scratch Cards
-                    </h1>
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                      Direct automated vending for JAMB 2026 (UTME & Direct Entry), WAEC, NECO, and NABTEB.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Wallet Balance & History Action Widgets */}
-            <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
-              <Link
-                href="/dashboard/ledger?service=EXAM_PIN"
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0A1220] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition shadow-xs"
-              >
-                <FileText className="w-4 h-4 text-emerald-500" />
-                <span>Exam PIN History</span>
-              </Link>
-
-              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 px-4 py-2.5 rounded-xl">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-                    Settlement Balance
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-base sm:text-lg text-slate-900 dark:text-white">
-                      {isLoadingBalance ? 'Loading...' : formatNaira(walletBalance)}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setIsRefreshing(true);
-                        loadWallets();
-                      }}
-                      disabled={isRefreshing}
-                      title="Refresh Balance"
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition disabled:opacity-50 cursor-pointer"
+              {/* ======================================================== */}
+              {/* VIEW 1: EXAM PIN CATALOG (No package selected)           */}
+              {/* ======================================================== */}
+              {!currentPackage ? (
+                <div className="space-y-6">
+                  {/* Top Navigation Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                      <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                      <span>Back to Dashboard</span>
+                    </Link>
 
-
-          {/* Council Filter Tabs & Search */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {(['ALL', 'JAMB', 'WAEC', 'NECO', 'NABTEB'] as const).map((council) => (
-                <button
-                  key={council}
-                  type="button"
-                  onClick={() => setSelectedBodyFilter(council)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
-                    selectedBodyFilter === council
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {council === 'ALL' ? 'All Examination Councils' : council}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search packages..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          {/* MAIN INTERACTIVE SECTION: CATALOG (LEFT) + VENDING TERMINAL (RIGHT) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* LEFT: Examination Package Cards Grid (7 Cols) */}
-            <div className="lg:col-span-7 space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Select Examination Package ({filteredPackages.length})
-                </span>
-                <span className="text-xs text-slate-400">Click a card to vend</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {filteredPackages.map((pkg) => {
-                  const isSelected = selectedPackageCode === pkg.packageCode;
-                  const councilLogo = getCouncilLogo(pkg.examBody);
-                  const marginNaira = pkg.suggestedPriceNaira - pkg.baseCostNaira;
-
-                  return (
-                    <div
-                      key={pkg.packageCode}
-                      onClick={() => handleSelectPackage(pkg)}
-                      className={`relative flex flex-col justify-between p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
-                        isSelected
-                          ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500 shadow-md ring-1 ring-emerald-500/30'
-                          : 'bg-white dark:bg-[#0A1220] border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm'
-                      }`}
+                    <Link
+                      href="/dashboard/ledger?service=EXAM_PIN"
+                      className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
                     >
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 p-1 rounded-full bg-emerald-600 text-white">
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </div>
-                      )}
+                      <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                      <span>Exam PIN History</span>
+                    </Link>
+                  </div>
 
-                      <div className="space-y-3">
-                        {/* Council Badge & Logo */}
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shrink-0">
-                            <Image
-                              src={councilLogo}
-                              alt={pkg.examBody}
-                              width={32}
-                              height={32}
-                              className="object-contain max-h-8"
-                            />
-                          </div>
-                          <div>
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                              {pkg.examBody}
-                            </span>
-                            <h3 className="font-bold text-sm text-slate-900 dark:text-white leading-tight mt-0.5">
-                              {pkg.name}
-                            </h3>
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                          {pkg.description}
+                  {/* Page Heading & Compact Wallet Balance */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <Image
+                        src="/logos/categories/education.svg"
+                        alt=""
+                        width={40}
+                        height={40}
+                        className="w-10 h-10 shrink-0 rounded-xl"
+                      />
+                      <div className="min-w-0">
+                        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+                          Exam PINs
+                        </h1>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 text-pretty">
+                          JAMB, WAEC, NECO, and NABTEB result checkers and registration PINs.
                         </p>
                       </div>
-
-                      {/* Financial Footer */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-[10px] uppercase text-slate-400 block font-medium">
-                            Wholesale Cost
-                          </span>
-                          <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-                            {formatNaira(pkg.baseCostNaira)}
-                          </span>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="text-[10px] uppercase text-slate-400 block font-medium">
-                            Retail Margin
-                          </span>
-                          <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                            +{formatNaira(marginNaira)}
-                          </span>
-                        </div>
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* RIGHT: Vending Terminal & Checkout Form (5 Cols) */}
-            <div className="lg:col-span-5 bg-white dark:bg-[#0A1220] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
-              {/* Selected Package Summary Header */}
-              <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shrink-0">
-                  <Image
-                    src={getCouncilLogo(currentPackage.examBody)}
-                    alt={currentPackage.examBody}
-                    width={40}
-                    height={40}
-                    className="object-contain max-h-10"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                      {currentPackage.examBody} Vending Terminal
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                    {currentPackage.name}
-                  </h3>
-                </div>
-              </div>
-
-              {/* Form Form */}
-              <form onSubmit={handleOpenConfirm} className="space-y-4">
-                {/* Identifier Input (Profile Code or Phone) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {currentPackage.identifierType === 'PROFILE_CODE'
-                        ? 'Candidate Profile Code (10 Digits)'
-                        : 'Candidate / Recipient Phone (11 Digits)'}
-                    </label>
-                    {currentPackage.requiresValidation && (
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                        Verification Required
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="relative flex gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={currentPackage.identifierType === 'PROFILE_CODE' ? 10 : 14}
-                      placeholder={
-                        currentPackage.identifierType === 'PROFILE_CODE'
-                          ? 'e.g. 1234567890'
-                          : 'e.g. 08012345678'
-                      }
-                      value={candidateId}
-                      onChange={(e) => {
-                        setCandidateId(e.target.value);
-                        setValidationResult(null);
-                        setValidationError(null);
-                      }}
-                      className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-
-                    {/* Validate Button for JAMB */}
-                    {currentPackage.identifierType === 'PROFILE_CODE' && (
-                      <button
-                        type="button"
-                        onClick={handleValidateCandidate}
-                        disabled={isValidating || candidateId.replace(/[\s\-]/g, '').length !== 10}
-                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
-                      >
-                        {isValidating ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            Validating...
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-3.5 h-3.5" />
-                            Validate
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Validation Error Message */}
-                  {validationError && (
-                    <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-1">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>{validationError}</span>
-                    </div>
-                  )}
-
-                  {/* Candidate Validated Badge */}
-                  {validationResult?.isValid && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs">
-                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      <div className="truncate">
-                        <span className="font-semibold block truncate">
-                          {validationResult.candidateName}
+                    <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                      <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                      <span>Balance:</span>
+                      {isLoadingBalance ? (
+                        <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                      ) : (
+                        <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                          {formatNaira(walletBalance)}
                         </span>
-                        <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
-                          {validationResult.responseMessage}
-                        </span>
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Candidate Name (Optional if phone, confirmed if profile) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Candidate Full Name <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Candidate name for receipt"
-                    value={candidateName}
-                    onChange={(e) => setCandidateName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                  {/* Council Filter Tabs & Search */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#0B1528] rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto">
+                      {(['ALL', 'JAMB', 'WAEC', 'NECO', 'NABTEB'] as const).map((council) => (
+                        <button
+                          key={council}
+                          type="button"
+                          onClick={() => setSelectedBodyFilter(council)}
+                          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                            selectedBodyFilter === council
+                              ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {council === 'ALL' ? 'All Exam Bodies' : council}
+                        </button>
+                      ))}
+                    </div>
 
-                {/* Candidate Email (Optional) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Candidate Email <span className="text-slate-400 font-normal">(Optional notification)</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="candidate@example.com"
-                    value={candidateEmail}
-                    onChange={(e) => setCandidateEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                    <search className="relative flex-1 sm:max-w-xs">
+                      <label htmlFor="education-package-search" className="sr-only">
+                        Search exam PIN packages
+                      </label>
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
+                      <input
+                        id="education-package-search"
+                        type="search"
+                        placeholder="Search packages..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full h-10 pl-9 pr-3 text-xs sm:text-sm rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                      />
+                    </search>
+                  </div>
 
-                {/* Quantity Selector (1-5 for scratch cards, 1 for profile code) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Quantity of Tokens / PINs
-                  </label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {[1, 2, 3, 4, 5].map((num) => {
-                      const isDisabled = currentPackage.identifierType === 'PROFILE_CODE' && num > 1;
+                  {/* PACKAGES GRID */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {filteredPackages.map((pkg) => {
+                      const isUnavailable = pkg.enabled === false;
+                      const councilLogo = getCouncilLogo(pkg.examBody);
                       return (
                         <button
-                          key={num}
+                          key={pkg.packageCode}
                           type="button"
-                          disabled={isDisabled}
-                          onClick={() => setQuantity(num)}
-                          className={`py-2 text-xs font-bold rounded-xl border transition ${
-                            quantity === num
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                              : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          } ${isDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+                          aria-disabled={isUnavailable || undefined}
+                          onClick={() => handleSelectPackage(pkg)}
+                          className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                            isUnavailable
+                              ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                              : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                          }`}
                         >
-                          {num}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
+                                <Image
+                                  src={councilLogo}
+                                  alt={pkg.examBody}
+                                  width={32}
+                                  height={32}
+                                  className="object-contain max-h-8"
+                                />
+                              </div>
+
+                              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 shrink-0">
+                                {pkg.examBody}
+                              </span>
+                            </div>
+
+                            <h2 className={`font-bold text-sm text-slate-900 dark:text-white leading-snug ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
+                              {pkg.name}
+                            </h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                              {pkg.description}
+                            </p>
+                          </div>
+
+                          <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                              {formatNaira(pkg.baseCostNaira)}
+                            </span>
+
+                            {isUnavailable ? (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                                Unavailable
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                                Buy PIN
+                              </span>
+                            )}
+                          </div>
                         </button>
                       );
                     })}
                   </div>
-                  {currentPackage.identifierType === 'PROFILE_CODE' && (
-                    <span className="text-[10px] text-slate-400 block">
-                      JAMB profile codes can only vend 1 registration PIN per profile.
-                    </span>
+
+                  {filteredPackages.length === 0 && (
+                    <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
+                      No exam package matches &quot;{searchQuery}&quot;.
+                    </div>
                   )}
                 </div>
-
-                {/* Financial Summary Box */}
-                <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
-                  <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                    <span>Wholesale Unit Cost</span>
-                    <span className="font-mono">{formatNaira(currentPackage.baseCostNaira)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                    <span>Recommended Retail</span>
-                    <span className="font-mono">{formatNaira(currentPackage.suggestedPriceNaira)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                    <span>Units to Vend</span>
-                    <span className="font-semibold">{quantity} PIN{quantity > 1 ? 's' : ''}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-slate-200 dark:border-slate-800">
-                    <span>Estimated Merchant Profit</span>
-                    <span className="font-mono">+{formatNaira(totalEstimatedProfit)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white pt-1">
-                    <span>Total Amount Debited</span>
-                    <span className="font-mono text-base">{formatNaira(totalCostNaira)}</span>
-                  </div>
-                </div>
-
-                {/* Insufficient Balance Notice */}
-                {!hasSufficientBalance && (
-                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
-                    <span>Balance too low (Need {formatNaira(totalCostNaira)})</span>
-                    <Link
-                      href="/dashboard"
-                      className="font-bold underline text-amber-800 dark:text-amber-200 hover:text-amber-900"
+              ) : (
+                /* ======================================================== */
+                /* VIEW 2: DEDICATED PACKAGE CHECKOUT                       */
+                /* ======================================================== */
+                <div className="space-y-6">
+                  {/* Top Navigation Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleBackToCatalog}
+                      className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
                     >
-                      Fund Wallet
+                      <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                      <span>Back to Packages</span>
+                    </button>
+
+                    <Link
+                      href="/dashboard/ledger?service=EXAM_PIN"
+                      className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                      <span>Exam PIN History</span>
                     </Link>
                   </div>
-                )}
 
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>Buy Exam PIN • {formatNaira(totalCostNaira)}</span>
-                </button>
-              </form>
-            </div>
-          </div>
-        </>
-      )}
-    </main>
+                  {/* Package Header & Compact Balance */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
+                        <Image
+                          src={getCouncilLogo(currentPackage.examBody)}
+                          alt={currentPackage.examBody}
+                          width={36}
+                          height={36}
+                          className="object-contain max-h-9"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+                            {currentPackage.name}
+                          </h1>
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 shrink-0">
+                            {currentPackage.examBody}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                          {currentPackage.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                      <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                      <span>Balance:</span>
+                      {isLoadingBalance ? (
+                        <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                      ) : (
+                        <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                          {formatNaira(walletBalance)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Centered Checkout Form Card */}
+                  <form
+                    onSubmit={handleOpenConfirm}
+                    noValidate
+                    aria-label="Exam PIN purchase form"
+                    className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
+                  >
+                    {/* 1. Candidate Profile Code OR Recipient Phone */}
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="education-candidate-input"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                      >
+                        {currentPackage.identifierType === 'PROFILE_CODE'
+                          ? 'Candidate Profile Code'
+                          : 'Recipient Phone Number'}{' '}
+                        <span aria-hidden="true" className="text-red-500">*</span>
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          ref={candidateInputRef}
+                          id="education-candidate-input"
+                          name="candidateId"
+                          type={currentPackage.identifierType === 'PROFILE_CODE' ? 'text' : 'tel'}
+                          inputMode="numeric"
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          maxLength={currentPackage.identifierType === 'PROFILE_CODE' ? 10 : 11}
+                          placeholder={
+                            currentPackage.identifierType === 'PROFILE_CODE'
+                              ? '10-digit JAMB profile code'
+                              : '08012345678'
+                          }
+                          value={candidateId}
+                          onChange={(e) => handleCandidateIdChange(e.target.value)}
+                          onBlur={handleCandidateIdBlur}
+                          readOnly={currentPackage.identifierType === 'PROFILE_CODE' && isValidating}
+                          aria-busy={isValidating}
+                          aria-invalid={Boolean(validationError && !isValidating && !validationResult?.isValid)}
+                          className={`w-full h-11 pl-3.5 ${
+                            currentPackage.identifierType === 'PROFILE_CODE'
+                              ? isValidating
+                                ? 'pr-36'
+                                : validationResult?.isValid
+                                ? 'pr-28'
+                                : 'pr-24'
+                              : 'pr-3.5'
+                          } rounded-lg border text-slate-900 dark:text-white text-sm sm:text-base font-mono font-semibold placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                            isValidating
+                              ? 'bg-slate-50 dark:bg-[#0D1726] border-[#126BEB] focus:ring-[#126BEB]/20'
+                              : validationResult?.isValid
+                              ? 'bg-white dark:bg-[#070D18] border-emerald-500/70 focus:border-emerald-500 focus:ring-emerald-500/20'
+                              : validationError
+                              ? 'bg-white dark:bg-[#070D18] border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                              : 'bg-white dark:bg-[#070D18] border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                          }`}
+                          required
+                        />
+
+                        {currentPackage.identifierType === 'PROFILE_CODE' && (
+                          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            {isValidating ? (
+                              <>
+                                <span className="h-8 px-2.5 rounded-md bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold flex items-center gap-1.5">
+                                  <RotateCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                                  <span>Verifying</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelVerification}
+                                  aria-label="Cancel verification and edit profile code"
+                                  title="Edit profile code"
+                                  className="h-8 w-8 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center transition-colors cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : validationResult?.isValid ? (
+                              <span className="h-8 px-2.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Verified</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleValidateCandidate}
+                                disabled={candidateId.replace(/\D/g, '').length !== 10}
+                                className="h-8 px-3 rounded-md bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Verify
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Verification Error */}
+                      {validationError && !isValidating && (
+                        <div className="flex items-start justify-between gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>{validationError}</span>
+                          </div>
+                          {currentPackage.identifierType === 'PROFILE_CODE' && (
+                            <button
+                              type="button"
+                              onClick={handleValidateCandidate}
+                              className="font-semibold underline hover:no-underline shrink-0 cursor-pointer"
+                            >
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Validated Candidate Information */}
+                      {validationResult?.isValid && (
+                        <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{validationResult.candidateName}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Quantity Selector */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Quantity
+                        </span>
+                        {currentPackage.identifierType === 'PROFILE_CODE' && (
+                          <span className="text-[11px] text-slate-400">
+                            1 PIN per profile code
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[1, 2, 3, 4, 5].map((num) => {
+                          const isDisabled = currentPackage.identifierType === 'PROFILE_CODE' && num > 1;
+                          return (
+                            <button
+                              key={num}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => setQuantity(num)}
+                              className={`h-10 text-xs font-semibold rounded-lg border transition-colors ${
+                                quantity === num
+                                  ? 'bg-[#126BEB] text-white border-[#126BEB]'
+                                  : 'bg-white dark:bg-[#070D18] border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                              } ${isDisabled ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {num}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 3. Candidate Name (Optional) */}
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="education-candidate-name"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                      >
+                        Candidate Name{' '}
+                        <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        id="education-candidate-name"
+                        name="candidateName"
+                        type="text"
+                        placeholder="Candidate full name"
+                        value={candidateName}
+                        onChange={(e) => setCandidateName(e.target.value)}
+                        className="w-full h-11 px-3.5 bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/25 focus:border-[#126BEB] transition-colors"
+                      />
+                    </div>
+
+                    {/* 4. Candidate Email (Optional) */}
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="education-candidate-email"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                      >
+                        Candidate Email{' '}
+                        <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        id="education-candidate-email"
+                        name="candidateEmail"
+                        type="email"
+                        placeholder="candidate@example.com"
+                        value={candidateEmail}
+                        onChange={(e) => setCandidateEmail(e.target.value)}
+                        className="w-full h-11 px-3.5 bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/25 focus:border-[#126BEB] transition-colors"
+                      />
+                    </div>
+
+                    {/* Insufficient Balance Notice */}
+                    {!hasSufficientBalance && (
+                      <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/35 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-2">
+                        <span>Insufficient balance for {formatNaira(totalCostNaira)}</span>
+                        <Link
+                          href="/dashboard"
+                          className="font-semibold underline hover:no-underline shrink-0"
+                        >
+                          Fund Wallet
+                        </Link>
+                      </div>
+                    )}
+
+                    {/* Clean Total & Submit CTA */}
+                    <div className="pt-1 space-y-3">
+                      <div className="flex items-center justify-between text-xs px-0.5">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {quantity} × {formatNaira(currentPackage.baseCostNaira)}
+                        </span>
+                        <span className="font-bold text-sm text-slate-900 dark:text-white tabular-nums">
+                          {formatNaira(totalCostNaira)}
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Buy {currentPackage.examBody} PIN • {formatNaira(totalCostNaira)}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </>
+          )}
+        </main>
       </div>
 
       {/* CONFIRMATION MODAL */}
       <ModalDialog
-        isOpen={isConfirmModalOpen && !isSubmitting}
+        isOpen={Boolean(isConfirmModalOpen && currentPackage && !isSubmitting)}
         onClose={() => setIsConfirmModalOpen(false)}
         dismissible={!isSubmitting}
-        ariaLabel="Confirm PIN Purchase"
-        maxWidthClass="max-w-md"
-        className="dark:bg-[#0F172A]"
+        ariaLabel="Confirm Exam PIN Purchase"
+        maxWidthClass="max-w-sm"
+        className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
       >
-        <div className="p-6 space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <GraduationCap className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                  Confirm PIN Purchase
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Please review candidate details before confirming.
-                </p>
-              </div>
+        {currentPackage && (
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Confirm PIN Purchase
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                disabled={isSubmitting}
+                aria-label="Close confirmation"
+                className="relative text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 after:content-[''] after:absolute after:-inset-2 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Examination Package</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {currentPackage.name}
-                </span>
+            <dl className="space-y-3 py-1 text-xs">
+              <div className="flex justify-between items-center gap-3">
+                <dt className="text-slate-500 dark:text-slate-400 shrink-0">Package</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-md bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shrink-0">
+                    <Image
+                      src={getCouncilLogo(currentPackage.examBody)}
+                      alt={currentPackage.examBody}
+                      width={18}
+                      height={18}
+                      className="object-contain"
+                    />
+                  </span>
+                  <span className="truncate">{currentPackage.name}</span>
+                </dd>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Candidate / Recipient</span>
-                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                <dt className="text-slate-500 dark:text-slate-400">
+                  {currentPackage.identifierType === 'PROFILE_CODE' ? 'Profile Code' : 'Phone Number'}
+                </dt>
+                <dd className="font-mono font-semibold text-slate-900 dark:text-white">
                   {candidateId}
-                </span>
+                </dd>
               </div>
 
               {candidateName && (
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 dark:text-slate-400">Candidate Name</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Candidate</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white text-right truncate">
                     {candidateName}
-                  </span>
+                  </dd>
                 </div>
               )}
 
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Quantity</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <dt className="text-slate-500 dark:text-slate-400">Quantity</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white tabular-nums">
                   {quantity} PIN{quantity > 1 ? 's' : ''}
-                </span>
+                </dd>
               </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-bold text-sm">
-                <span className="text-slate-900 dark:text-white">Amount to Debit</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 text-base">
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <dt className="font-semibold text-slate-900 dark:text-white">Total Debit</dt>
+                <dd className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base tabular-nums">
                   {formatNaira(totalCostNaira)}
-                </span>
+                </dd>
               </div>
-            </div>
+            </dl>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                disabled={isSubmitting}
+                autoFocus
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50"
+                disabled={isSubmitting}
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1219,22 +1437,20 @@ export default function EducationPage() {
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleExecutePurchase}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 min-h-[44px] px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Processing...
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Processing</span>
                   </>
                 ) : (
-                  <>
-                    <Lock className="w-3.5 h-3.5" />
-                    Confirm
-                  </>
+                  <span>Confirm</span>
                 )}
               </button>
             </div>
-        </div>
+          </div>
+        )}
       </ModalDialog>
 
       {/* RECEIPT MODAL */}
@@ -1246,7 +1462,12 @@ export default function EducationPage() {
           setIsReceiptModalOpen(false);
           setCandidateId('');
           setCandidateName('');
+          setCandidateEmail('');
+          setQuantity(1);
           setValidationResult(null);
+          setValidationError(null);
+          lastVerifiedKeyRef.current = '';
+          lastAttemptedKeyRef.current = '';
         }}
       />
 

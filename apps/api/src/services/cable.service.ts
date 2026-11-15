@@ -27,6 +27,10 @@ import { ledgerService } from './ledger.service.js';
 import { idempotencyService } from './idempotency.service.js';
 import { webhookDispatcherService } from './webhook-dispatcher.service.js';
 import {
+  serviceControlsService,
+  type SystemSettingsState,
+} from './service-controls.service.js';
+import {
   providerRouterService,
   ProviderRouterService,
 } from './providers/index.js';
@@ -418,7 +422,7 @@ export class CableService {
   /**
    * Retrieves list of supported Cable TV operators.
    */
-  public getOperators() {
+  public getOperators(controls?: SystemSettingsState) {
     return Object.values(CABLE_OPERATORS).map((op) => ({
       code: op.code,
       name: op.name,
@@ -427,13 +431,26 @@ export class CableService {
       customerField: op.customerField,
       defaultDiscountBps: op.defaultDiscountBps,
       defaultDiscountPercent: (op.defaultDiscountBps / 100).toFixed(1) + '%',
+      enabled: controls ? !serviceControlsService.isCableOperatorDisabled(controls, op.code) : true,
+    }));
+  }
+
+  /**
+   * Retrieves unfiltered operator catalog for admin controls.
+   */
+  public getAdminCatalogOperators() {
+    return Object.values(CABLE_OPERATORS).map((op) => ({
+      code: op.code,
+      name: op.name,
+      shortName: op.shortName,
+      customerField: op.customerField,
     }));
   }
 
   /**
    * Retrieves cable bouquets, optionally filtered by operator.
    */
-  public getBouquets(operator?: CableOperator) {
+  public getBouquets(operator?: CableOperator, controls?: SystemSettingsState) {
     return CABLE_BOUQUETS.filter((b) => {
       if (operator && b.operator !== operator) return false;
       return true;
@@ -450,6 +467,7 @@ export class CableService {
       discountBps: b.discountBps,
       discountPercent: (b.discountBps / 100).toFixed(1) + '%',
       description: b.description,
+      enabled: controls ? !serviceControlsService.isCableOperatorDisabled(controls, b.operator) : true,
     }));
   }
 
@@ -476,6 +494,14 @@ export class CableService {
     const opInfo = CABLE_OPERATORS[operator];
     if (!opInfo) {
       throw new ValidationError(`Unsupported cable operator: '${operator}'.`);
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.CABLE) {
+      throw new ValidationError('Cable TV service is currently unavailable. Please try again later.');
+    }
+    if (serviceControlsService.isCableOperatorDisabled(controls, operator)) {
+      throw new ValidationError(`${opInfo.shortName} cable TV is currently unavailable.`);
     }
 
     try {
@@ -536,6 +562,16 @@ export class CableService {
     if (input.operator !== bouquet.operator) {
       throw new ValidationError(
         `Selected bouquet '${bouquet.name}' belongs to ${bouquet.operatorName}, but requested operator is ${input.operator}.`,
+      );
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.CABLE) {
+      throw new ValidationError('Cable TV service is currently unavailable. Please try again later.');
+    }
+    if (serviceControlsService.isCableOperatorDisabled(controls, input.operator)) {
+      throw new ValidationError(
+        `${CABLE_OPERATORS[input.operator]?.shortName || input.operator} cable TV is currently unavailable.`,
       );
     }
 

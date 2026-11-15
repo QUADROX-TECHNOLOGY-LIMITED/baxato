@@ -7,6 +7,7 @@ import {
   ElectricityMeterType,
 } from '@baxato/common';
 import { electricityService } from '../../services/electricity.service.js';
+import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
@@ -15,8 +16,11 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
    * Returns list of supported Nigerian electricity distribution companies (DISCOs).
    */
   fastify.get('/discos', async (request, reply) => {
-    const adminDiscounts = await electricityService.getAdminDiscounts();
-    const discos = electricityService.getDiscos(adminDiscounts);
+    const [adminDiscounts, controls] = await Promise.all([
+      electricityService.getAdminDiscounts(),
+      serviceControlsService.getSettings(),
+    ]);
+    const discos = electricityService.getDiscos(adminDiscounts, controls);
     return reply.status(200).send(createSuccessResponse(discos, request.id));
   });
 

@@ -41,6 +41,9 @@ import {
 } from '../services/service-controls.service.js';
 import { airtimeService } from '../services/airtime.service.js';
 import { dataService } from '../services/data.service.js';
+import { electricityService } from '../services/electricity.service.js';
+import { cableService } from '../services/cable.service.js';
+import { educationService } from '../services/education.service.js';
 
 export const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // All admin routes strictly require Platform Staff or Super Admin authentication
@@ -1521,6 +1524,9 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             airtimeNetworks,
             dataNetworks,
             dataPlans: catalogPlans,
+            electricityOptions: electricityService.getAdminCatalogOptions(),
+            cableOperators: cableService.getAdminCatalogOperators(),
+            educationPackages: educationService.getAdminCatalogPackages(),
           },
         },
         request.id,

@@ -7,16 +7,15 @@ import {
   Tv,
   ArrowLeft,
   Wallet,
-  RefreshCw,
   Search,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
-  UserCheck,
-  Lock,
   ChevronDown,
   Check,
   FileText,
+  X,
+  RotateCw,
+  Loader2,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -36,9 +35,18 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import { useWalletBalance } from '@/lib/use-wallet-balance';
+import {
+  useSavedBeneficiaries,
+  type CableOperatorCode,
+  type SavedCableBeneficiary,
+} from '@/lib/use-saved-beneficiaries';
+import {
+  SavedCableQuickStrip,
+  SavedCableLabelRow,
+} from '@/components/dashboard/SavedCableSmartcards';
 import { showToast } from '@/lib/toast';
 
-export type CableOperatorCode = 'DSTV' | 'GOTV' | 'STARTIMES';
+export type { CableOperatorCode };
 
 export interface CableOperatorOption {
   code: CableOperatorCode;
@@ -49,6 +57,8 @@ export interface CableOperatorOption {
   minDigits: number;
   maxDigits: number;
   description: string;
+  enabled?: boolean;
+  discountBps?: number;
 }
 
 export interface CableBouquetOption {
@@ -59,6 +69,8 @@ export interface CableBouquetOption {
   code: string;
   validity: string;
   priceNaira: number;
+  enabled?: boolean;
+  discountBps?: number;
 }
 
 export interface VerifiedDecoder {
@@ -77,7 +89,8 @@ const CABLE_OPERATORS: CableOperatorOption[] = [
     customerField: 'Smartcard Number',
     minDigits: 10,
     maxDigits: 11,
-    description: 'Direct-to-home satellite television subscription',
+    description: 'Satellite television packages and renewals',
+    enabled: true,
   },
   {
     code: 'GOTV',
@@ -87,7 +100,8 @@ const CABLE_OPERATORS: CableOperatorOption[] = [
     customerField: 'IUC / Decoder Number',
     minDigits: 10,
     maxDigits: 11,
-    description: 'Digital terrestrial pay television service',
+    description: 'Digital terrestrial television subscriptions',
+    enabled: true,
   },
   {
     code: 'STARTIMES',
@@ -97,7 +111,8 @@ const CABLE_OPERATORS: CableOperatorOption[] = [
     customerField: 'Smartcard / e-Wallet Number',
     minDigits: 11,
     maxDigits: 11,
-    description: 'Digital terrestrial and satellite television service',
+    description: 'Digital terrestrial and satellite TV bouquets',
+    enabled: true,
   },
 ];
 
@@ -278,7 +293,7 @@ export default function CableVendingPage() {
     }
     return '';
   });
-  const [kycStatus, setKycStatus] = useState<string>('VERIFIED');
+  const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
@@ -289,22 +304,38 @@ export default function CableVendingPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Operator Catalog & View State
-  const [selectedOperator, setSelectedOperator] = useState<CableOperatorOption | null>(null);
+  const [operatorsList, setOperatorsList] = useState<CableOperatorOption[]>(CABLE_OPERATORS);
+  const [selectedOperatorCode, setSelectedOperatorCode] = useState<CableOperatorCode | null>(null);
   const [filterType, setFilterType] = useState<'ALL' | 'DSTV' | 'GOTV' | 'STARTIMES'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Vending Form Inputs
+  // Form Inputs
   const [smartcard, setSmartcard] = useState('');
   const [selectedBouquetId, setSelectedBouquetId] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [isBouquetDropdownOpen, setIsBouquetDropdownOpen] = useState(false);
+  const [bouquetSearchQuery, setBouquetSearchQuery] = useState('');
 
-  // Decoder Real-time Validation State
+  // Decoder Verification State
   const [isValidating, setIsValidating] = useState(false);
   const [verifiedDecoder, setVerifiedDecoder] = useState<VerifiedDecoder | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastVerifiedKeyRef = useRef<string>('');
+  const lastAttemptedKeyRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const smartcardInputRef = useRef<HTMLInputElement | null>(null);
   const bouquetDropdownRef = useRef<HTMLDivElement | null>(null);
+  const bouquetSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Saved Cable Beneficiaries State
+  const {
+    beneficiaries: savedSmartcards,
+    fetchBeneficiaries: refreshSavedSmartcards,
+    saveBeneficiary: saveCableBeneficiary,
+    deleteBeneficiary: deleteCableBeneficiary,
+  } = useSavedBeneficiaries('CABLE_TV');
+  const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState(false);
 
   // Dynamic Bouquets List
   const [bouquetsList, setBouquetsList] = useState<CableBouquetOption[]>(DEFAULT_BOUQUETS);
@@ -317,7 +348,14 @@ export default function CableVendingPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<CableReceiptData | null>(null);
 
-  // Close custom dropdown when clicking outside
+  const bouquetListboxId = 'cable-bouquet-listbox';
+
+  const selectedOperator = useMemo(() => {
+    if (!selectedOperatorCode) return null;
+    return operatorsList.find((op) => op.code === selectedOperatorCode) || null;
+  }, [operatorsList, selectedOperatorCode]);
+
+  // Close custom bouquet dropdown when clicking outside or pressing Escape
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -327,25 +365,87 @@ export default function CableVendingPage() {
         setIsBouquetDropdownOpen(false);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsBouquetDropdownOpen(false);
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
-  // Load Bouquets from Backend
-  const loadBouquets = async () => {
-    try {
-      const authToken = getStoredAuthToken();
-      const res = await fetch('/api/services/cable/bouquets', {
-        headers: {
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        },
+  useEffect(() => {
+    if (isBouquetDropdownOpen) {
+      setBouquetSearchQuery('');
+      requestAnimationFrame(() => {
+        bouquetSearchInputRef.current?.focus();
       });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && Array.isArray(data.data) && data.data.length > 0) {
-        setBouquetsList(data.data);
+    }
+  }, [isBouquetDropdownOpen]);
+
+  // Load Cable Operators & Bouquets from Backend
+  const loadCatalogData = async (requestedProvider?: string | null) => {
+    const authToken = getStoredAuthToken();
+    const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
+    try {
+      const [opsRes, bouquetsRes] = await Promise.all([
+        fetch('/api/services/cable/operators', { headers, cache: 'no-store' }),
+        fetch('/api/services/cable/bouquets', { headers, cache: 'no-store' }),
+      ]);
+
+      const [opsData, bouquetsData] = await Promise.all([
+        opsRes.json().catch(() => null),
+        bouquetsRes.json().catch(() => null),
+      ]);
+
+      let mergedOperators = CABLE_OPERATORS;
+      if (opsRes.ok && opsData?.success && Array.isArray(opsData.data)) {
+        mergedOperators = CABLE_OPERATORS.map((baseOp) => {
+          const matched = opsData.data.find((d: any) => d.code === baseOp.code);
+          if (!matched) return baseOp;
+          return {
+            ...baseOp,
+            name: matched.name || baseOp.name,
+            shortName: matched.shortName || baseOp.shortName,
+            customerField: matched.customerField || baseOp.customerField,
+            enabled: matched.enabled !== false,
+            discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : baseOp.discountBps,
+          };
+        });
+        setOperatorsList(mergedOperators);
+      }
+
+      if (bouquetsRes.ok && bouquetsData?.success && Array.isArray(bouquetsData.data) && bouquetsData.data.length > 0) {
+        setBouquetsList(bouquetsData.data);
+      }
+
+      const activeProviderParam =
+        typeof window !== 'undefined'
+          ? (new URLSearchParams(window.location.search).get('provider') || requestedProvider || '').toUpperCase()
+          : (requestedProvider || '').toUpperCase();
+
+      if (activeProviderParam) {
+        const matchedSelected = mergedOperators.find((op) => op.code === activeProviderParam);
+        if (matchedSelected && matchedSelected.enabled === false) {
+          setSelectedOperatorCode(null);
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('provider');
+            window.history.replaceState({}, '', url.toString());
+          }
+          showToast({
+            type: 'error',
+            message: `${matchedSelected.shortName} Cable TV is currently unavailable.`,
+          });
+        }
       }
     } catch {
-      // Fallback to default bouquets
+      // Fallback to default local catalog
     }
   };
 
@@ -361,17 +461,49 @@ export default function CableVendingPage() {
     if (biz?.name) setBusinessName(biz.name);
     setIsInitialLoading(false);
 
-    loadBouquets();
+    let initialProvider: string | null = null;
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const rawParam = params.get('provider')?.toUpperCase();
+        if (rawParam && CABLE_OPERATORS.some((op) => op.code === rawParam)) {
+          initialProvider = rawParam;
+          setSelectedOperatorCode(rawParam as CableOperatorCode);
+        }
+      }
+    } catch {}
+
+    void loadCatalogData(initialProvider);
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
       if (b?.role) setUserRole(b.role);
+      void refreshSavedSmartcards();
+    };
+
+    const handlePopState = () => {
+      const nextParam = new URLSearchParams(window.location.search).get('provider')?.toUpperCase();
+      if (nextParam && CABLE_OPERATORS.some((op) => op.code === nextParam)) {
+        setSelectedOperatorCode(nextParam as CableOperatorCode);
+      } else {
+        setSelectedOperatorCode(null);
+      }
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
-    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
-  }, []);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('bx_business_switched', handleBizSwitched);
+      window.removeEventListener('popstate', handlePopState);
+      if (autoVerifyTimeoutRef.current) {
+        clearTimeout(autoVerifyTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [refreshSavedSmartcards]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -379,17 +511,27 @@ export default function CableVendingPage() {
     userRole === 'DEVELOPER' ||
     userRole === 'SUPPORT';
 
+  const handleRefreshBalance = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadWallets();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Filtered Operators for Catalog
   const filteredOperators = useMemo(() => {
-    return CABLE_OPERATORS.filter((op) => {
+    return operatorsList.filter((op) => {
       const matchesFilter = filterType === 'ALL' || op.code === filterType;
       const matchesSearch =
         searchQuery.trim() === '' ||
         op.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        op.shortName.toLowerCase().includes(searchQuery.toLowerCase());
+        op.shortName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        op.customerField.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesFilter && matchesSearch;
     });
-  }, [filterType, searchQuery]);
+  }, [operatorsList, filterType, searchQuery]);
 
   // Bouquets for selected operator
   const operatorBouquets = useMemo(() => {
@@ -397,37 +539,80 @@ export default function CableVendingPage() {
     return bouquetsList.filter((b) => b.operator === selectedOperator.code);
   }, [bouquetsList, selectedOperator]);
 
+  const filteredBouquets = useMemo(() => {
+    const q = bouquetSearchQuery.trim().toLowerCase();
+    if (!q) return operatorBouquets;
+    return operatorBouquets.filter((b) =>
+      `${b.name} ${b.validity} ${b.priceNaira}`.toLowerCase().includes(q),
+    );
+  }, [operatorBouquets, bouquetSearchQuery]);
+
   // Default select first bouquet when operator changes
   useEffect(() => {
     if (operatorBouquets.length > 0) {
-      setSelectedBouquetId(operatorBouquets[0].id);
+      setSelectedBouquetId((prev) =>
+        operatorBouquets.some((b) => b.id === prev) ? prev : operatorBouquets[0].id,
+      );
     } else {
       setSelectedBouquetId('');
     }
-  }, [selectedOperator, operatorBouquets]);
+  }, [operatorBouquets]);
 
   const currentBouquet = useMemo(() => {
     return operatorBouquets.find((b) => b.id === selectedBouquetId) || operatorBouquets[0];
   }, [operatorBouquets, selectedBouquetId]);
 
-  // Face amount & debit calculations directly from provider pricing
+  // Face amount, discount & net debit calculations
   const faceAmountNaira = currentBouquet?.priceNaira || 0;
-  const amountToDebitNaira = faceAmountNaira;
+  const activeDiscountBps = currentBouquet?.discountBps ?? selectedOperator?.discountBps ?? 0;
+  const discountAmountNaira =
+    activeDiscountBps > 0 ? Math.floor((faceAmountNaira * activeDiscountBps) / 10000) : 0;
+  const amountToDebitNaira = Math.max(0, faceAmountNaira - discountAmountNaira);
   const hasSufficientBalance = walletBalance >= amountToDebitNaira;
 
+  const clearPendingVerification = () => {
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsValidating(false);
+  };
+
   // Real-time Decoder Validation
-  const handleValidateDecoder = async (numToValidate?: string) => {
-    if (!selectedOperator) return;
-
-    const raw = numToValidate !== undefined ? numToValidate : smartcard;
-    const cleanNum = raw.replace(/[\s\-()]/g, '');
-
-    if (cleanNum.length < selectedOperator.minDigits) {
-      const msg = `${selectedOperator.shortName} requires at least ${selectedOperator.minDigits} digits.`;
-      setValidationError(msg);
-      showToast({ type: 'error', title: 'Invalid decoder number', message: msg });
+  const executeDecoderValidation = async (
+    rawNum: string,
+    targetOperator: CableOperatorOption,
+  ) => {
+    if (targetOperator.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${targetOperator.shortName} Cable TV is currently unavailable.`,
+      });
       return;
     }
+
+    const cleanNum = rawNum.replace(/[\s\-()]/g, '');
+    if (cleanNum.length < targetOperator.minDigits) {
+      const msg = `${targetOperator.shortName} requires at least ${targetOperator.minDigits} digits.`;
+      setValidationError(msg);
+      return;
+    }
+
+    const verificationKey = `${targetOperator.code}:${cleanNum}`;
+    if (verificationKey === lastVerifiedKeyRef.current && verifiedDecoder) {
+      return;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    lastAttemptedKeyRef.current = verificationKey;
 
     setIsValidating(true);
     setValidationError(null);
@@ -437,17 +622,25 @@ export default function CableVendingPage() {
       const authToken = getStoredAuthToken();
       const res = await fetch('/api/services/cable/validate', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({
-          operator: selectedOperator.code,
+          operator: targetOperator.code,
           smartcard: cleanNum,
         }),
       });
 
       const data = await res.json().catch(() => null);
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
 
       if (res.ok && data?.success && data.data?.isValid) {
         setVerifiedDecoder({
@@ -456,59 +649,157 @@ export default function CableVendingPage() {
           accountStatus: data.data.accountStatus || 'ACTIVE',
           outstandingBalanceNaira: data.data.outstandingBalanceNaira,
         });
+        lastVerifiedKeyRef.current = verificationKey;
       } else {
         const errorMsg =
           data?.error?.message ||
           data?.data?.responseMessage ||
-          'Decoder validation failed. Please check the smartcard number.';
+          'Decoder validation failed. Check the smartcard number.';
         setValidationError(errorMsg);
         showToast({ type: 'error', title: 'Decoder verification failed', message: errorMsg });
+        lastVerifiedKeyRef.current = '';
       }
-    } catch {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return;
+      }
       const errMsg = 'Network error while validating decoder. Please try again.';
       setValidationError(errMsg);
       showToast({ type: 'error', title: 'Decoder verification failed', message: errMsg });
+      lastVerifiedKeyRef.current = '';
     } finally {
-      setIsValidating(false);
+      if (!controller.signal.aborted) {
+        setIsValidating(false);
+      }
     }
+  };
+
+  const handleValidateDecoder = (numToValidate?: string) => {
+    if (!selectedOperator) return;
+    const raw = numToValidate !== undefined ? numToValidate : smartcard;
+    void executeDecoderValidation(raw, selectedOperator);
+  };
+
+  const handleCancelVerification = () => {
+    clearPendingVerification();
+    lastAttemptedKeyRef.current = '';
+    smartcardInputRef.current?.focus();
   };
 
   // Auto-trigger validation when required digits reached
   const handleSmartcardChange = (val: string) => {
-    setSmartcard(val);
+    const clean = val.replace(/\D/g, '').slice(0, selectedOperator?.maxDigits || 11);
+    setSmartcard(clean);
     setVerifiedDecoder(null);
     setValidationError(null);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
 
     if (autoVerifyTimeoutRef.current) {
       clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
     }
 
     if (!selectedOperator) return;
-    const clean = val.replace(/[\s\-()]/g, '');
 
     if (clean.length >= selectedOperator.minDigits && clean.length <= selectedOperator.maxDigits) {
       autoVerifyTimeoutRef.current = setTimeout(() => {
-        handleValidateDecoder(clean);
-      }, 500);
+        void executeDecoderValidation(clean, selectedOperator);
+      }, 450);
     }
   };
 
+  const handleSmartcardBlur = () => {
+    if (!selectedOperator || isValidating) return;
+    const clean = smartcard.replace(/\D/g, '');
+    if (clean.length < selectedOperator.minDigits) return;
+    const key = `${selectedOperator.code}:${clean}`;
+    if (key === lastVerifiedKeyRef.current || key === lastAttemptedKeyRef.current) {
+      return;
+    }
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    void executeDecoderValidation(clean, selectedOperator);
+  };
+
   const handleSelectOperator = (op: CableOperatorOption) => {
-    setSelectedOperator(op);
+    if (op.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${op.shortName} Cable TV is currently unavailable.`,
+      });
+      return;
+    }
+
+    clearPendingVerification();
+    setSelectedOperatorCode(op.code);
     setSmartcard('');
     setCustomerMobile('');
     setVerifiedDecoder(null);
     setValidationError(null);
     setIsBouquetDropdownOpen(false);
+    setSaveBeneficiaryChecked(false);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('provider', op.code);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
+
+  const handleSelectSavedSmartcard = (ben: SavedCableBeneficiary) => {
+    const targetOp = operatorsList.find((op) => op.code === ben.operator);
+    if (!targetOp || targetOp.enabled === false) {
+      showToast({
+        type: 'error',
+        message: `${ben.operator} Cable TV is currently unavailable.`,
+      });
+      return;
+    }
+
+    clearPendingVerification();
+    const cleanNum = ben.smartcardNumber.replace(/\D/g, '').slice(0, targetOp.maxDigits);
+    setSelectedOperatorCode(targetOp.code);
+    setSmartcard(cleanNum);
+    setVerifiedDecoder(null);
+    setValidationError(null);
+    setIsBouquetDropdownOpen(false);
+    setSaveBeneficiaryChecked(false);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('provider', targetOp.code);
+      window.history.pushState({}, '', url.toString());
+    }
+
+    if (cleanNum.length >= targetOp.minDigits) {
+      void executeDecoderValidation(cleanNum, targetOp);
+    }
   };
 
   const handleBackToCatalog = () => {
-    setSelectedOperator(null);
+    clearPendingVerification();
+    setSelectedOperatorCode(null);
     setSmartcard('');
     setCustomerMobile('');
     setVerifiedDecoder(null);
     setValidationError(null);
     setIsBouquetDropdownOpen(false);
+    setSaveBeneficiaryChecked(false);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('provider');
+      window.history.pushState({}, '', url.toString());
+    }
   };
 
   // Open Confirmation Modal
@@ -517,19 +808,27 @@ export default function CableVendingPage() {
 
     if (!selectedOperator || !currentBouquet) return;
 
-    const clean = smartcard.replace(/[\s\-()]/g, '');
-    if (clean.length < selectedOperator.minDigits) {
+    if (selectedOperator.enabled === false || currentBouquet.enabled === false) {
       showToast({
         type: 'error',
-        message: `Please enter a valid ${selectedOperator.shortName} ${selectedOperator.customerField}.`,
+        message: `${selectedOperator.shortName} Cable TV is currently unavailable.`,
       });
+      return;
+    }
+
+    const clean = smartcard.replace(/[\s\-()]/g, '');
+    if (clean.length < selectedOperator.minDigits) {
+      const msg = `Please enter a valid ${selectedOperator.shortName} ${selectedOperator.customerField}.`;
+      setValidationError(msg);
+      showToast({ type: 'error', message: msg });
+      smartcardInputRef.current?.focus();
       return;
     }
 
     if (!hasSufficientBalance) {
       showToast({
         type: 'error',
-        message: `Insufficient wallet balance. Total cost is ₦${amountToDebitNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}.`,
+        message: `Insufficient wallet balance. Total cost is ₦${amountToDebitNaira.toLocaleString()}, while balance is ₦${walletBalance.toLocaleString()}.`,
       });
       return;
     }
@@ -573,10 +872,22 @@ export default function CableVendingPage() {
       });
 
       const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) {
+        return;
+      }
 
       if (res.ok && data?.success) {
         setIsConfirmModalOpen(false);
         const receipt = data.data;
+
+        if (saveBeneficiaryChecked) {
+          void saveCableBeneficiary({
+            serviceType: 'CABLE_TV',
+            smartcardNumber: clean,
+            operator: selectedOperator.code,
+            ...(verifiedDecoder?.customerName ? { label: verifiedDecoder.customerName } : {}),
+          });
+        }
 
         setReceiptData({
           transactionId: receipt.transactionId,
@@ -591,7 +902,7 @@ export default function CableVendingPage() {
           bouquetName: receipt.bouquetName || currentBouquet.name,
           validity: receipt.validity || currentBouquet.validity,
           faceAmountNaira: receipt.faceAmountNaira || faceAmountNaira,
-          discountNaira: receipt.discountNaira || 0,
+          discountNaira: receipt.discountNaira || discountAmountNaira,
           amountDebitedNaira: receipt.amountDebitedNaira || amountToDebitNaira,
           date: receipt.createdAt
             ? new Date(receipt.createdAt).toISOString()
@@ -604,6 +915,9 @@ export default function CableVendingPage() {
         setSmartcard('');
         setCustomerMobile('');
         setVerifiedDecoder(null);
+        setSaveBeneficiaryChecked(false);
+        lastVerifiedKeyRef.current = '';
+        lastAttemptedKeyRef.current = '';
       } else {
         const msg = data?.error?.message || 'Subscription failed. Please verify smartcard.';
         setIsConfirmModalOpen(false);
@@ -614,7 +928,7 @@ export default function CableVendingPage() {
       showToast({
         type: 'error',
         title: 'Cable subscription failed',
-        message: 'Network failure occurred. Please check history to verify status.',
+        message: 'Network failure occurred. Check transaction history to confirm status.',
       });
     } finally {
       setIsSubmitting(false);
@@ -629,7 +943,7 @@ export default function CableVendingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
+    <div className="min-h-screen bg-[#FFFFFF] dark:bg-[#070D18]">
       {isSubmitting && <BaxatoLoader variant="overlay" />}
       {/* Sidebar */}
       <Sidebar
@@ -650,20 +964,18 @@ export default function CableVendingPage() {
           businessName={businessName}
           kycStatus={kycStatus}
           isRefreshing={isRefreshing}
-          onRefresh={() => {
-            setIsRefreshing(true);
-            loadWallets();
-          }}
+          onRefresh={handleRefreshBalance}
           sticky={false}
         />
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-5">
+        <main className="flex-1 px-4 py-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
           {!canExecuteServices ? (
-            <AccessRestricted description="Cable TV subscription and bill payments are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+            <AccessRestricted description="Cable TV subscriptions and decoder renewals are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
           ) : (
             <>
               <KycBanner
                 kycStatus={kycStatus}
+                userRole={userRole}
                 onOpenKycModal={() => setIsKycModalOpen(true)}
               />
 
@@ -671,88 +983,80 @@ export default function CableVendingPage() {
           {/* VIEW 1: OPERATOR CATALOG (Displayed when no provider selected) */}
           {/* ======================================================== */}
           {!selectedOperator ? (
-            <div className="space-y-4">
-              {/* Back to Dashboard & Actions */}
-              <div className="flex items-center justify-between">
+            <div className="space-y-6">
+              {/* Navigation Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   <span>Back to Dashboard</span>
                 </Link>
 
-                <div className="flex items-center gap-2">
-                  {/* Link to Unified Ledger History */}
-                  <Link
-                    href="/dashboard/ledger?service=CABLE_TV"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Cable History</span>
-                  </Link>
-
-                  <button
-                    onClick={() => {
-                      setIsRefreshing(true);
-                      loadWallets();
-                    }}
-                    disabled={isRefreshing}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`}
-                    />
-                    <span>Refresh</span>
-                  </button>
-                </div>
+                <Link
+                  href="/dashboard/ledger?service=CABLE_TV"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Cable History</span>
+                </Link>
               </div>
 
-              {/* Page Heading & Settlement Balance */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-500 dark:bg-blue-500/15 dark:text-blue-400 border border-blue-500/20">
-                      <Tv className="w-4 h-4" />
-                    </div>
-                    <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                      Cable TV (PayTV) Subscription
+              {/* Page Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Image
+                    src="/logos/categories/cable.svg"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 shrink-0 rounded-xl"
+                  />
+                  <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+                      Cable TV
                     </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 text-pretty">
+                      DStv, GOtv, and StarTimes decoder subscriptions.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Instant renewal and bouquet upgrades for DStv, GOtv, and StarTimes decoders
-                  </p>
                 </div>
 
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
-                  <Wallet className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Settlement Balance:</span>
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
                   {isLoadingBalance ? (
-                    <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
                   ) : (
-                    <span className="font-extrabold text-slate-900 dark:text-white">
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
                       {formatNaira(walletBalance)}
                     </span>
                   )}
                 </div>
               </div>
 
+              {/* Saved Smartcards Quick-Pick Strip */}
+              <SavedCableQuickStrip
+                beneficiaries={savedSmartcards}
+                onSelectBeneficiary={handleSelectSavedSmartcard}
+              />
+
               {/* Filters & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white dark:bg-[#0B1528] p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
-                {/* Tabs */}
-                <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-[#070D18] rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#0B1528] rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto">
                   {(['ALL', 'DSTV', 'GOTV', 'STARTIMES'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setFilterType(t)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
                         filterType === t
                           ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      {t === 'ALL' && 'All Providers (3)'}
+                      {t === 'ALL' && 'All Providers'}
                       {t === 'DSTV' && 'DStv'}
                       {t === 'GOTV' && 'GOtv'}
                       {t === 'STARTIMES' && 'StarTimes'}
@@ -760,105 +1064,122 @@ export default function CableVendingPage() {
                   ))}
                 </div>
 
-                {/* Search Operator */}
-                <div className="relative flex-1 sm:max-w-xs">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <search className="relative flex-1 sm:max-w-xs">
+                  <label htmlFor="cable-operator-search" className="sr-only">
+                    Search Cable TV provider
+                  </label>
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
                   <input
-                    type="text"
+                    id="cable-operator-search"
+                    type="search"
                     placeholder="Search provider..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-8 pl-8 pr-3 text-xs rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                    className="w-full h-10 pl-9 pr-3 text-xs sm:text-sm rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
                   />
-                </div>
+                </search>
               </div>
 
               {/* OPERATORS GRID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-                {filteredOperators.map((op) => (
-                  <div
-                    key={op.code}
-                    onClick={() => handleSelectOperator(op)}
-                    className="group relative p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] hover:shadow-md transition-all duration-150 cursor-pointer flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Top: Logo */}
-                      <div className="flex items-center justify-between gap-1.5 mb-3">
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0 group-hover:scale-105 transition-transform">
-                          <Image
-                            src={op.logo}
-                            alt={op.shortName}
-                            width={40}
-                            height={40}
-                            className="object-contain"
-                          />
+                {filteredOperators.map((op) => {
+                  const isUnavailable = op.enabled === false;
+                  return (
+                    <button
+                      key={op.code}
+                      type="button"
+                      aria-disabled={isUnavailable || undefined}
+                      onClick={() => handleSelectOperator(op)}
+                      className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                        isUnavailable
+                          ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                          : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="w-11 h-11 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
+                            <Image
+                              src={op.logo}
+                              alt={op.shortName}
+                              width={36}
+                              height={36}
+                              className="object-contain"
+                            />
+                          </div>
+
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
+                            {op.shortName}
+                          </span>
                         </div>
+
+                        <h2 className={`font-bold text-sm text-slate-900 dark:text-white ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
+                          {op.name}
+                        </h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                          {op.description}
+                        </p>
                       </div>
 
-                      {/* Title & Description */}
-                      <h3 className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors">
-                        {op.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                        {op.description}
-                      </p>
-                    </div>
+                      <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
+                        {isUnavailable ? (
+                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                            Unavailable
+                          </span>
+                        ) : op.discountBps && op.discountBps > 0 ? (
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            {(op.discountBps / 100).toFixed(1)}% off
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500">{op.customerField}</span>
+                        )}
 
-                    {/* Footer: Pay Action */}
-                    <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Instant Activation</span>
-                      <span className="inline-flex items-center gap-1 font-bold text-[#126BEB] group-hover:translate-x-0.5 transition-transform">
-                        <span>Subscribe</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                        {!isUnavailable && (
+                          <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                            Subscribe
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+
+              {filteredOperators.length === 0 && (
+                <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
+                  No provider matches &quot;{searchQuery}&quot;.
+                </div>
+              )}
             </div>
           ) : (
             /* ======================================================== */
-            /* VIEW 2: DEDICATED BILLER PAGE (e.g. DStv Subscription) */
+            /* VIEW 2: DEDICATED OPERATOR CHECKOUT                      */
             /* ======================================================== */
-            <div className="space-y-4 max-w-xl mx-auto">
-              {/* Back to All Providers Navigation Bar */}
-              <div className="flex items-center justify-between">
+            <div className="space-y-6">
+              {/* Top Navigation Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={handleBackToCatalog}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#126BEB] hover:text-[#126BEB] dark:hover:text-[#126BEB] transition-all shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   <span>Back to Providers</span>
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <Link
-                    href="/dashboard/ledger?service=CABLE_TV"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-                  >
-                    <FileText className="w-3 h-3 text-blue-500" />
-                    <span>History</span>
-                  </Link>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                    <Wallet className="w-3 h-3 text-blue-500" />
-                    <span>Balance:</span>
-                    {isLoadingBalance ? (
-                      <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
-                    ) : (
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        {formatNaira(walletBalance)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                <Link
+                  href="/dashboard/ledger?service=CABLE_TV"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Cable History</span>
+                </Link>
               </div>
 
-              {/* Dedicated Biller Hero Banner */}
-              <div className="p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0">
+              {/* Operator Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
                     <Image
                       src={selectedOperator.logo}
                       alt={selectedOperator.shortName}
@@ -868,199 +1189,356 @@ export default function CableVendingPage() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <h1 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
-                      {selectedOperator.name}
-                    </h1>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+                        {selectedOperator.name}
+                      </h1>
+                      {activeDiscountBps > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                          {(activeDiscountBps / 100).toFixed(1)}% off
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {selectedOperator.description}
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
+                  {isLoadingBalance ? (
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                  ) : (
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                      {formatNaira(walletBalance)}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Focused Vending Form Card */}
-              <div className="bg-white dark:bg-[#0B1528] rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <form onSubmit={handleOpenConfirm} className="space-y-4">
-                  {/* 1. SMARTCARD / IUC INPUT WITH AUTO-VERIFICATION */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                        {selectedOperator.customerField}
+              {/* Centered Subscription Form */}
+              <form
+                onSubmit={handleOpenConfirm}
+                noValidate
+                aria-label="Cable TV subscription form"
+                className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
+              >
+                {/* 1. SMARTCARD / IUC NUMBER WITH LIVE VERIFICATION */}
+                <div className="space-y-1.5">
+                  <SavedCableLabelRow
+                    label={
+                      <label
+                        htmlFor="cable-smartcard-input"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        {selectedOperator.customerField}{' '}
+                        <span aria-hidden="true" className="text-red-500">*</span>
                       </label>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        {selectedOperator.minDigits}–{selectedOperator.maxDigits} digits
-                      </span>
-                    </div>
+                    }
+                    beneficiaries={savedSmartcards}
+                    currentSmartcard={smartcard}
+                    currentOperator={selectedOperator.code}
+                    onSelectBeneficiary={handleSelectSavedSmartcard}
+                    onDeleteBeneficiary={deleteCableBeneficiary}
+                  />
 
-                    <div className="relative flex gap-2">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={selectedOperator.maxDigits + 2}
-                        placeholder={`Enter ${selectedOperator.shortName} ${selectedOperator.customerField}`}
-                        value={smartcard}
-                        onChange={(e) => handleSmartcardChange(e.target.value)}
-                        className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
-                      />
+                  <div className="relative">
+                    <input
+                      ref={smartcardInputRef}
+                      id="cable-smartcard-input"
+                      name="smartcard"
+                      type="text"
+                      inputMode="numeric"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      enterKeyHint="next"
+                      maxLength={selectedOperator.maxDigits}
+                      placeholder={`Enter ${selectedOperator.shortName} ${selectedOperator.customerField.toLowerCase()}`}
+                      value={smartcard}
+                      onChange={(e) => handleSmartcardChange(e.target.value)}
+                      onBlur={handleSmartcardBlur}
+                      readOnly={isValidating}
+                      aria-busy={isValidating}
+                      aria-invalid={Boolean(validationError && !isValidating && !verifiedDecoder)}
+                      className={`w-full h-11 pl-3.5 ${
+                        isValidating ? 'pr-36' : verifiedDecoder ? 'pr-28' : 'pr-24'
+                      } rounded-lg border text-slate-900 dark:text-white text-sm sm:text-base font-mono font-semibold placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                        isValidating
+                          ? 'bg-slate-50 dark:bg-[#0D1726] border-[#126BEB] focus:ring-[#126BEB]/20'
+                          : verifiedDecoder
+                          ? 'bg-white dark:bg-[#070D18] border-emerald-500/70 focus:border-emerald-500 focus:ring-emerald-500/20'
+                          : validationError
+                          ? 'bg-white dark:bg-[#070D18] border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                          : 'bg-white dark:bg-[#070D18] border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                      }`}
+                      required
+                    />
 
-                      <button
-                        type="button"
-                        onClick={() => handleValidateDecoder()}
-                        disabled={isValidating || smartcard.replace(/[\s\-()]/g, '').length < selectedOperator.minDigits}
-                        className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
-                      >
-                        {isValidating ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            Validating...
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-3.5 h-3.5" />
-                            Verify
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Verification Error */}
-                    {validationError && (
-                      <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>{validationError}</span>
-                      </div>
-                    )}
-
-                    {/* Verified Customer Card */}
-                    {verifiedDecoder && (
-                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                            Verified Subscriber
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      {isValidating ? (
+                        <>
+                          <span className="h-8 px-2.5 rounded-md bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold flex items-center gap-1.5">
+                            <RotateCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                            <span>Verifying</span>
                           </span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 uppercase">
-                            {verifiedDecoder.accountStatus || 'ACTIVE'}
-                          </span>
-                        </div>
-                        {verifiedDecoder.customerName && (
-                          <div className="font-bold text-slate-900 dark:text-white text-sm pt-0.5">
-                            {verifiedDecoder.customerName}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. CUSTOM BOUQUET DROPDOWN (Zero native browser select) */}
-                  <div className="space-y-1.5" ref={bouquetDropdownRef}>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                      Select Subscription Package
-                    </label>
-
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsBouquetDropdownOpen(!isBouquetDropdownOpen)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-xl text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-colors cursor-pointer"
-                      >
-                        {currentBouquet ? (
-                          <div className="flex items-center justify-between w-full mr-2">
-                            <div className="truncate">
-                              <span className="font-bold text-sm text-slate-900 dark:text-white">
-                                {currentBouquet.name}
-                              </span>
-                              <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-                                {currentBouquet.validity}
-                              </span>
-                            </div>
-                            <span className="font-extrabold text-sm text-[#126BEB] ml-2 shrink-0">
-                              {formatNaira(currentBouquet.priceNaira)}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-slate-400">Select a bouquet package...</span>
-                        )}
-                        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isBouquetDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {/* Dropdown Menu */}
-                      {isBouquetDropdownOpen && (
-                        <div className="absolute z-30 left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-xl overflow-hidden py-1 max-h-64 overflow-y-auto">
-                          {operatorBouquets.map((b) => {
-                            const isSelected = b.id === currentBouquet?.id;
-                            return (
-                              <button
-                                key={b.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedBouquetId(b.id);
-                                  setIsBouquetDropdownOpen(false);
-                                }}
-                                className={`w-full px-3.5 py-2.5 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-blue-50 dark:bg-[#126BEB]/15 text-[#126BEB] dark:text-blue-400'
-                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 truncate mr-2">
-                                  <div className="w-4 h-4 flex items-center justify-center shrink-0">
-                                    {isSelected && <Check className="w-3.5 h-3.5 text-[#126BEB]" />}
-                                  </div>
-                                  <div className="truncate">
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                      {b.name}
-                                    </span>
-                                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium">
-                                      {b.validity}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className="font-extrabold text-slate-900 dark:text-white shrink-0">
-                                  {formatNaira(b.priceNaira)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                          <button
+                            type="button"
+                            onClick={handleCancelVerification}
+                            aria-label="Cancel verification and edit smartcard number"
+                            title="Edit number"
+                            className="h-8 w-8 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        </>
+                      ) : verifiedDecoder ? (
+                        <span className="h-8 px-2.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Verified</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleValidateDecoder()}
+                          disabled={smartcard.replace(/\D/g, '').length < selectedOperator.minDigits}
+                          className="h-8 px-3 rounded-md bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Verify
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* 3. CUSTOMER PHONE (OPTIONAL) */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                      Customer Phone Number <span className="text-slate-400 font-normal">(Optional SMS update)</span>
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. 08012345678"
-                      value={customerMobile}
-                      onChange={(e) => setCustomerMobile(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
-                    />
-                  </div>
-
-                  {/* 4. TOTAL & SUBMIT BUTTON */}
-                  <div className="pt-2">
-                    <div className="flex items-center justify-between mb-3 text-xs">
-                      <span className="text-slate-500 dark:text-slate-400">Total Subscription Cost</span>
-                      <span className="font-extrabold text-base text-slate-900 dark:text-white">
-                        {formatNaira(amountToDebitNaira)}
-                      </span>
+                  {/* Verification Error */}
+                  {validationError && !isValidating && (
+                    <div className="flex items-start justify-between gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>{validationError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleValidateDecoder()}
+                        className="font-semibold underline hover:no-underline shrink-0 cursor-pointer"
+                      >
+                        Retry
+                      </button>
                     </div>
+                  )}
 
+                  {/* Verified Subscriber Card */}
+                  {verifiedDecoder && (
+                    <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold min-w-0">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">
+                            {verifiedDecoder.customerName || 'Verified Subscriber'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 uppercase shrink-0">
+                          {verifiedDecoder.accountStatus || 'ACTIVE'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. CUSTOM SEARCHABLE BOUQUET DROPDOWN */}
+                <div className="space-y-1.5" ref={bouquetDropdownRef}>
+                  <label
+                    id="cable-bouquet-label"
+                    htmlFor="cable-bouquet-trigger"
+                    className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                  >
+                    Bouquet Package <span aria-hidden="true" className="text-red-500">*</span>
+                  </label>
+
+                  <div className="relative">
                     <button
-                      type="submit"
-                      disabled={isSubmitting || !currentBouquet}
-                      className="w-full py-3 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-bold text-sm shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                      id="cable-bouquet-trigger"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isBouquetDropdownOpen}
+                      aria-controls={bouquetListboxId}
+                      aria-labelledby="cable-bouquet-label cable-bouquet-trigger"
+                      onClick={() => setIsBouquetDropdownOpen((prev) => !prev)}
+                      className="w-full h-11 px-3.5 bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-lg text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/25 focus:border-[#126BEB] transition-colors cursor-pointer"
                     >
-                      <span>Proceed to Payment</span>
-                      <ArrowRight className="w-4 h-4" />
+                      {currentBouquet ? (
+                        <div className="flex items-center justify-between w-full min-w-0 gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">
+                              {currentBouquet.name}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium shrink-0">
+                              {currentBouquet.validity}
+                            </span>
+                          </div>
+                          <span className="font-bold text-sm text-[#126BEB] dark:text-[#38BDF8] tabular-nums shrink-0">
+                            {formatNaira(currentBouquet.priceNaira)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-400">Select bouquet package</span>
+                      )}
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+                          isBouquetDropdownOpen ? 'rotate-180' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
                     </button>
+
+                    {isBouquetDropdownOpen && (
+                      <div className="absolute z-30 left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden">
+                        <div className="p-2 border-b border-slate-100 dark:border-slate-800">
+                          <div className="relative">
+                            <Search
+                              className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                              aria-hidden="true"
+                            />
+                            <input
+                              ref={bouquetSearchInputRef}
+                              type="search"
+                              value={bouquetSearchQuery}
+                              onChange={(e) => setBouquetSearchQuery(e.target.value)}
+                              placeholder="Search bouquets..."
+                              aria-label="Search bouquets"
+                              className="w-full h-9 pl-8 pr-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                            />
+                          </div>
+                        </div>
+
+                        <div
+                          id={bouquetListboxId}
+                          role="listbox"
+                          aria-labelledby="cable-bouquet-label"
+                          className="max-h-64 overflow-y-auto overscroll-contain py-1"
+                        >
+                          {filteredBouquets.length === 0 ? (
+                            <div className="px-3.5 py-4 text-xs text-slate-400 text-center">
+                              No bouquets found.
+                            </div>
+                          ) : (
+                            filteredBouquets.map((b) => {
+                              const isSelected = b.id === currentBouquet?.id;
+                              return (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => {
+                                    setSelectedBouquetId(b.id);
+                                    setIsBouquetDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3.5 py-2.5 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-blue-50 dark:bg-[#126BEB]/15 text-[#126BEB] dark:text-blue-400'
+                                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate mr-2">
+                                    <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-[#126BEB]" aria-hidden="true" />}
+                                    </div>
+                                    <div className="truncate">
+                                      <span className="font-semibold text-slate-900 dark:text-white">
+                                        {b.name}
+                                      </span>
+                                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium">
+                                        {b.validity}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className="font-bold text-slate-900 dark:text-white tabular-nums shrink-0">
+                                    {formatNaira(b.priceNaira)}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </form>
-              </div>
+                </div>
+
+                {/* 3. CUSTOMER PHONE NUMBER (OPTIONAL) */}
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cable-customer-mobile"
+                    className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                  >
+                    Customer Phone Number{' '}
+                    <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    id="cable-customer-mobile"
+                    name="customerMobile"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="08012345678"
+                    value={customerMobile}
+                    onChange={(e) => setCustomerMobile(e.target.value)}
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/25 focus:border-[#126BEB] transition-colors"
+                  />
+                </div>
+
+                {/* Save Beneficiary Checkbox */}
+                <label
+                  htmlFor="cable-save-beneficiary"
+                  className="inline-flex items-center gap-2 cursor-pointer select-none pt-0.5"
+                >
+                  <input
+                    id="cable-save-beneficiary"
+                    type="checkbox"
+                    checked={saveBeneficiaryChecked}
+                    onChange={(e) => setSaveBeneficiaryChecked(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-[#126BEB] focus:ring-[#126BEB]/30 bg-white dark:bg-[#070D18]"
+                  />
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Save beneficiary
+                  </span>
+                </label>
+
+                {/* Balance Warning */}
+                {!hasSufficientBalance && currentBouquet && (
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/35 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-2">
+                    <span>Insufficient balance for {formatNaira(amountToDebitNaira)}</span>
+                    <Link
+                      href="/dashboard"
+                      className="font-semibold underline hover:no-underline shrink-0"
+                    >
+                      Fund Wallet
+                    </Link>
+                  </div>
+                )}
+
+                {/* Total & Submit CTA */}
+                <div className="pt-1 space-y-3">
+                  <div className="flex items-center justify-between text-xs px-0.5">
+                    <span className="text-slate-500 dark:text-slate-400">Total Debit</span>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white tabular-nums">
+                      {formatNaira(amountToDebitNaira)}
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !currentBouquet}
+                    className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {currentBouquet
+                      ? `Subscribe • ${formatNaira(amountToDebitNaira)}`
+                      : 'Subscribe'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </>
@@ -1073,71 +1551,98 @@ export default function CableVendingPage() {
         isOpen={Boolean(isConfirmModalOpen && selectedOperator && currentBouquet && !isSubmitting)}
         onClose={() => setIsConfirmModalOpen(false)}
         dismissible={!isSubmitting}
-        ariaLabel="Confirm Subscription"
-        maxWidthClass="max-w-md"
-        className="dark:bg-[#0B1528]"
+        ariaLabel="Confirm Cable TV Subscription"
+        maxWidthClass="max-w-sm"
+        className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
       >
         {selectedOperator && currentBouquet && (
-          <div className="p-6 space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500 dark:text-blue-400">
-                <Tv className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                  Confirm Subscription
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Please review decoder and bouquet details before confirming.
-                </p>
-              </div>
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Confirm Subscription
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                disabled={isSubmitting}
+                aria-label="Close confirmation"
+                className="relative text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 after:content-[''] after:absolute after:-inset-2 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
+            <dl className="space-y-3 py-1 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Provider</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {selectedOperator.name}
-                </span>
+                <dt className="text-slate-500 dark:text-slate-400">Provider</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shrink-0">
+                    <Image
+                      src={selectedOperator.logo}
+                      alt={selectedOperator.shortName}
+                      width={18}
+                      height={18}
+                      className="object-contain"
+                    />
+                  </span>
+                  <span>{selectedOperator.shortName}</span>
+                </dd>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">{selectedOperator.customerField}</span>
-                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                <dt className="text-slate-500 dark:text-slate-400">{selectedOperator.customerField}</dt>
+                <dd className="font-mono font-semibold text-slate-900 dark:text-white">
                   {smartcard}
-                </span>
+                </dd>
               </div>
 
               {verifiedDecoder?.customerName && (
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 dark:text-slate-400">Subscriber Name</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Subscriber</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white uppercase text-right truncate">
                     {verifiedDecoder.customerName}
-                  </span>
+                  </dd>
                 </div>
               )}
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Bouquet Package</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
+              <div className="flex justify-between items-center gap-3">
+                <dt className="text-slate-500 dark:text-slate-400 shrink-0">Bouquet</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white text-right truncate">
                   {currentBouquet.name}
-                </span>
+                </dd>
               </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-bold text-sm">
-                <span className="text-slate-900 dark:text-white">Amount to Debit</span>
-                <span className="font-mono text-[#126BEB] text-base">
+              <div className="flex justify-between items-center">
+                <dt className="text-slate-500 dark:text-slate-400">Bouquet Price</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  {formatNaira(faceAmountNaira)}
+                </dd>
+              </div>
+
+              {discountAmountNaira > 0 && (
+                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
+                  <dt>Discount ({(activeDiscountBps / 100).toFixed(1)}%)</dt>
+                  <dd className="font-semibold tabular-nums">
+                    -{formatNaira(discountAmountNaira)}
+                  </dd>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <dt className="font-semibold text-slate-900 dark:text-white">Total Debit</dt>
+                <dd className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base tabular-nums">
                   {formatNaira(amountToDebitNaira)}
-                </span>
+                </dd>
               </div>
-            </div>
+            </dl>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                disabled={isSubmitting}
+                autoFocus
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50"
+                disabled={isSubmitting}
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1146,18 +1651,15 @@ export default function CableVendingPage() {
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleExecutePurchase}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 min-h-[44px] px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Subscribing...
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Processing</span>
                   </>
                 ) : (
-                  <>
-                    <Lock className="w-3.5 h-3.5" />
-                    Confirm & Debit
-                  </>
+                  <span>Confirm</span>
                 )}
               </button>
             </div>
@@ -1175,6 +1677,7 @@ export default function CableVendingPage() {
           setSmartcard('');
           setCustomerMobile('');
           setVerifiedDecoder(null);
+          setSaveBeneficiaryChecked(false);
         }}
       />
 

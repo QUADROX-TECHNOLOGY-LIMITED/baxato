@@ -4,8 +4,9 @@ import { normalizeNigerianPhone, detectTelcoNetwork } from './telco.utils.js';
 
 export const MAX_BENEFICIARIES_PER_BUSINESS = 5;
 
-export type BeneficiaryServiceType = 'AIRTIME' | 'DATA' | 'ELECTRICITY';
+export type BeneficiaryServiceType = 'AIRTIME' | 'DATA' | 'ELECTRICITY' | 'CABLE_TV';
 export type ElectricityMeterType = 'PREPAID' | 'POSTPAID';
+export type CableOperatorCode = 'DSTV' | 'GOTV' | 'STARTIMES';
 
 export interface BeneficiaryDto {
   id: string;
@@ -15,6 +16,8 @@ export interface BeneficiaryDto {
   meterNumber: string | null;
   disco: string | null;
   meterType: ElectricityMeterType | null;
+  smartcardNumber: string | null;
+  operator: CableOperatorCode | null;
   label: string | null;
   serviceType: BeneficiaryServiceType | null;
   createdAt: Date;
@@ -39,6 +42,14 @@ export interface SaveElectricityBeneficiaryInput {
   label?: string;
 }
 
+export interface SaveCableBeneficiaryInput {
+  businessId: string;
+  userId?: string;
+  smartcardNumber: string;
+  operator: string;
+  label?: string;
+}
+
 interface BeneficiaryRowLike {
   id: string;
   businessId: string;
@@ -47,6 +58,8 @@ interface BeneficiaryRowLike {
   meterNumber?: string | null;
   disco?: string | null;
   meterType?: string | null;
+  smartcardNumber?: string | null;
+  operator?: string | null;
   label: string | null;
   serviceType: string | null;
   createdAt: Date;
@@ -62,6 +75,8 @@ function toDto(row: BeneficiaryRowLike): BeneficiaryDto {
     meterNumber: row.meterNumber ?? null,
     disco: row.disco ?? null,
     meterType: (row.meterType as ElectricityMeterType) || null,
+    smartcardNumber: row.smartcardNumber ?? null,
+    operator: (row.operator as CableOperatorCode) || null,
     label: row.label ?? null,
     serviceType: (row.serviceType as BeneficiaryServiceType) || null,
     createdAt: row.createdAt,
@@ -71,6 +86,30 @@ function toDto(row: BeneficiaryRowLike): BeneficiaryDto {
 
 function isElectricityBeneficiaryRow(row: { serviceType?: string | null; meterNumber?: string | null }): boolean {
   return row.serviceType === 'ELECTRICITY' && Boolean(row.meterNumber);
+}
+
+function isCableBeneficiaryRow(row: { serviceType?: string | null; smartcardNumber?: string | null }): boolean {
+  return row.serviceType === 'CABLE_TV' && Boolean(row.smartcardNumber);
+}
+
+function isPhoneBeneficiaryRow(row: { serviceType?: string | null; phoneNumber?: string | null }): boolean {
+  return row.serviceType !== 'ELECTRICITY' && row.serviceType !== 'CABLE_TV' && Boolean(row.phoneNumber);
+}
+
+function normalizeSmartcardNumber(rawSmartcard: string): string {
+  const digits = rawSmartcard.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 12) {
+    throw new ValidationError('Smartcard / IUC number must be 10 to 12 digits.');
+  }
+  return digits;
+}
+
+function normalizeCableOperator(rawOperator: string): CableOperatorCode {
+  const cleaned = rawOperator.trim().toUpperCase();
+  if (cleaned !== 'DSTV' && cleaned !== 'GOTV' && cleaned !== 'STARTIMES') {
+    throw new ValidationError('Invalid cable operator. Supported: DSTV, GOTV, STARTIMES.');
+  }
+  return cleaned;
 }
 
 function normalizeMeterNumber(rawMeter: string): string {
@@ -100,7 +139,12 @@ function normalizeMeterType(rawType: string): ElectricityMeterType {
 class BeneficiaryService {
   private async evictOverflow(
     businessId: string,
-    matchesCategory: (row: { serviceType: string | null; phoneNumber: string | null; meterNumber?: string | null }) => boolean,
+    matchesCategory: (row: {
+      serviceType: string | null;
+      phoneNumber: string | null;
+      meterNumber?: string | null;
+      smartcardNumber?: string | null;
+    }) => boolean,
   ): Promise<void> {
     const allRows = await db
       .select()
@@ -144,7 +188,9 @@ class BeneficiaryService {
     const filtered =
       serviceType === 'ELECTRICITY'
         ? rows.filter((row) => isElectricityBeneficiaryRow(row))
-        : rows.filter((row) => row.serviceType !== 'ELECTRICITY' && Boolean(row.phoneNumber));
+        : serviceType === 'CABLE_TV'
+          ? rows.filter((row) => isCableBeneficiaryRow(row))
+          : rows.filter((row) => isPhoneBeneficiaryRow(row));
 
     return filtered
       .slice(0, MAX_BENEFICIARIES_PER_BUSINESS)
@@ -208,7 +254,7 @@ class BeneficiaryService {
     // 2. Enforce FIFO max 5 cap within phone beneficiaries
     await this.evictOverflow(
       input.businessId,
-      (row) => row.serviceType !== 'ELECTRICITY' && Boolean(row.phoneNumber),
+      (row) => isPhoneBeneficiaryRow(row),
     );
 
     const now = new Date();
@@ -222,6 +268,8 @@ class BeneficiaryService {
         meterNumber: null,
         disco: null,
         meterType: null,
+        smartcardNumber: null,
+        operator: null,
         label: cleanedLabel,
         serviceType: input.serviceType ?? null,
         createdAt: now,
@@ -296,6 +344,8 @@ class BeneficiaryService {
         meterNumber: normalizedMeter,
         disco: normalizedDisco,
         meterType: normalizedType,
+        smartcardNumber: null,
+        operator: null,
         label: cleanedLabel,
         serviceType: 'ELECTRICITY',
         createdAt: now,
@@ -305,6 +355,80 @@ class BeneficiaryService {
 
     if (!created) {
       throw new Error('Failed to persist electricity beneficiary record.');
+    }
+
+    return toDto(created);
+  }
+
+  /**
+   * Saves a Cable TV smartcard/IUC beneficiary for a business.
+   * Deduplicates by (businessId, smartcardNumber, operator) and enforces
+   * a separate 5-item FIFO cap for cable subscribers.
+   */
+  public async saveCableBeneficiary(
+    input: SaveCableBeneficiaryInput,
+  ): Promise<BeneficiaryDto> {
+    const normalizedSmartcard = normalizeSmartcardNumber(input.smartcardNumber);
+    const normalizedOperator = normalizeCableOperator(input.operator);
+
+    const cleanedLabel =
+      typeof input.label === 'string' && input.label.trim().length > 0
+        ? input.label.trim().slice(0, 60)
+        : null;
+
+    const [existing] = await db
+      .select()
+      .from(beneficiaries)
+      .where(
+        and(
+          eq(beneficiaries.businessId, input.businessId),
+          eq(beneficiaries.smartcardNumber, normalizedSmartcard),
+          eq(beneficiaries.operator, normalizedOperator),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db
+        .update(beneficiaries)
+        .set({
+          label: cleanedLabel ?? existing.label ?? null,
+          userId: input.userId ?? existing.userId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(beneficiaries.id, existing.id))
+        .returning();
+
+      return toDto(updated ?? existing);
+    }
+
+    await this.evictOverflow(
+      input.businessId,
+      (row) => isCableBeneficiaryRow(row),
+    );
+
+    const now = new Date();
+    const [created] = await db
+      .insert(beneficiaries)
+      .values({
+        businessId: input.businessId,
+        userId: input.userId ?? null,
+        phoneNumber: null,
+        network: null,
+        meterNumber: null,
+        disco: null,
+        meterType: null,
+        smartcardNumber: normalizedSmartcard,
+        operator: normalizedOperator,
+        label: cleanedLabel,
+        serviceType: 'CABLE_TV',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to persist cable beneficiary record.');
     }
 
     return toDto(created);

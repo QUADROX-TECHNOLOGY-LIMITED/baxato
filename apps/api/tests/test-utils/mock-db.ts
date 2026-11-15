@@ -202,6 +202,8 @@ export interface MockBeneficiary {
   meterNumber?: string | null;
   disco?: string | null;
   meterType?: string | null;
+  smartcardNumber?: string | null;
+  operator?: string | null;
   label?: string | null;
   serviceType?: string | null;
   createdAt: Date;
@@ -213,7 +215,13 @@ export interface MockSystemSetting {
   key: string;
   maintenanceMode: boolean;
   killSwitches: Record<string, boolean>;
-  disabledNetworks: { AIRTIME?: string[]; DATA?: string[] };
+  disabledNetworks: {
+    AIRTIME?: string[];
+    DATA?: string[];
+    ELECTRICITY?: string[];
+    CABLE?: string[];
+    EDUCATION?: string[];
+  };
   disabledDataPlans: string[];
   updatedById?: string | null;
   createdAt: Date;
@@ -535,6 +543,8 @@ export function createMockDatabase() {
           meterNumber: u.meterNumber ? String(u.meterNumber) : null,
           disco: u.disco ? String(u.disco) : null,
           meterType: u.meterType ? String(u.meterType) : null,
+          smartcardNumber: u.smartcardNumber ? String(u.smartcardNumber) : null,
+          operator: u.operator ? String(u.operator) : null,
           label: u.label ? String(u.label) : null,
           serviceType: u.serviceType ? String(u.serviceType) : null,
           createdAt: (u.createdAt as Date) || now,
@@ -551,7 +561,14 @@ export function createMockDatabase() {
           key: String(u.key),
           maintenanceMode: Boolean(u.maintenanceMode ?? false),
           killSwitches: (u.killSwitches as Record<string, boolean>) || {},
-          disabledNetworks: (u.disabledNetworks as { AIRTIME?: string[]; DATA?: string[] }) || {},
+          disabledNetworks:
+            (u.disabledNetworks as {
+              AIRTIME?: string[];
+              DATA?: string[];
+              ELECTRICITY?: string[];
+              CABLE?: string[];
+              EDUCATION?: string[];
+            }) || {},
           disabledDataPlans: Array.isArray(u.disabledDataPlans) ? (u.disabledDataPlans as string[]) : [],
           updatedById: u.updatedById ? String(u.updatedById) : null,
           createdAt: (u.createdAt as Date) || now,
@@ -966,6 +983,8 @@ export function createMockDatabase() {
       meterNumber: 'meter_number',
       disco: 'disco',
       meterType: 'meter_type',
+      smartcardNumber: 'smartcard_number',
+      operator: 'operator',
       label: 'label',
       serviceType: 'service_type',
       createdAt: 'created_at',
@@ -1327,6 +1346,8 @@ export function createMockDatabase() {
                       if ((col === 'meter_number' || col === 'meternumber') && b.meterNumber !== c.val) return false;
                       if (col === 'disco' && b.disco !== c.val) return false;
                       if ((col === 'meter_type' || col === 'metertype') && b.meterType !== c.val) return false;
+                      if ((col === 'smartcard_number' || col === 'smartcardnumber') && b.smartcardNumber !== c.val) return false;
+                      if (col === 'operator' && b.operator !== c.val) return false;
                       if ((col === 'service_type' || col === 'servicetype') && b.serviceType !== c.val) return false;
                     }
                     return true;
@@ -1688,6 +1709,8 @@ export function createMockDatabase() {
                       if ((col === 'meter_number' || col === 'meternumber') && b.meterNumber !== c.val) return false;
                       if (col === 'disco' && b.disco !== c.val) return false;
                       if ((col === 'meter_type' || col === 'metertype') && b.meterType !== c.val) return false;
+                      if ((col === 'smartcard_number' || col === 'smartcardnumber') && b.smartcardNumber !== c.val) return false;
+                      if (col === 'operator' && b.operator !== c.val) return false;
                       if ((col === 'service_type' || col === 'servicetype') && b.serviceType !== c.val) return false;
                     }
                     return true;

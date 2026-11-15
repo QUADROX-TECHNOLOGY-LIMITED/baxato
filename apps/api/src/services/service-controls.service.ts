@@ -14,6 +14,9 @@ export interface KillSwitchesConfig {
 export interface DisabledNetworksConfig {
   AIRTIME: TelecomNetwork[];
   DATA: TelecomNetwork[];
+  ELECTRICITY: string[];
+  CABLE: string[];
+  EDUCATION: string[];
 }
 
 export interface SystemSettingsState {
@@ -43,12 +46,24 @@ export interface UpdateSystemSettingsInput {
   disabledNetworks?: {
     AIRTIME?: TelecomNetwork[];
     DATA?: TelecomNetwork[];
+    ELECTRICITY?: string[];
+    CABLE?: string[];
+    EDUCATION?: string[];
   };
   disabledDataPlans?: string[];
 }
 
 const SETTINGS_KEY = 'GLOBAL';
 const VALID_NETWORKS = new Set<string>(Object.values(TelecomNetwork));
+const OPTION_CODE_REGEX = /^[A-Z0-9_-]{2,64}$/;
+
+function canonicalizeElectricityOptionCode(code: string): string {
+  const upper = code.trim().toUpperCase();
+  if (upper === 'ABA') return 'APLE';
+  if (upper === 'ABA_PREPAID') return 'APLE_PREPAID';
+  if (upper === 'ABA_POSTPAID') return 'APLE_POSTPAID';
+  return upper;
+}
 
 const DEFAULT_SETTINGS: SystemSettingsState = {
   maintenanceMode: false,
@@ -64,6 +79,9 @@ const DEFAULT_SETTINGS: SystemSettingsState = {
   disabledNetworks: {
     AIRTIME: [],
     DATA: [],
+    ELECTRICITY: [],
+    CABLE: [],
+    EDUCATION: [],
   },
   disabledDataPlans: [],
   feeSchedules: {
@@ -94,6 +112,26 @@ function normalizeNetworksList(list?: unknown): TelecomNetwork[] {
   return Array.from(unique);
 }
 
+function normalizeOptionCodes(
+  list?: unknown,
+  label = 'option',
+  canonicalizer?: (code: string) => string,
+): string[] {
+  if (!Array.isArray(list)) return [];
+  const unique = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== 'string') {
+      throw new ValidationError(`Invalid ${label} identifier '${String(item)}'.`);
+    }
+    const upper = canonicalizer ? canonicalizer(item) : item.trim().toUpperCase();
+    if (!OPTION_CODE_REGEX.test(upper)) {
+      throw new ValidationError(`Invalid ${label} identifier '${item}'.`);
+    }
+    unique.add(upper);
+  }
+  return Array.from(unique);
+}
+
 function normalizePlanIds(list?: unknown): string[] {
   if (!Array.isArray(list)) return [];
   const unique = new Set<string>();
@@ -112,7 +150,13 @@ class ServiceControlsService {
   private buildStateFromRow(row?: {
     maintenanceMode?: boolean;
     killSwitches?: Record<string, boolean> | null;
-    disabledNetworks?: { AIRTIME?: string[]; DATA?: string[] } | null;
+    disabledNetworks?: {
+      AIRTIME?: string[];
+      DATA?: string[];
+      ELECTRICITY?: string[];
+      CABLE?: string[];
+      EDUCATION?: string[];
+    } | null;
     disabledDataPlans?: string[] | null;
   }): SystemSettingsState {
     const ks = (row?.killSwitches || {}) as Record<string, unknown>;
@@ -136,6 +180,21 @@ class ServiceControlsService {
         DATA: Array.isArray(dn.DATA)
           ? (dn.DATA.filter((n) => VALID_NETWORKS.has(String(n))) as TelecomNetwork[])
           : [],
+        ELECTRICITY: Array.isArray(dn.ELECTRICITY)
+          ? dn.ELECTRICITY
+              .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
+              .map(canonicalizeElectricityOptionCode)
+          : [],
+        CABLE: Array.isArray(dn.CABLE)
+          ? dn.CABLE
+              .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
+              .map((id) => id.trim().toUpperCase())
+          : [],
+        EDUCATION: Array.isArray(dn.EDUCATION)
+          ? dn.EDUCATION
+              .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
+              .map((id) => id.trim().toUpperCase())
+          : [],
       },
       disabledDataPlans: Array.isArray(row?.disabledDataPlans)
         ? row!.disabledDataPlans.filter((id): id is string => typeof id === 'string')
@@ -143,6 +202,42 @@ class ServiceControlsService {
       feeSchedules: { ...DEFAULT_SETTINGS.feeSchedules },
       securityPolicies: { ...DEFAULT_SETTINGS.securityPolicies },
     };
+  }
+
+  public isElectricityOptionDisabled(
+    controls: SystemSettingsState,
+    disco: string,
+    meterType: string,
+  ): boolean {
+    if (controls.maintenanceMode || controls.killSwitches.ELECTRICITY) {
+      return true;
+    }
+    const upperDisco = canonicalizeElectricityOptionCode(disco);
+    const upperOption = canonicalizeElectricityOptionCode(`${upperDisco}_${meterType}`);
+    const disabled = controls.disabledNetworks.ELECTRICITY;
+    return disabled.includes(upperDisco) || disabled.includes(upperOption);
+  }
+
+  public isCableOperatorDisabled(controls: SystemSettingsState, operator: string): boolean {
+    if (controls.maintenanceMode || controls.killSwitches.CABLE) {
+      return true;
+    }
+    return controls.disabledNetworks.CABLE.includes(operator.trim().toUpperCase());
+  }
+
+  public isEducationPackageDisabled(
+    controls: SystemSettingsState,
+    packageCode: string,
+    examBody?: string,
+  ): boolean {
+    if (controls.maintenanceMode || controls.killSwitches.EDUCATION) {
+      return true;
+    }
+    const disabled = controls.disabledNetworks.EDUCATION;
+    if (disabled.includes(packageCode.trim().toUpperCase())) {
+      return true;
+    }
+    return Boolean(examBody && disabled.includes(examBody.trim().toUpperCase()));
   }
 
   public invalidateCache(): void {
@@ -204,6 +299,22 @@ class ServiceControlsService {
         input.disabledNetworks?.DATA !== undefined
           ? normalizeNetworksList(input.disabledNetworks.DATA)
           : current.disabledNetworks.DATA,
+      ELECTRICITY:
+        input.disabledNetworks?.ELECTRICITY !== undefined
+          ? normalizeOptionCodes(
+              input.disabledNetworks.ELECTRICITY,
+              'electricity option',
+              canonicalizeElectricityOptionCode,
+            )
+          : current.disabledNetworks.ELECTRICITY,
+      CABLE:
+        input.disabledNetworks?.CABLE !== undefined
+          ? normalizeOptionCodes(input.disabledNetworks.CABLE, 'cable operator')
+          : current.disabledNetworks.CABLE,
+      EDUCATION:
+        input.disabledNetworks?.EDUCATION !== undefined
+          ? normalizeOptionCodes(input.disabledNetworks.EDUCATION, 'education package')
+          : current.disabledNetworks.EDUCATION,
     };
 
     const nextDisabledDataPlans =

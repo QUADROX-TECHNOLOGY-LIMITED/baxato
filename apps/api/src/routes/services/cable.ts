@@ -6,6 +6,7 @@ import {
   CableOperator,
 } from '@baxato/common';
 import { cableService } from '../../services/cable.service.js';
+import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 export const cableRoutes: FastifyPluginAsync = async (fastify) => {
@@ -14,7 +15,8 @@ export const cableRoutes: FastifyPluginAsync = async (fastify) => {
    * Returns list of supported Cable TV operators (DSTV, GOTV, StarTimes) with metadata.
    */
   fastify.get('/operators', async (request, reply) => {
-    const operators = cableService.getOperators();
+    const controls = await serviceControlsService.getSettings();
+    const operators = cableService.getOperators(controls);
     return reply.status(200).send(createSuccessResponse(operators, request.id));
   });
 
@@ -36,7 +38,8 @@ export const cableRoutes: FastifyPluginAsync = async (fastify) => {
       operatorFilter = upperOp as CableOperator;
     }
 
-    const bouquets = cableService.getBouquets(operatorFilter);
+    const controls = await serviceControlsService.getSettings();
+    const bouquets = cableService.getBouquets(operatorFilter, controls);
     return reply.status(200).send(createSuccessResponse(bouquets, request.id));
   });
 

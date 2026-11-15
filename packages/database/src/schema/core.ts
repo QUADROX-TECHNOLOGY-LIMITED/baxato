@@ -191,7 +191,16 @@ export const systemSettings = pgTable(
     key: text('key').notNull().unique(),
     maintenanceMode: boolean('maintenance_mode').default(false).notNull(),
     killSwitches: jsonb('kill_switches').$type<Record<string, boolean>>().default({}).notNull(),
-    disabledNetworks: jsonb('disabled_networks').$type<{ AIRTIME?: string[]; DATA?: string[] }>().default({}).notNull(),
+    disabledNetworks: jsonb('disabled_networks')
+      .$type<{
+        AIRTIME?: string[];
+        DATA?: string[];
+        ELECTRICITY?: string[];
+        CABLE?: string[];
+        EDUCATION?: string[];
+      }>()
+      .default({})
+      .notNull(),
     disabledDataPlans: jsonb('disabled_data_plans').$type<string[]>().default([]).notNull(),
     updatedById: text('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

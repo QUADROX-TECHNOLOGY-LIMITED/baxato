@@ -147,7 +147,7 @@ export const examPins = pgTable(
   ],
 );
 
-// 5. Saved Beneficiaries Table (up to 5 phone numbers + up to 5 utility meters per business)
+// 5. Saved Beneficiaries Table (up to 5 per category: phone numbers, utility meters, and cable smartcards)
 export const beneficiaries = pgTable(
   'beneficiaries',
   {
@@ -161,6 +161,8 @@ export const beneficiaries = pgTable(
     meterNumber: text('meter_number'),
     disco: text('disco'),
     meterType: text('meter_type'),
+    smartcardNumber: text('smartcard_number'),
+    operator: text('operator'),
     label: text('label'),
     serviceType: text('service_type'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -175,6 +177,11 @@ export const beneficiaries = pgTable(
       table.meterNumber,
       table.disco,
       table.meterType,
+    ),
+    uniqueIndex('beneficiaries_business_smartcard_idx').on(
+      table.businessId,
+      table.smartcardNumber,
+      table.operator,
     ),
   ],
 );

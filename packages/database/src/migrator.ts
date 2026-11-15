@@ -114,6 +114,8 @@ export async function runMigrations(): Promise<boolean> {
         meter_number TEXT,
         disco TEXT,
         meter_type TEXT,
+        smartcard_number TEXT,
+        operator TEXT,
         label TEXT,
         service_type TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -124,10 +126,13 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS meter_number TEXT;`;
     await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS disco TEXT;`;
     await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS meter_type TEXT;`;
+    await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS smartcard_number TEXT;`;
+    await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS operator TEXT;`;
     await sql`CREATE INDEX IF NOT EXISTS beneficiaries_business_id_idx ON beneficiaries(business_id);`;
     await sql`CREATE INDEX IF NOT EXISTS beneficiaries_created_at_idx ON beneficiaries(created_at);`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_phone_idx ON beneficiaries(business_id, phone_number);`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_meter_idx ON beneficiaries(business_id, meter_number, disco, meter_type);`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_smartcard_idx ON beneficiaries(business_id, smartcard_number, operator);`;
 
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;

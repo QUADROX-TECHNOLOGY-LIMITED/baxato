@@ -9,8 +9,9 @@ import {
 } from '@/lib/auth-session';
 import { showToast } from '@/lib/toast';
 
-export type BeneficiaryServiceType = 'AIRTIME' | 'DATA' | 'ELECTRICITY';
+export type BeneficiaryServiceType = 'AIRTIME' | 'DATA' | 'ELECTRICITY' | 'CABLE_TV';
 export type ElectricityMeterType = 'PREPAID' | 'POSTPAID';
+export type CableOperatorCode = 'DSTV' | 'GOTV' | 'STARTIMES';
 
 export interface SavedPhoneBeneficiary {
   id: string;
@@ -20,6 +21,8 @@ export interface SavedPhoneBeneficiary {
   meterNumber?: string | null;
   disco?: string | null;
   meterType?: ElectricityMeterType | null;
+  smartcardNumber?: string | null;
+  operator?: CableOperatorCode | null;
   label: string | null;
   serviceType: 'AIRTIME' | 'DATA' | null;
   createdAt: string;
@@ -34,8 +37,26 @@ export interface SavedElectricityBeneficiary {
   meterNumber: string;
   disco: string;
   meterType: ElectricityMeterType;
+  smartcardNumber?: string | null;
+  operator?: CableOperatorCode | null;
   label: string | null;
   serviceType: 'ELECTRICITY';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedCableBeneficiary {
+  id: string;
+  businessId: string;
+  phoneNumber?: string | null;
+  network?: string | null;
+  meterNumber?: string | null;
+  disco?: string | null;
+  meterType?: ElectricityMeterType | null;
+  smartcardNumber: string;
+  operator: CableOperatorCode;
+  label: string | null;
+  serviceType: 'CABLE_TV';
   createdAt: string;
   updatedAt: string;
 }
@@ -55,8 +76,21 @@ export type SaveBeneficiaryParams =
       disco: string;
       meterType: ElectricityMeterType;
       label?: string;
+    }
+  | {
+      serviceType: 'CABLE_TV';
+      smartcardNumber: string;
+      operator: CableOperatorCode;
+      label?: string;
     };
 
+export function useSavedBeneficiaries(serviceType: 'CABLE_TV'): {
+  beneficiaries: SavedCableBeneficiary[];
+  isLoadingBeneficiaries: boolean;
+  fetchBeneficiaries: () => Promise<void>;
+  saveBeneficiary: (params: SaveBeneficiaryParams) => Promise<void>;
+  deleteBeneficiary: (id: string) => Promise<void>;
+};
 export function useSavedBeneficiaries(serviceType: 'ELECTRICITY'): {
   beneficiaries: SavedElectricityBeneficiary[];
   isLoadingBeneficiaries: boolean;
@@ -73,11 +107,11 @@ export function useSavedBeneficiaries(serviceType?: 'AIRTIME' | 'DATA'): {
 };
 /**
  * Shared hook to load, save, and delete saved beneficiaries for the active business.
- * Scopes phone beneficiaries (AIRTIME/DATA) separately from utility beneficiaries (ELECTRICITY).
+ * Scopes phone beneficiaries (AIRTIME/DATA) separately from utility beneficiaries (ELECTRICITY, CABLE_TV).
  */
 export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
   const [beneficiaries, setBeneficiaries] = useState<
-    Array<SavedPhoneBeneficiary | SavedElectricityBeneficiary>
+    Array<SavedPhoneBeneficiary | SavedElectricityBeneficiary | SavedCableBeneficiary>
   >([]);
   const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(false);
 
@@ -96,8 +130,8 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
     if (!headers) return;
 
     const url =
-      serviceType === 'ELECTRICITY'
-        ? '/api/beneficiaries?serviceType=ELECTRICITY'
+      serviceType === 'ELECTRICITY' || serviceType === 'CABLE_TV'
+        ? `/api/beneficiaries?serviceType=${serviceType}`
         : '/api/beneficiaries';
 
     try {
@@ -129,12 +163,19 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
               meterType: params.meterType,
               ...(params.label ? { label: params.label } : {}),
             }
-          : {
-              serviceType: params.serviceType,
-              phoneNumber: params.phoneNumber,
-              ...(params.network ? { network: params.network } : {}),
-              ...(params.label ? { label: params.label } : {}),
-            };
+          : params.serviceType === 'CABLE_TV'
+            ? {
+                serviceType: 'CABLE_TV',
+                smartcardNumber: params.smartcardNumber,
+                operator: params.operator,
+                ...(params.label ? { label: params.label } : {}),
+              }
+            : {
+                serviceType: params.serviceType,
+                phoneNumber: params.phoneNumber,
+                ...(params.network ? { network: params.network } : {}),
+                ...(params.label ? { label: params.label } : {}),
+              };
 
       try {
         const res = await fetch('/api/beneficiaries', {
