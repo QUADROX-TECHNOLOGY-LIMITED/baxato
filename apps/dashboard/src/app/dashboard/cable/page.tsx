@@ -79,7 +79,7 @@ const CABLE_OPERATORS: CableOperatorOption[] = [
     code: 'GOTV',
     name: 'GOtv (MultiChoice)',
     shortName: 'GOtv',
-    logo: '/logos/cable/gotv.png',
+    logo: '/logos/cable/gotv.svg',
     customerField: 'IUC / Decoder Number',
     minDigits: 10,
     maxDigits: 11,

@@ -1,23 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Receipt,
-  ArrowRight,
-  ChevronRight,
   Lock,
   Eye,
   EyeOff,
   Plus,
   Key,
-  Smartphone,
-  Wifi,
-  Zap,
-  Tv,
-  GraduationCap,
   X,
   Copy,
   Check,
@@ -31,165 +24,278 @@ import {
   isTokenExpired,
   getStoredUser,
   getStoredBusiness,
+  getStoredHideBalancePreference,
+  setStoredHideBalancePreference,
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
 
+interface ServiceProviderBadge {
+  name: string;
+  logo: string;
+  fullBleed?: boolean;
+}
+
+interface QuickServiceItem {
+  id: string;
+  name: string;
+  desc: string;
+  route: string;
+  logo: string;
+  providers: ServiceProviderBadge[];
+}
+
+interface RecentTransaction {
+  id: string;
+  reference: string;
+  service: string;
+  recipient: string;
+  amount: number;
+  status: string;
+  date: string;
+}
+
+interface TodayTelemetry {
+  formattedTotalVolume: string;
+  totalCount: number;
+  successfulCount: number;
+}
+
+const QUICK_SERVICES: QuickServiceItem[] = [
+  {
+    id: 'airtime',
+    name: 'Airtime',
+    desc: 'Instant mobile top-up',
+    route: '/dashboard/airtime',
+    logo: '/logos/categories/airtime.svg',
+    providers: [
+      { name: 'MTN', logo: '/logos/telecom/mtn.svg', fullBleed: true },
+      { name: 'Airtel', logo: '/logos/telecom/airtel.svg', fullBleed: true },
+      { name: 'Glo', logo: '/logos/telecom/glo.svg', fullBleed: true },
+      { name: '9mobile', logo: '/logos/telecom/9mobile.svg', fullBleed: true },
+    ],
+  },
+  {
+    id: 'data',
+    name: 'Data Bundles',
+    desc: 'Prepaid internet plans',
+    route: '/dashboard/data',
+    logo: '/logos/categories/data.svg',
+    providers: [
+      { name: 'MTN', logo: '/logos/telecom/mtn.svg', fullBleed: true },
+      { name: 'Airtel', logo: '/logos/telecom/airtel.svg', fullBleed: true },
+      { name: 'Glo', logo: '/logos/telecom/glo.svg', fullBleed: true },
+      { name: '9mobile', logo: '/logos/telecom/9mobile.svg', fullBleed: true },
+    ],
+  },
+  {
+    id: 'electricity',
+    name: 'Electricity',
+    desc: 'Prepaid & postpaid tokens',
+    route: '/dashboard/electricity',
+    logo: '/logos/categories/electricity.svg',
+    providers: [
+      { name: 'IKEDC', logo: '/logos/electricity/ikedc.png' },
+      { name: 'EKEDC', logo: '/logos/electricity/ekedc.png' },
+      { name: 'AEDC', logo: '/logos/electricity/aedc.png' },
+      { name: 'IBEDC', logo: '/logos/electricity/ibedc.png' },
+    ],
+  },
+  {
+    id: 'cable',
+    name: 'Cable TV',
+    desc: 'TV bouquet renewals',
+    route: '/dashboard/cable',
+    logo: '/logos/categories/cable.svg',
+    providers: [
+      { name: 'DStv', logo: '/logos/cable/dstv.svg' },
+      { name: 'GOtv', logo: '/logos/cable/gotv.svg', fullBleed: true },
+      { name: 'StarTimes', logo: '/logos/cable/startimes.svg' },
+      { name: 'Showmax', logo: '/logos/cable/showmax.svg' },
+    ],
+  },
+  {
+    id: 'education',
+    name: 'Exam PINs',
+    desc: 'Result checker tokens',
+    route: '/dashboard/education',
+    logo: '/logos/categories/education.svg',
+    providers: [
+      { name: 'WAEC', logo: '/logos/education/waec.png' },
+      { name: 'JAMB', logo: '/logos/education/jamb.png' },
+      { name: 'NECO', logo: '/logos/education/neco.png' },
+      { name: 'NABTEB', logo: '/logos/education/nabteb.png' },
+    ],
+  },
+];
+
+function getStatusBadgeClass(status: string): string {
+  switch (status?.toUpperCase()) {
+    case 'SUCCESSFUL':
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60';
+    case 'FAILED':
+      return 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/60';
+    case 'PROCESSING':
+    case 'PENDING':
+      return 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/60';
+    case 'REVERSED':
+      return 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/60';
+    default:
+      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+  }
+}
+
+function formatStatusLabel(status: string): string {
+  const norm = (status || '').trim().toLowerCase();
+  return norm ? norm.charAt(0).toUpperCase() + norm.slice(1) : 'Unknown';
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function DashboardOverviewPage() {
   const router = useRouter();
-  const [merchantName, setMerchantName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const u = getStoredUser();
-      if (u?.firstName) return u.firstName;
-    }
-    return '';
-  });
-  const [userFirstName, setUserFirstName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const u = getStoredUser();
-      if (u?.firstName) return u.firstName;
-    }
-    return '';
-  });
-  const [userLastName, setUserLastName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const u = getStoredUser();
-      if (u?.lastName) return u.lastName;
-    }
-    return '';
-  });
-  const [businessName, setBusinessName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const b = getStoredBusiness();
-      if (b?.name) return b.name;
-    }
-    return '';
-  });
+  const [merchantName, setMerchantName] = useState<string>('');
+  const [userFirstName, setUserFirstName] = useState<string>('');
+  const [userLastName, setUserLastName] = useState<string>('');
+  const [businessName, setBusinessName] = useState<string>('');
+  const [businessId, setBusinessId] = useState<string>('');
+  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
+  const [greeting, setGreeting] = useState<string>('Welcome');
+
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showBalance, setShowBalance] = useState(true);
-  const [walletBalance, setWalletBalance] = useState<string>('');
-  const [isFundModalOpen, setIsFundModalOpen] = useState(false);
-  const [copiedBank, setCopiedBank] = useState(false);
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
-  const [transactions, setTransactions] = useState<any[]>([]);
 
-  const loadWallets = async () => {
+  // Synced with DB users.hide_balance and cached locally; skeleton shows until hydrated + loaded
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const [hideBalance, setHideBalance] = useState<boolean>(true);
+
+  const [walletBalance, setWalletBalance] = useState<string>('₦0.00');
+  const [commissionBalance, setCommissionBalance] = useState<string>('₦0.00');
+  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+
+  const [todayTelemetry, setTodayTelemetry] = useState<TodayTelemetry>({
+    formattedTotalVolume: '₦0.00',
+    totalCount: 0,
+    successfulCount: 0,
+  });
+  const [isLoadingTelemetry, setIsLoadingTelemetry] = useState<boolean>(true);
+
+  const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
+  const [isFundModalOpen, setIsFundModalOpen] = useState(false);
+  const [copiedWorkspaceRef, setCopiedWorkspaceRef] = useState(false);
+
+  const getRequestHeaders = useCallback(() => {
+    const authToken = getStoredAuthToken();
+    if (!authToken || isTokenExpired(authToken)) {
+      clearSessionAndRedirect('expired');
+      return null;
+    }
+    const storedBiz = getStoredBusiness();
+    return {
+      Authorization: `Bearer ${authToken}`,
+      ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
+    };
+  }, []);
+
+  const syncUserPreferences = useCallback(async () => {
+    const headers = getRequestHeaders();
+    if (!headers) return;
+
+    try {
+      const res = await fetch('/api/users/me', { headers: { Authorization: headers.Authorization } });
+      const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) return;
+
+      const u = data?.data?.user;
+      if (res.ok && u) {
+        if (u.firstName) {
+          setMerchantName(u.firstName);
+          setUserFirstName(u.firstName);
+        }
+        if (u.lastName) setUserLastName(u.lastName);
+        if (u.kycStatus) setKycStatus(u.kycStatus);
+        if (typeof u.hideBalance === 'boolean') {
+          setHideBalance(u.hideBalance);
+          setStoredHideBalancePreference(u.hideBalance);
+        }
+      }
+    } catch {}
+  }, [getRequestHeaders]);
+
+  const loadWallets = useCallback(async () => {
+    const headers = getRequestHeaders();
+    if (!headers) return;
+
     try {
       setIsLoadingBalance(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken || isTokenExpired(authToken)) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-
-      const storedBiz = getStoredBusiness();
-      const res = await fetch('/api/wallets', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
-        },
-      });
+      const res = await fetch('/api/wallets', { headers });
       const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) {
-        return;
-      }
+      if (handleAuthResponse(res, data)) return;
 
       if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
+        const formatWallet = (wallet: any) =>
+          wallet?.formattedBalance ||
+          `₦${(wallet?.balanceNaira || 0).toLocaleString('en-NG', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+
         const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        if (main) {
-          setWalletBalance(
-            main.formattedBalance ||
-              `₦${(main.balanceNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
-          );
-        }
+        const commission = data.data.wallets.find((w: any) => w.type === 'COMMISSION');
+        if (main) setWalletBalance(formatWallet(main));
+        if (commission) setCommissionBalance(formatWallet(commission));
       }
     } catch {
     } finally {
       setIsLoadingBalance(false);
     }
-  };
+  }, [getRequestHeaders]);
 
-  const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
-
-  useEffect(() => {
-    const token = getStoredAuthToken();
-    if (!token) {
-      clearSessionAndRedirect('expired');
-      return;
-    }
+  const loadTodayAnalytics = useCallback(async () => {
+    const headers = getRequestHeaders();
+    if (!headers) return;
 
     try {
-      const storedUser = getStoredUser();
-      const storedBiz = getStoredBusiness();
-
-      if (storedUser) {
-        if (storedUser.role === 'SUPER_ADMIN') {
-          router.replace('/admin');
-          return;
-        }
-        if (storedUser.role === 'STAFF') {
-          router.replace('/staff/overview');
-          return;
-        }
-        if (storedBiz?.role) {
-          setUserRole(storedBiz.role);
-        } else if (storedUser.role) {
-          setUserRole(storedUser.role);
-        }
-        if (storedUser.firstName) {
-          setMerchantName(storedUser.firstName);
-          setUserFirstName(storedUser.firstName);
-        }
-        if (storedUser.lastName) setUserLastName(storedUser.lastName);
-        if (storedUser.kycStatus) {
-          setKycStatus(storedUser.kycStatus);
-        } else {
-          setKycStatus('UNVERIFIED');
-        }
-      } else {
-        setKycStatus('UNVERIFIED');
-      }
-
-      if (storedBiz?.name) {
-        setBusinessName(storedBiz.name);
-      }
-    } catch {}
-
-    loadWallets();
-    loadRecentTransactions();
-
-    const handleBizSwitched = () => {
-      const updatedBiz = getStoredBusiness();
-      if (updatedBiz?.name) setBusinessName(updatedBiz.name);
-      if (updatedBiz?.role) setUserRole(updatedBiz.role);
-      loadWallets();
-      loadRecentTransactions();
-    };
-
-    window.addEventListener('bx_business_switched', handleBizSwitched);
-    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
-  }, []);
-
-  const loadRecentTransactions = async () => {
-    try {
-      const authToken = getStoredAuthToken();
-      if (!authToken || isTokenExpired(authToken)) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-      const storedBiz = getStoredBusiness();
-      const res = await fetch('/api/transactions?limit=6', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          ...(storedBiz?.id ? { 'x-business-id': storedBiz.id } : {}),
-        },
-      });
+      setIsLoadingTelemetry(true);
+      const res = await fetch('/api/analytics?timeframe=today', { headers });
       const data = await res.json().catch(() => null);
       if (handleAuthResponse(res, data)) return;
+
+      const summary = data?.data?.summary;
+      if (res.ok && summary) {
+        setTodayTelemetry({
+          formattedTotalVolume:
+            summary.formattedTotalVolume ||
+            `₦${Number(summary.totalVolumeNaira || 0).toLocaleString('en-NG', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+          totalCount: Number(summary.totalCount || 0),
+          successfulCount: Number(summary.successfulCount || 0),
+        });
+      }
+    } catch {
+    } finally {
+      setIsLoadingTelemetry(false);
+    }
+  }, [getRequestHeaders]);
+
+  const loadRecentTransactions = useCallback(async () => {
+    const headers = getRequestHeaders();
+    if (!headers) return;
+
+    try {
+      const res = await fetch('/api/transactions?limit=6', { headers });
+      const data = await res.json().catch(() => null);
+      if (handleAuthResponse(res, data)) return;
+
       if (res.ok && data?.success && Array.isArray(data.data?.transactions)) {
         setTransactions(
           data.data.transactions.map((t: any) => ({
@@ -214,18 +320,102 @@ export default function DashboardOverviewPage() {
         );
       }
     } catch {}
+  }, [getRequestHeaders]);
+
+  useEffect(() => {
+    const token = getStoredAuthToken();
+    if (!token) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
+    const storedUser = getStoredUser();
+    const storedBiz = getStoredBusiness();
+
+    if (storedUser?.role === 'SUPER_ADMIN') {
+      router.replace('/admin');
+      return;
+    }
+    if (storedUser?.role === 'STAFF') {
+      router.replace('/staff/overview');
+      return;
+    }
+
+    if (storedBiz?.id) setBusinessId(storedBiz.id);
+    if (storedBiz?.name) setBusinessName(storedBiz.name);
+    if (storedBiz?.role) {
+      setUserRole(storedBiz.role);
+    } else if (storedUser?.role) {
+      setUserRole(storedUser.role);
+    }
+    if (storedUser?.firstName) {
+      setMerchantName(storedUser.firstName);
+      setUserFirstName(storedUser.firstName);
+    }
+    if (storedUser?.lastName) setUserLastName(storedUser.lastName);
+    if (storedUser?.kycStatus) {
+      setKycStatus(storedUser.kycStatus);
+    } else {
+      setKycStatus('UNVERIFIED');
+    }
+
+    setGreeting(getGreeting());
+    setHideBalance(getStoredHideBalancePreference());
+    setIsHydrated(true);
+
+    void syncUserPreferences();
+    void loadWallets();
+    void loadTodayAnalytics();
+    void loadRecentTransactions();
+
+    const handleBizSwitched = () => {
+      const updatedBiz = getStoredBusiness();
+      if (updatedBiz?.id) setBusinessId(updatedBiz.id);
+      if (updatedBiz?.name) setBusinessName(updatedBiz.name);
+      if (updatedBiz?.role) setUserRole(updatedBiz.role);
+      void loadWallets();
+      void loadTodayAnalytics();
+      void loadRecentTransactions();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
+  }, [router, syncUserPreferences, loadWallets, loadTodayAnalytics, loadRecentTransactions]);
+
+  const handleToggleHideBalance = async () => {
+    const nextValue = !hideBalance;
+    setHideBalance(nextValue);
+    setStoredHideBalancePreference(nextValue);
+
+    const headers = getRequestHeaders();
+    if (!headers) return;
+
+    try {
+      const res = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hideBalance: nextValue }),
+      });
+      const data = await res.json().catch(() => null);
+      handleAuthResponse(res, data);
+    } catch {}
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    loadWallets();
-    loadRecentTransactions();
-    setTimeout(() => setIsRefreshing(false), 700);
+    await Promise.all([loadWallets(), loadTodayAnalytics(), loadRecentTransactions()]);
+    setIsRefreshing(false);
   };
 
   const handleKycSuccess = (updatedUser: any) => {
     setKycStatus('VERIFIED');
-    if (updatedUser?.firstName) setUserFirstName(updatedUser.firstName);
+    if (updatedUser?.firstName) {
+      setMerchantName(updatedUser.firstName);
+      setUserFirstName(updatedUser.firstName);
+    }
     if (updatedUser?.lastName) setUserLastName(updatedUser.lastName);
   };
 
@@ -233,9 +423,10 @@ export default function DashboardOverviewPage() {
   const canFundWallet = isOwnerOrAdmin || userRole === 'FINANCE';
   const canViewApiKeys = isOwnerOrAdmin || userRole === 'DEVELOPER';
   const canExecuteServices = isOwnerOrAdmin || userRole === 'DEVELOPER' || userRole === 'SUPPORT';
+  const isVerified = kycStatus === 'VERIFIED';
 
-  const handleServiceClick = (serviceName: string, serviceRoute: string) => {
-    if (isOwnerOrAdmin && kycStatus !== 'VERIFIED') {
+  const handleServiceClick = (serviceRoute: string) => {
+    if (isOwnerOrAdmin && !isVerified) {
       setIsKycModalOpen(true);
       return;
     }
@@ -244,98 +435,20 @@ export default function DashboardOverviewPage() {
 
   const handleFundWalletClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (isOwnerOrAdmin && kycStatus !== 'VERIFIED') {
+    if (isOwnerOrAdmin && !isVerified) {
       setIsKycModalOpen(true);
       return;
     }
     setIsFundModalOpen(true);
   };
 
-  const isVerified = kycStatus === 'VERIFIED';
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const services = [
-    {
-      id: 'airtime',
-      name: 'Airtime Recharge',
-      desc: 'MTN, Airtel, Glo & 9mobile',
-      route: '/dashboard/airtime',
-      icon: Smartphone,
-      iconColor: 'bg-blue-500/10 text-[#126BEB] dark:bg-blue-500/15 dark:text-[#38BDF8] border-blue-500/20',
-      providers: [
-        { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
-        { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
-        { name: 'Glo', logo: '/logos/telecom/glo.svg' },
-        { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
-      ],
-    },
-    {
-      id: 'data',
-      name: 'Data Bundles',
-      desc: 'SME, Corporate & Direct gifting',
-      route: '/dashboard/data',
-      icon: Wifi,
-      iconColor: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-500/20',
-      providers: [
-        { name: 'MTN', logo: '/logos/telecom/mtn.svg' },
-        { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
-        { name: 'Glo', logo: '/logos/telecom/glo.svg' },
-        { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
-      ],
-    },
-    {
-      id: 'electricity',
-      name: 'Electricity',
-      desc: 'Prepaid tokens & postpaid bills',
-      route: '/dashboard/electricity',
-      icon: Zap,
-      iconColor: 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400 border-amber-500/20',
-      providers: [
-        { name: 'IKEDC', logo: '/logos/electricity/ikedc.png' },
-        { name: 'EKEDC', logo: '/logos/electricity/ekedc.png' },
-        { name: 'AEDC', logo: '/logos/electricity/aedc.png' },
-        { name: 'IBEDC', logo: '/logos/electricity/ibedc.png' },
-      ],
-    },
-    {
-      id: 'cable',
-      name: 'Cable TV (PayTV)',
-      desc: 'DStv, GOtv, StarTimes & Showmax',
-      route: '/dashboard/cable',
-      icon: Tv,
-      iconColor: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400 border-purple-500/20',
-      providers: [
-        { name: 'DStv', logo: '/logos/cable/dstv.svg' },
-        { name: 'GOtv', logo: '/logos/cable/gotv.png' },
-        { name: 'StarTimes', logo: '/logos/cable/startimes.svg' },
-        { name: 'Showmax', logo: '/logos/cable/showmax.svg' },
-      ],
-    },
-    {
-      id: 'education',
-      name: 'Exam PINs',
-      desc: 'WAEC, JAMB, NECO & NABTEB',
-      route: '/dashboard/education',
-      icon: GraduationCap,
-      iconColor: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-500/20',
-      providers: [
-        { name: 'WAEC', logo: '/logos/education/waec.png' },
-        { name: 'JAMB', logo: '/logos/education/jamb.png' },
-        { name: 'NECO', logo: '/logos/education/neco.png' },
-        { name: 'NABTEB', logo: '/logos/education/nabteb.png' },
-      ],
-    },
-  ];
+  const todayCountLabel =
+    todayTelemetry.totalCount === 1
+      ? `1 transaction today (${todayTelemetry.successfulCount} successful)`
+      : `${todayTelemetry.totalCount} transactions today`;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
-      {/* Sidebar */}
+    <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -346,7 +459,6 @@ export default function DashboardOverviewPage() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Container */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -359,78 +471,71 @@ export default function DashboardOverviewPage() {
           onRefresh={handleRefresh}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 sm:space-y-8">
-          {/* Identity Verification Warning Banner */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-8">
           <KycBanner
             kycStatus={kycStatus}
             userRole={userRole}
             onOpenKycModal={() => setIsKycModalOpen(true)}
           />
 
-          {/* Simple Greeting */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                {getGreeting()}{merchantName ? `, ${merchantName}` : ''}
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                {businessName ? `${businessName} Workspace` : 'Workspace'}
-              </p>
-            </div>
+          {/* Greeting */}
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+              {greeting}
+              {merchantName ? `, ${merchantName}` : ''}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {businessName || 'Workspace'}
+            </p>
           </div>
 
-          {/* Wallet Section: Sleek Virtual Card & Today's Volume */}
+          {/* Wallet & Daily Volume */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
-            {/* ATM Virtual Card (col-span-12 lg:col-span-7) */}
-            <div className="lg:col-span-7 rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg bg-gradient-to-br from-[#0F1E36] via-[#091322] to-[#040A14] border border-slate-700/60 text-white flex flex-col justify-between group transition-all">
-              {/* Subtle background glow */}
-              <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-blue-500/10 blur-2xl group-hover:bg-blue-500/20 transition-all pointer-events-none" />
-
-              {/* Card Top: Chip, Contactless Symbol & Brand */}
-              <div className="flex items-center justify-between z-10">
-                <div className="flex items-center gap-2.5">
-                  {/* Golden EMV Chip */}
-                  <div className="w-8 h-5.5 rounded bg-gradient-to-tr from-amber-400 via-amber-300 to-yellow-500 border border-amber-300/60 shadow-xs flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-amber-600/40" />
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[1px] bg-amber-600/40" />
-                    <div className="w-3.5 h-2.5 rounded-[2px] border border-amber-600/40" />
+            {/* Primary Wallet Card */}
+            <div className="lg:col-span-7 rounded-2xl p-5 bg-gradient-to-br from-[#0F1E36] via-[#0A1527] to-[#060D1A] border border-slate-800/90 text-white flex flex-col justify-between gap-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>Available Balance</span>
+                    <button
+                      type="button"
+                      onClick={handleToggleHideBalance}
+                      className="text-slate-400 hover:text-white transition-colors p-0.5 rounded"
+                      aria-label={hideBalance ? 'Show balance' : 'Hide balance'}
+                      title={hideBalance ? 'Show balance' : 'Hide balance'}
+                    >
+                      {hideBalance ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
-                  {/* Contactless waves symbol */}
-                  <svg className="w-3.5 h-3.5 text-slate-400 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.5 16.5a5 5 0 010-9M12 19a8.5 8.5 0 000-14M15.5 21.5a12 12 0 000-19" />
-                  </svg>
+
+                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-white mt-1.5 min-h-[36px] flex items-center">
+                    {!isHydrated || isLoadingBalance ? (
+                      <div className="h-8 w-44 bg-white/15 rounded-lg animate-pulse" />
+                    ) : hideBalance ? (
+                      '••••••••'
+                    ) : (
+                      walletBalance
+                    )}
+                  </div>
                 </div>
 
-                <span className="text-xs font-black tracking-widest text-slate-300">BAXATO</span>
-              </div>
-
-              {/* Card Center: Balance Display */}
-              <div className="my-2.5 z-10">
-                <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  <span>Available Balance</span>
-                  <button
-                    onClick={() => setShowBalance(!showBalance)}
-                    className="text-slate-400 hover:text-white transition-colors p-0.5"
-                    title={showBalance ? 'Hide Balance' : 'Show Balance'}
-                  >
-                    {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-0.5 min-h-[36px] flex items-center">
-                  {isLoadingBalance ? (
-                    <div className="h-8 w-44 bg-white/15 rounded-lg animate-pulse" />
-                  ) : showBalance ? (
-                    walletBalance
-                  ) : (
-                    '••••••••'
-                  )}
+                <div className="text-right shrink-0">
+                  <span className="text-xs text-slate-400 block">Commission</span>
+                  <span className="text-sm font-semibold tabular-nums text-slate-200 mt-1 inline-block">
+                    {!isHydrated || isLoadingBalance ? (
+                      <span className="inline-block h-4 w-16 bg-white/10 rounded animate-pulse align-middle" />
+                    ) : hideBalance ? (
+                      '••••••'
+                    ) : (
+                      commissionBalance
+                    )}
+                  </span>
                 </div>
               </div>
 
-              {/* Card Bottom: Holder Name & Quick Actions */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-white/10 z-10">
-                <span className="text-[11px] font-medium tracking-wide uppercase text-slate-300 truncate max-w-[200px]">
-                  {merchantName} • {businessName}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 border-t border-white/10">
+                <span className="text-xs text-slate-300 truncate max-w-[260px]">
+                  {[merchantName, businessName].filter(Boolean).join(' • ') || 'BAXATO Wallet'}
                 </span>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -438,7 +543,7 @@ export default function DashboardOverviewPage() {
                     <button
                       type="button"
                       onClick={handleFundWalletClick}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0D58C8] text-white inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Fund Wallet</span>
@@ -447,7 +552,7 @@ export default function DashboardOverviewPage() {
                   {canViewApiKeys && (
                     <Link
                       href="/dashboard/developer"
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 flex items-center gap-1 border border-white/10 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-100 inline-flex items-center gap-1.5 border border-white/10 transition-colors whitespace-nowrap shrink-0"
                     >
                       <Key className="w-3.5 h-3.5 text-[#38BDF8]" />
                       <span>API Keys</span>
@@ -456,7 +561,7 @@ export default function DashboardOverviewPage() {
                   {(userRole === 'FINANCE' || userRole === 'VIEWER') && (
                     <Link
                       href="/dashboard/ledger"
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 flex items-center gap-1 border border-white/10 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-100 inline-flex items-center gap-1.5 border border-white/10 transition-colors whitespace-nowrap shrink-0"
                     >
                       <Receipt className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Statements</span>
@@ -466,184 +571,187 @@ export default function DashboardOverviewPage() {
               </div>
             </div>
 
-            {/* Today's Volume (col-span-12 lg:col-span-5) */}
-            <div className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            {/* Today's Telemetry Card */}
+            <div className="lg:col-span-5 p-5 rounded-2xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between gap-4">
               <div>
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Today&apos;s Volume
                 </span>
                 <div className="mt-1.5">
-                  <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
-                    ₦0.00
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">0 transactions completed today</p>
+                  {isLoadingTelemetry ? (
+                    <div className="h-8 w-36 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
+                  ) : (
+                    <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">
+                      {todayTelemetry.formattedTotalVolume}
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+                    {isLoadingTelemetry ? 'Loading activity...' : todayCountLabel}
+                  </p>
                 </div>
               </div>
 
-              <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-400">
-                <span>Real-time wallet settlement</span>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Daily summary</span>
+                <Link
+                  href="/dashboard/analytics"
+                  className="font-medium text-[#126BEB] dark:text-[#38BDF8] hover:underline whitespace-nowrap shrink-0"
+                >
+                  View analytics
+                </Link>
               </div>
             </div>
           </div>
 
           {/* Quick Services Grid */}
           {canExecuteServices && (
-            <div className="space-y-3">
+            <section className="space-y-3.5">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                  Quick Services
+                  Services
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Airtime, data bundles, utility bills, cable TV, and exam PINs
+                  Airtime, mobile data, electricity, cable TV, and exam PINs
                 </p>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                {services.map((svc) => (
+                {QUICK_SERVICES.map((svc) => (
                   <button
                     key={svc.id}
-                    onClick={() => handleServiceClick(svc.name, svc.route)}
-                    className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200/90 dark:border-slate-800 text-left transition-all duration-150 group relative flex flex-col justify-between shadow-xs hover:border-[#126BEB]/50 hover:shadow-md min-h-[160px]"
+                    type="button"
+                    onClick={() => handleServiceClick(svc.route)}
+                    className="p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-left transition-colors duration-150 group relative flex flex-col justify-between gap-4 hover:border-[#126BEB]/50 dark:hover:border-[#38BDF8]/40 cursor-pointer"
                   >
-                    {/* Subtle Lock in Corner when unverified */}
                     {!isVerified && (
                       <div
-                        className="absolute top-2.5 right-2.5 p-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 z-10"
-                        title="NIMC Verification required"
+                        className="absolute top-3 right-3 p-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                        title="Identity verification required"
                       >
                         <Lock className="w-3 h-3" />
                       </div>
                     )}
 
-                    <div className="space-y-2.5">
-                      {/* Native Vector Category Icon Badge (Crisp & Authentic) */}
-                      <div
-                        className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center border shadow-xs transition-transform duration-200 group-hover:scale-105 ${svc.iconColor}`}
-                      >
-                        <svc.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <div className="space-y-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-[#0E1A30] border border-slate-200/80 dark:border-slate-800 p-2 relative shrink-0">
+                        <Image
+                          src={svc.logo}
+                          alt={svc.name}
+                          fill
+                          sizes="40px"
+                          className="object-contain p-1.5"
+                        />
                       </div>
 
                       <div>
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#126BEB] dark:group-hover:text-[#38BDF8] transition-colors leading-tight">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-[#126BEB] dark:group-hover:text-[#38BDF8] transition-colors leading-tight">
                           {svc.name}
                         </h3>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5 line-clamp-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
                           {svc.desc}
                         </p>
                       </div>
                     </div>
 
-                    {/* Clean brand icons row */}
-                    <div className="pt-2 mt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                      <div className="flex items-center -space-x-1 overflow-hidden">
-                        {svc.providers.map((p) => (
-                          <div
-                            key={p.name}
-                            title={p.name}
-                            className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white dark:bg-[#070E1C] border border-slate-200 dark:border-slate-700/80 p-0.5 relative shrink-0 shadow-xs"
-                          >
-                            <Image
-                              src={p.logo}
-                              alt={p.name}
-                              fill
-                              sizes="20px"
-                              className="object-contain rounded-full"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#126BEB] transition-transform group-hover:translate-x-0.5" />
+                    <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center -space-x-1.5">
+                      {svc.providers.map((p) => (
+                        <div
+                          key={p.name}
+                          title={p.name}
+                          className={`w-5 h-5 rounded-full relative shrink-0 overflow-hidden ring-1 ring-slate-200/90 dark:ring-slate-700/80 ${
+                            p.fullBleed ? 'bg-transparent' : 'bg-white p-0.5'
+                          }`}
+                        >
+                          <Image
+                            src={p.logo}
+                            alt={p.name}
+                            fill
+                            sizes="20px"
+                            className={p.fullBleed ? 'object-cover' : 'object-contain'}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Transaction History Section */}
-          <div className="space-y-3 pt-1">
-            <div className="flex items-center justify-between">
+          {/* Unboxed Recent Transactions */}
+          <section className="space-y-3 pt-1">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                  Transaction History
+                  Recent Transactions
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Latest vending activity and transaction status
+                  Latest workspace transactions
                 </p>
               </div>
 
               <Link
                 href="/dashboard/ledger"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
+                className="text-xs font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline whitespace-nowrap shrink-0"
               >
-                <span>Full History</span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                Full history
               </Link>
             </div>
 
-            {/* Transactions Content */}
             {transactions.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
-                No transactions recorded yet. Real-time vending receipts will appear here.
+              <div className="py-10 border-t border-b border-slate-200/80 dark:border-slate-800/80 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                No transactions yet. Completed purchases will appear here.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528]">
-                <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+              <div className="overflow-x-auto border-t border-b border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left border-collapse text-xs sm:text-[13px] whitespace-nowrap">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-[#070F1E] border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-4">Reference</th>
-                      <th className="py-2.5 px-4">Service</th>
-                      <th className="py-2.5 px-4">Recipient</th>
-                      <th className="py-2.5 px-4">Amount</th>
-                      <th className="py-2.5 px-4">Status</th>
-                      <th className="py-2.5 px-4">Date</th>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <th className="py-3 pr-4">Reference</th>
+                      <th className="py-3 px-4">Service</th>
+                      <th className="py-3 px-4">Recipient</th>
+                      <th className="py-3 px-4">Amount</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 pl-4 text-right">Date</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {transactions.map((txn) => {
-                      const getStatusBadgeClass = (status: string) => {
-                        switch (status?.toUpperCase()) {
-                          case 'SUCCESSFUL':
-                            return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60';
-                          case 'FAILED':
-                            return 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60';
-                          case 'PROCESSING':
-                          case 'PENDING':
-                            return 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60';
-                          case 'REVERSED':
-                            return 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-200 dark:border-purple-800/60';
-                          default:
-                            return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-                        }
-                      };
-
-                      return (
-                        <tr key={txn.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
-                          <td className="py-2.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                            {txn.reference}
-                          </td>
-                          <td className="py-2.5 px-4">{txn.service}</td>
-                          <td className="py-2.5 px-4 font-mono">{txn.recipient}</td>
-                          <td className="py-2.5 px-4 font-bold">₦{txn.amount.toLocaleString()}</td>
-                          <td className="py-2.5 px-4">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusBadgeClass(
-                                txn.status,
-                              )}`}
-                            >
-                              {txn.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-4 text-slate-400">{txn.date}</td>
-                        </tr>
-                      );
-                    })}
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {transactions.map((txn) => (
+                      <tr
+                        key={txn.id}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"
+                      >
+                        <td className="py-3 pr-4 font-medium text-slate-900 dark:text-white">
+                          {txn.reference}
+                        </td>
+                        <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                          {txn.service}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 tabular-nums">
+                          {txn.recipient}
+                        </td>
+                        <td className="py-3 px-4 font-semibold tabular-nums text-slate-900 dark:text-white">
+                          ₦{txn.amount.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusBadgeClass(
+                              txn.status,
+                            )}`}
+                          >
+                            {formatStatusLabel(txn.status)}
+                          </span>
+                        </td>
+                        <td className="py-3 pl-4 text-right text-slate-500 dark:text-slate-400 tabular-nums">
+                          {txn.date}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </section>
         </main>
       </div>
 
@@ -656,74 +764,84 @@ export default function DashboardOverviewPage() {
         userLastName={userLastName}
       />
 
-      {/* Fund Merchant Wallet Modal */}
+      {/* Fund Wallet Modal */}
       {isFundModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center font-bold">
                   ₦
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                    Fund Operational Wallet
+                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                    Fund Wallet
                   </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Instant automated balance replenishment
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Workspace balance replenishment
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsFundModalOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#060D18] border border-slate-200/80 dark:border-slate-800/80 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 dark:text-slate-400">Bank Destination</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">Wema Bank / Monnify</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 dark:text-slate-400">Account Name</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
-                  BAXATO / {businessName}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200/80 dark:border-slate-800 space-y-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Workspace</span>
+                <span className="font-medium text-slate-900 dark:text-white truncate max-w-[220px]">
+                  {businessName || 'BAXATO Workspace'}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/50 dark:border-slate-800/50">
-                <span className="text-slate-500 dark:text-slate-400">Virtual Treasury Ref</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    9982401827
-                  </span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText('9982401827');
-                      setCopiedBank(true);
-                      setTimeout(() => setCopiedBank(false), 2000);
-                    }}
-                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                  >
-                    {copiedBank ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+              {businessId && (
+                <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400">Workspace Reference</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-medium text-slate-900 dark:text-white truncate max-w-[160px]">
+                      {businessId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(businessId);
+                        setCopiedWorkspaceRef(true);
+                        setTimeout(() => setCopiedWorkspaceRef(false), 2000);
+                      }}
+                      className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white shrink-0"
+                      title="Copy workspace reference"
+                    >
+                      {copiedWorkspaceRef ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            <p className="text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Electronic fund transfers to your dedicated merchant account reflect in your BAXATO main wallet automatically in under <span className="font-bold text-slate-700 dark:text-slate-300">5 seconds</span> with zero manual confirmation required.
+            <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Dedicated transfer accounts are provisioned after merchant onboarding. Contact{' '}
+              <a
+                href="mailto:support@baxato.com"
+                className="font-medium text-[#126BEB] dark:text-[#38BDF8] hover:underline"
+              >
+                support@baxato.com
+              </a>{' '}
+              with your workspace reference for wallet funding assistance.
             </p>
 
             <button
+              type="button"
               onClick={() => setIsFundModalOpen(false)}
-              className="w-full py-2.5 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-bold text-xs shadow-xs transition-colors"
+              className="w-full py-2.5 rounded-lg bg-[#126BEB] hover:bg-[#0D58C8] text-white font-semibold text-xs transition-colors"
             >
               Done
             </button>

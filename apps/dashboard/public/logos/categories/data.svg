@@ -1,0 +1,10 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="22" cy="24" r="13" fill="#0EA5E9" fill-opacity="0.14" stroke="#0EA5E9" stroke-width="2.4"/>
+  <ellipse cx="22" cy="24" rx="6" ry="13" stroke="#126BEB" stroke-width="2.2"/>
+  <path d="M9.5 24H34.5" stroke="#0EA5E9" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- Speed transfer pill -->
+  <rect x="27" y="25" width="13" height="13" rx="6.5" fill="#126BEB"/>
+  <path d="M31.5 33.5V29.5M31.5 29.5L29.5 31.5M31.5 29.5L33.5 31.5" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M36 29.5V33.5M36 33.5L34.2 31.8M36 33.5L37.8 31.8" stroke="#38BDF8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+

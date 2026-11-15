@@ -63,6 +63,7 @@ export const users = pgTable(
     twoFactorMethod: text('two_factor_method'),
     twoFactorSecret: text('two_factor_secret'),
     twoFactorBackupCodes: jsonb('two_factor_backup_codes').default([]).notNull(),
+    hideBalance: boolean('hide_balance').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

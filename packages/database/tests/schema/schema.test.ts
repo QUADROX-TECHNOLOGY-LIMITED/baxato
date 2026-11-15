@@ -33,6 +33,7 @@ describe('Database Schemas Specification', () => {
     expect(userCols.kycStatus).toBeDefined();
     expect(userCols.isEmailVerified).toBeDefined();
     expect(userCols.isPhoneVerified).toBeDefined();
+    expect(userCols.hideBalance).toBeDefined();
 
     const bizCols = getTableColumns(businesses);
     expect(bizCols.id.primary).toBe(true);

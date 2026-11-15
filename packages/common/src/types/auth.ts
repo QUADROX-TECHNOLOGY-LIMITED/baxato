@@ -54,6 +54,7 @@ export const updateUserProfileSchema = z.object({
   firstName: z.string().min(2).optional(),
   lastName: z.string().min(2).optional(),
   middleName: z.string().optional(),
+  hideBalance: z.boolean().optional(),
 });
 
 export type UpdateUserProfileInput = z.infer<typeof updateUserProfileSchema>;

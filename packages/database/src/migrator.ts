@@ -41,6 +41,7 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_method TEXT;`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_backup_codes JSONB DEFAULT '[]'::jsonb NOT NULL;`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS hide_balance BOOLEAN DEFAULT FALSE NOT NULL;`;
 
     // Idempotent schema guarantee for Team & RBAC
     try {

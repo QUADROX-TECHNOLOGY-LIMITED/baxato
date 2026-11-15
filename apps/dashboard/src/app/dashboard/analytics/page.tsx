@@ -218,8 +218,8 @@ function getOperatorLogo(operator: string): { logoUrl: string | null; bg: string
   if (norm.includes('9MOBILE') || norm.includes('ETISALAT')) return { logoUrl: '/logos/telecom/9mobile.svg', bg: 'bg-teal-500/10 border-teal-300 dark:border-teal-900/50' };
 
   // Cable TV Providers
-  if (norm.includes('DSTV')) return { logoUrl: '/logos/cable/dstv.svg', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };
-  if (norm.includes('GOTV')) return { logoUrl: '/logos/cable/gotv.png', bg: 'bg-yellow-500/10 border-yellow-300 dark:border-yellow-900/50' };
+  if (norm.includes('DSTV')) return { logoUrl: '/logos/cable/dstv.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
+  if (norm.includes('GOTV')) return { logoUrl: '/logos/cable/gotv.svg', bg: 'bg-white border-slate-200 dark:border-slate-700' };
   if (norm.includes('STARTIMES')) return { logoUrl: '/logos/cable/startimes.svg', bg: 'bg-purple-500/10 border-purple-300 dark:border-purple-900/50' };
   if (norm.includes('SHOWMAX')) return { logoUrl: '/logos/cable/showmax.svg', bg: 'bg-rose-500/10 border-rose-300 dark:border-rose-900/50' };
 
@@ -229,7 +229,7 @@ function getOperatorLogo(operator: string): { logoUrl: string | null; bg: string
   if (norm.includes('AEDC') || norm.includes('ABUJA')) return { logoUrl: '/logos/electricity/aedc.png', bg: 'bg-emerald-500/10 border-emerald-300 dark:border-emerald-900/50' };
   if (norm.includes('IBEDC') || norm.includes('IBADAN')) return { logoUrl: '/logos/electricity/ibedc.png', bg: 'bg-amber-500/10 border-amber-300 dark:border-amber-900/50' };
   if (norm.includes('EEDC') || norm.includes('ENUGU')) return { logoUrl: '/logos/electricity/eedc.png', bg: 'bg-red-500/10 border-red-300 dark:border-red-900/50' };
-  if (norm.includes('PHED') || norm.includes('PORT')) return { logoUrl: '/logos/electricity/phed.png', bg: 'bg-purple-500/10 border-purple-300 dark:border-purple-900/50' };
+  if (norm.includes('PHED') || norm.includes('PORT')) return { logoUrl: '/logos/electricity/phed.svg', bg: 'bg-blue-900/10 border-blue-300 dark:border-blue-800/50' };
   if (norm.includes('BEDC') || norm.includes('BENIN')) return { logoUrl: '/logos/electricity/bedc.png', bg: 'bg-teal-500/10 border-teal-300 dark:border-teal-900/50' };
   if (norm.includes('KEDCO') || norm.includes('KANO')) return { logoUrl: '/logos/electricity/kedco.png', bg: 'bg-orange-500/10 border-orange-300 dark:border-orange-900/50' };
   if (norm.includes('KAEDCO') || norm.includes('KADUNA')) return { logoUrl: '/logos/electricity/kaedco.png', bg: 'bg-blue-500/10 border-blue-300 dark:border-blue-900/50' };

@@ -1,0 +1,14 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="32" cy="32" r="32" fill="#1E3A8A"/>
+  <!-- High-contrast electric bolt + PHED monogram -->
+  <path d="M34.5 11L25.5 25H31.8L29.5 34L39.5 20.5H33L34.5 11Z" fill="#FBBF24"/>
+  <!-- P -->
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M12 39H16.8C18.9 39 20.2 40.2 20.2 42.1C20.2 44 18.9 45.2 16.8 45.2H14.5V49H12V39ZM14.5 41.1V43.1H16.4C17.3 43.1 17.8 42.7 17.8 42.1C17.8 41.5 17.3 41.1 16.4 41.1H14.5Z" fill="#FFFFFF"/>
+  <!-- H -->
+  <path d="M21.8 39H24.3V42.9H27.7V39H30.2V49H27.7V45H24.3V49H21.8V39Z" fill="#FFFFFF"/>
+  <!-- E -->
+  <path d="M32.1 39H39.3V41.1H34.6V42.9H38.7V45H34.6V46.9H39.4V49H32.1V39Z" fill="#FFFFFF"/>
+  <!-- D -->
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M41.2 39H45.4C48.3 39 50.3 41 50.3 44C50.3 47 48.3 49 45.4 49H41.2V39ZM43.7 41.2V46.8H45.3C46.8 46.8 47.8 45.7 47.8 44C47.8 42.3 46.8 41.2 45.3 41.2H43.7Z" fill="#FFFFFF"/>
+</svg>
+

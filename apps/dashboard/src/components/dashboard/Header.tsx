@@ -4,8 +4,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Menu,
-  Search,
-  Bell,
   RefreshCw,
   ShieldCheck,
   AlertCircle,
@@ -118,7 +116,7 @@ export default function Header({
   return (
     <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-2.5 sm:px-6 lg:px-8 py-2 sm:py-3 transition-colors duration-150`}>
       <div className="flex items-center justify-between gap-2 sm:gap-4">
-        {/* Left Side: Mobile Menu Button, Business Switcher & Search */}
+        {/* Left Side: Mobile Menu Button & Business Switcher */}
         <div className="flex items-center gap-1.5 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onToggleSidebar}
@@ -129,25 +127,12 @@ export default function Header({
           </button>
 
           {/* Business Workspace Switcher in Header (accessible directly on mobile & desktop) */}
-          <div className="min-w-0 max-w-[130px] xs:max-w-[160px] sm:max-w-[220px] md:max-w-[260px]">
+          <div className="min-w-0 max-w-[160px] sm:max-w-[240px] md:max-w-[280px]">
             <BusinessSwitcher currentBusinessName={currentBiz?.name || businessName} variant="header" />
-          </div>
-
-          {/* Quick Search */}
-          <div className="relative w-full max-w-xs hidden md:block">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search transactions or services..."
-              className="w-full h-9 pl-9 pr-12 text-xs rounded-xl bg-slate-100/80 dark:bg-[#0E1828] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#126BEB] focus:border-[#126BEB] transition-all"
-            />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#070D18] text-[10px] font-mono text-slate-400">
-              ⌘K
-            </div>
           </div>
         </div>
 
-        {/* Right Side: Refresh, Theme, Bell & Profile */}
+        {/* Right Side: Refresh, Theme & Profile */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Refresh Balances */}
           <button
@@ -159,15 +144,6 @@ export default function Header({
             <RefreshCw
               className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#126BEB]' : ''}`}
             />
-          </button>
-
-          {/* Notification Bell */}
-          <button
-            title="Notifications"
-            aria-label="Notifications"
-            className="relative p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
-          >
-            <Bell className="w-4 h-4" />
           </button>
 
           {/* Theme Toggle (Light / System / Dark) */}

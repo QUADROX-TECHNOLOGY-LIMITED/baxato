@@ -39,6 +39,7 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
         kycStatus: users.kycStatus,
         role: users.role,
         status: users.status,
+        hideBalance: users.hideBalance,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -134,6 +135,7 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
         ...(data.firstName ? { firstName: data.firstName.trim() } : {}),
         ...(data.lastName ? { lastName: data.lastName.trim() } : {}),
         ...(data.middleName !== undefined ? { middleName: data.middleName ? data.middleName.trim() : null } : {}),
+        ...(data.hideBalance !== undefined ? { hideBalance: data.hideBalance } : {}),
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
@@ -143,20 +145,26 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError('User not found');
     }
 
-    await auditService.log({
-      userId: updatedUser.id,
-      businessId: request.user?.businessId,
-      action: 'PROFILE_UPDATED',
-      resourceType: 'USER',
-      resourceId: updatedUser.id,
-      ipAddress: request.ip,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
-      changes: {
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        middleName: updatedUser.middleName,
-      },
-    });
+    const hasProfileChange = Boolean(
+      data.firstName || data.lastName || data.middleName !== undefined,
+    );
+
+    if (hasProfileChange) {
+      await auditService.log({
+        userId: updatedUser.id,
+        businessId: request.user?.businessId,
+        action: 'PROFILE_UPDATED',
+        resourceType: 'USER',
+        resourceId: updatedUser.id,
+        ipAddress: request.ip,
+        userAgent: (request.headers['user-agent'] as string) || undefined,
+        changes: {
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          middleName: updatedUser.middleName,
+        },
+      });
+    }
 
     return reply.status(200).send(
       createSuccessResponse(

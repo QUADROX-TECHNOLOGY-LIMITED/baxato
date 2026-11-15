@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ArrowRight, ShieldAlert, AlertCircle } from 'lucide-react';
+import { ShieldAlert, AlertCircle } from 'lucide-react';
 
 interface KycBannerProps {
   kycStatus: string;
@@ -68,7 +68,7 @@ export default function KycBanner({ kycStatus, userRole, onOpenKycModal }: KycBa
             <p className="text-xs mt-0.5 text-slate-600 dark:text-slate-300">
               {isRejected
                 ? 'Your previous verification details did not match official records. Please check and try again.'
-                : 'Complete identity verification to enable wallet funding and start vending.'}
+                : 'Verify your identity to enable wallet funding and live transactions.'}
             </p>
           </div>
         </div>
@@ -76,14 +76,13 @@ export default function KycBanner({ kycStatus, userRole, onOpenKycModal }: KycBa
         <div className="shrink-0 self-start sm:self-center">
           <button
             onClick={onOpenKycModal}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-semibold text-xs text-white shadow-sm transition-colors ${
+            className={`inline-flex items-center justify-center px-3.5 py-2 rounded-lg font-semibold text-xs text-white shadow-sm whitespace-nowrap shrink-0 transition-colors ${
               isRejected
                 ? 'bg-red-600 hover:bg-red-700'
                 : 'bg-[#126BEB] hover:bg-[#0B5CC7]'
             }`}
           >
             <span>{isRejected ? 'Try Again' : 'Verify Identity'}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

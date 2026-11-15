@@ -232,6 +232,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             isPhoneVerified: newUser.isPhoneVerified,
             kycStatus: newUser.kycStatus,
             role: newUser.role,
+            hideBalance: false,
           },
           business: newBusiness
             ? {
@@ -572,6 +573,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             isPhoneVerified: user.isPhoneVerified,
             kycStatus: user.kycStatus,
             role: user.role,
+            hideBalance: Boolean(user.hideBalance),
           },
           business: biz
             ? {
@@ -742,6 +744,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             lastName: user.lastName,
             role: user.role,
             kycStatus: user.kycStatus,
+            hideBalance: Boolean(user.hideBalance),
           },
           token,
           message: 'Staff authentication successful. Welcome to Baxato Operations Console.',
@@ -903,6 +906,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             lastName: user.lastName,
             role: user.role,
             kycStatus: user.kycStatus,
+            hideBalance: Boolean(user.hideBalance),
           },
           token,
           message: 'Admin authentication successful.',
@@ -1076,6 +1080,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
             lastName: user.lastName,
             role: user.role,
             kycStatus: user.kycStatus,
+            hideBalance: Boolean(user.hideBalance),
           },
           token,
           message: 'Two-Factor Authentication successfully enrolled. Welcome to Baxato Staff Operations.',

@@ -1,0 +1,7 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Meter dial ring -->
+  <circle cx="24" cy="24" r="14" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-width="2.4"/>
+  <!-- High-contrast electric bolt -->
+  <path d="M25.8 13.5L17.2 25.2H23.6L21.8 34.5L30.8 22.4H24.3L25.8 13.5Z" fill="#F59E0B" stroke="#D97706" stroke-width="1.4" stroke-linejoin="round"/>
+</svg>
+

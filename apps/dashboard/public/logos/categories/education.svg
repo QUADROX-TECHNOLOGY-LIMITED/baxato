@@ -1,0 +1,10 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mortarboard crown -->
+  <path d="M24 11L9 18.5L24 26L39 18.5L24 11Z" fill="#10B981" fill-opacity="0.18" stroke="#10B981" stroke-width="2.4" stroke-linejoin="round"/>
+  <!-- Cap band -->
+  <path d="M14.5 21.5V29.5C14.5 32.3 18.8 34.5 24 34.5C29.2 34.5 33.5 32.3 33.5 29.5V21.5" stroke="#10B981" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Tassel cord + pin -->
+  <path d="M36.5 20V29.5" stroke="#059669" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="36.5" cy="31.5" r="2" fill="#10B981"/>
+</svg>
+

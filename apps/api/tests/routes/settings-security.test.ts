@@ -422,4 +422,54 @@ describe('Settings & Security Endpoints (/users/me/security & /auth/change-passw
     const statusBody: ApiResponse<{ enabled: boolean }> = statusRes.json();
     expect(statusBody.data?.enabled).toBe(false);
   });
+
+  it('PATCH /users/me persists hideBalance preference across /users/me and /auth/login', async () => {
+    const initialRes = await app.inject({
+      method: 'GET',
+      url: '/users/me',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    expect(initialRes.statusCode).toBe(200);
+    const initialBody: ApiResponse<{ user: { hideBalance: boolean } }> = initialRes.json();
+    expect(initialBody.data?.user.hideBalance).toBe(false);
+
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: '/users/me',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+      payload: {
+        hideBalance: true,
+      },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    const patchBody: ApiResponse<{ user: { hideBalance: boolean } }> = patchRes.json();
+    expect(patchBody.data?.user.hideBalance).toBe(true);
+
+    const verifyMeRes = await app.inject({
+      method: 'GET',
+      url: '/users/me',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    expect(verifyMeRes.statusCode).toBe(200);
+    const verifyMeBody: ApiResponse<{ user: { hideBalance: boolean } }> = verifyMeRes.json();
+    expect(verifyMeBody.data?.user.hideBalance).toBe(true);
+
+    const reloginRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
+        email: userEmail,
+        password: 'BrandNewPassword2026!',
+      },
+    });
+    expect(reloginRes.statusCode).toBe(200);
+    const reloginBody: ApiResponse<{ user: { hideBalance: boolean } }> = reloginRes.json();
+    expect(reloginBody.data?.user.hideBalance).toBe(true);
+  });
 });

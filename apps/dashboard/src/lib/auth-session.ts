@@ -14,6 +14,7 @@ export interface StoredUser {
   role?: string;
   kycStatus?: 'UNVERIFIED' | 'VERIFIED' | 'REJECTED';
   phone?: string;
+  hideBalance?: boolean;
 }
 
 export interface StoredBusiness {
@@ -106,6 +107,41 @@ export function getStoredUser(): StoredUser | null {
   }
 }
 
+function getHideBalanceStorageKey(userId?: string): string {
+  return userId ? `bx_hide_balance:${userId}` : 'bx_hide_balance';
+}
+
+/**
+ * Returns the cached balance visibility preference synchronously to prevent UI flash on reload.
+ */
+export function getStoredHideBalancePreference(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const user = getStoredUser();
+    const raw = localStorage.getItem(getHideBalanceStorageKey(user?.id));
+    if (raw === 'true' || raw === 'false') {
+      return raw === 'true';
+    }
+    return Boolean(user?.hideBalance);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Updates the cached balance visibility preference in localStorage and inside bx_user.
+ */
+export function setStoredHideBalancePreference(hideBalance: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const user = getStoredUser();
+    localStorage.setItem(getHideBalanceStorageKey(user?.id), String(hideBalance));
+    if (user) {
+      localStorage.setItem('bx_user', JSON.stringify({ ...user, hideBalance }));
+    }
+  } catch {}
+}
+
 /**
  * Retrieves the cached business profile from localStorage.
  */
@@ -163,9 +199,15 @@ export function clearSessionAndRedirect(reason: 'expired' | 'unauthorized' | 'lo
   if (typeof window === 'undefined') return;
 
   try {
+    const userRaw = localStorage.getItem('bx_user');
+    const userId = userRaw ? (JSON.parse(userRaw) as StoredUser)?.id : undefined;
     localStorage.removeItem('bx_auth_token');
     localStorage.removeItem('bx_user');
     localStorage.removeItem('bx_business');
+    localStorage.removeItem('bx_hide_balance');
+    if (userId) {
+      localStorage.removeItem(`bx_hide_balance:${userId}`);
+    }
     document.cookie = 'bx_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   } catch {}
 

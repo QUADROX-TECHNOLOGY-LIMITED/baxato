@@ -253,21 +253,21 @@ export default function Sidebar({
         {/* Header / Brand Logo */}
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-3 group">
-            <div className="relative w-8 h-8 rounded-xl overflow-hidden shadow-sm border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#0B1528] p-1 group-hover:scale-105 transition-transform">
+            <div className="relative w-8 h-8 shrink-0">
               <Image
-                src="/baxato-logo.jpg"
+                src="/baxato-mark.svg"
                 alt="BAXATO"
                 fill
                 priority
-                className="object-contain rounded-lg"
+                className="object-contain"
               />
             </div>
             <div>
-              <span className="font-black text-lg tracking-tight text-slate-900 dark:text-white block leading-tight">
+              <span className="font-bold text-lg tracking-tight text-slate-900 dark:text-white block leading-tight">
                 BAXATO
               </span>
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block">
-                Merchant Gateway
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
+                Merchant Console
               </span>
             </div>
           </Link>
@@ -414,7 +414,7 @@ export default function Sidebar({
             )}
 
             {/* Profile Card Pill */}
-            <div className="flex items-center justify-between p-2 rounded-2xl bg-rose-50/20 dark:bg-[#0A1220] border border-rose-100/60 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+            <div className="flex items-center justify-between p-2 rounded-2xl bg-slate-50/70 dark:bg-[#0A1220] border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
               <button
                 type="button"
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}

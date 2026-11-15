@@ -22,6 +22,7 @@ export interface MockUser {
   twoFactorMethod?: string | null;
   twoFactorSecret?: string | null;
   twoFactorBackupCodes?: string[];
+  hideBalance?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -509,6 +510,7 @@ export function createMockDatabase() {
           kycStatus: String(u.kycStatus || KycStatus.UNVERIFIED),
           isEmailVerified: Boolean(u.isEmailVerified),
           isPhoneVerified: Boolean(u.isPhoneVerified),
+          hideBalance: Boolean(u.hideBalance ?? false),
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -673,6 +675,7 @@ export function createMockDatabase() {
       role: 'role',
       status: 'status',
       kycStatus: 'kyc_status',
+      hideBalance: 'hide_balance',
     },
     businesses: {
       id: 'id',

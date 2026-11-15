@@ -1,0 +1,11 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Widescreen frame -->
+  <rect x="9" y="13" width="30" height="20" rx="4" fill="#6366F1" fill-opacity="0.14" stroke="#6366F1" stroke-width="2.4"/>
+  <!-- Stand base -->
+  <path d="M18 37H30M24 33V37" stroke="#6366F1" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- Crisp play prism -->
+  <path d="M21 19.2C21 18.4 21.9 17.9 22.6 18.3L29 22.1C29.7 22.5 29.7 23.5 29 23.9L22.6 27.7C21.9 28.1 21 27.6 21 26.8V19.2Z" fill="#6366F1"/>
+  <!-- Live broadcast arc -->
+  <path d="M35.5 9.5C37.6 10.6 39 12.6 39.2 14.9" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
+

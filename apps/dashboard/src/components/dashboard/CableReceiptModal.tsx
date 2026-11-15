@@ -100,7 +100,7 @@ export default function CableReceiptModal({
   const getOperatorLogo = (op: string) => {
     const o = op.toLowerCase();
     if (o.includes('dstv')) return '/logos/cable/dstv.svg';
-    if (o.includes('gotv')) return '/logos/cable/gotv.png';
+    if (o.includes('gotv')) return '/logos/cable/gotv.svg';
     if (o.includes('startimes')) return '/logos/cable/startimes.svg';
     if (o.includes('showmax')) return '/logos/cable/showmax.svg';
     return '/favicon.ico';

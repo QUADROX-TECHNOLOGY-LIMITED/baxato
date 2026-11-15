@@ -195,7 +195,7 @@ export default function KycModal({
                     Identity Verified
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Your NIMC records match your account details. Live vending access is now active.
+                    Your NIMC records matched. Live transactions and wallet funding are now active.
                   </p>
                 </div>
 
@@ -204,7 +204,7 @@ export default function KycModal({
                   onClick={onClose}
                   className="w-full py-2.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors"
                 >
-                  Continue to Dashboard
+                  Continue
                 </button>
               </motion.div>
             ) : (
@@ -314,10 +314,10 @@ export default function KycModal({
                       {isVerifying ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Verifying with NIMC...</span>
+                          <span>Verifying</span>
                         </>
                       ) : (
-                        <span>Verify & Unlock Account</span>
+                        <span>Verify Identity</span>
                       )}
                     </button>
                   </div>
