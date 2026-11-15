@@ -4,18 +4,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Zap,
   ArrowLeft,
   Wallet,
-  RefreshCw,
   Search,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
-  ShieldCheck,
+  Loader2,
   RotateCw,
   ArrowRightLeft,
   FileText,
+  X,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -35,6 +33,7 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import { useWalletBalance } from '@/lib/use-wallet-balance';
+import { showToast } from '@/lib/toast';
 
 export type MeterType = 'PREPAID' | 'POSTPAID';
 
@@ -382,6 +381,8 @@ export default function ElectricityPage() {
   });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
+  const [userFirstName, setUserFirstName] = useState<string>('');
+  const [userLastName, setUserLastName] = useState<string>('');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
@@ -396,7 +397,7 @@ export default function ElectricityPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
 
-  // Vending Form State - amount starts COMPLETELY EMPTY, never auto-selected
+  // Form State - amount starts empty, never auto-selected
   const [meterNumber, setMeterNumber] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [amount, setAmount] = useState('');
@@ -413,7 +414,6 @@ export default function ElectricityPage() {
   // Purchase & Modals State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ElectricityReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
@@ -433,7 +433,13 @@ export default function ElectricityPage() {
       if (storedUser) {
         if (storedBiz?.role) setUserRole(storedBiz.role);
         else if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
+        if (storedUser.firstName) {
+          setMerchantName(storedUser.firstName);
+          setUserFirstName(storedUser.firstName);
+        }
+        if (storedUser.lastName) {
+          setUserLastName(storedUser.lastName);
+        }
         if (storedUser.phone) setCustomerPhone(storedUser.phone);
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
         else setKycStatus('UNVERIFIED');
@@ -453,10 +459,50 @@ export default function ElectricityPage() {
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
 
+    const syncUserProfile = async () => {
+      try {
+        const currentToken = getStoredAuthToken();
+        if (!currentToken) return;
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (handleAuthResponse(res, data)) return;
+        if (res.ok && data?.success && data.data) {
+          const userData = data.data.user || data.data;
+          if (userData.kycStatus) setKycStatus(userData.kycStatus);
+          if (userData.firstName) {
+            setMerchantName(userData.firstName);
+            setUserFirstName(userData.firstName);
+          }
+          if (userData.lastName) {
+            setUserLastName(userData.lastName);
+          }
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({
+                  ...parsed,
+                  kycStatus: userData.kycStatus ?? parsed.kycStatus,
+                  firstName: userData.firstName ?? parsed.firstName,
+                  lastName: userData.lastName ?? parsed.lastName,
+                }),
+              );
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+
+    void syncUserProfile();
+
     // Fetch dynamic DISCO directory with admin-configured discount rates and minimum amounts
     const loadDiscosCatalog = async () => {
       try {
-        const res = await fetch('/api/services/electricity/discos');
+        const res = await fetch('/api/services/electricity/discos', { cache: 'no-store' });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.success && Array.isArray(data.data)) {
           setDiscosList((prev) =>
@@ -540,7 +586,9 @@ export default function ElectricityPage() {
   const executeMeterVerification = async (targetMeter: string, targetDisco: DiscoOption) => {
     const cleanMeter = targetMeter.replace(/\D/g, '');
     if (!cleanMeter || cleanMeter.length < 8) {
-      setVerificationError('Please enter a valid meter number (minimum 8 digits).');
+      const msg = 'Enter a valid meter number (minimum 8 digits).';
+      setVerificationError(msg);
+      showToast({ type: 'error', title: 'Invalid meter number', message: msg });
       return;
     }
 
@@ -559,7 +607,6 @@ export default function ElectricityPage() {
     setIsVerifying(true);
     setVerificationError(null);
     setMeterMismatch(null);
-    setSubmitError(null);
 
     try {
       const authToken = getStoredAuthToken();
@@ -641,7 +688,9 @@ export default function ElectricityPage() {
       if (err?.name === 'AbortError' || controller.signal.aborted) {
         return;
       }
-      setVerificationError(err.message || 'Unable to verify meter with electricity company.');
+      const msg = err?.message || 'Unable to verify meter with electricity provider.';
+      setVerificationError(msg);
+      showToast({ type: 'error', title: 'Meter verification failed', message: msg });
       setVerifiedMeter(null);
       setMeterMismatch(null);
       lastVerifiedKeyRef.current = '';
@@ -664,7 +713,6 @@ export default function ElectricityPage() {
     setMeterNumber(mismatch.meterNumber);
     setMeterMismatch(null);
     setVerificationError(null);
-    setSubmitError(null);
 
     setVerifiedMeter({
       meterNumber: mismatch.meterNumber,
@@ -693,7 +741,6 @@ export default function ElectricityPage() {
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
-    setSubmitError(null);
     lastVerifiedKeyRef.current = '';
 
     if (typeof window !== 'undefined') {
@@ -711,7 +758,6 @@ export default function ElectricityPage() {
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
-    setSubmitError(null);
     lastVerifiedKeyRef.current = '';
 
     if (typeof window !== 'undefined') {
@@ -728,7 +774,6 @@ export default function ElectricityPage() {
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
-    setSubmitError(null);
     lastVerifiedKeyRef.current = '';
 
     // Cancel in-flight validation on typing
@@ -791,7 +836,6 @@ export default function ElectricityPage() {
   // Validate and Open Confirm Modal
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitError(null);
 
     if (!isVerified) {
       setIsKycModalOpen(true);
@@ -799,32 +843,56 @@ export default function ElectricityPage() {
     }
 
     if (!selectedDisco) {
-      setSubmitError('Please select an electricity distribution company.');
+      showToast({ type: 'error', message: 'Select an electricity distribution company.' });
       return;
     }
 
     if (!meterNumber || meterNumber.length < 8) {
-      setVerificationError('Please enter a valid meter number.');
+      const msg = 'Enter a valid meter number (minimum 8 digits).';
+      setVerificationError(msg);
+      showToast({ type: 'error', message: msg });
+      return;
+    }
+
+    if (meterMismatch) {
+      showToast({
+        type: 'error',
+        message: `Switch meter type to ${meterMismatch.detectedMeterType} to continue.`,
+      });
+      return;
+    }
+
+    if (!verifiedMeter) {
+      showToast({ type: 'error', message: 'Verify your meter number first.' });
       return;
     }
 
     if (!numericAmount || numericAmount <= 0) {
-      setSubmitError('Please enter a recharge amount.');
+      showToast({ type: 'error', message: 'Enter an amount to pay.' });
       return;
     }
 
     if (numericAmount < effectiveMinAmount) {
-      setSubmitError(`Minimum purchase amount is ₦${effectiveMinAmount.toLocaleString()}.`);
+      showToast({
+        type: 'error',
+        message: `Minimum amount is ₦${effectiveMinAmount.toLocaleString()}.`,
+      });
       return;
     }
 
     if (numericAmount > 100000) {
-      setSubmitError('Maximum purchase amount is ₦100,000 per transaction.');
+      showToast({
+        type: 'error',
+        message: 'Maximum amount per transaction is ₦100,000.',
+      });
       return;
     }
 
     if (amountToDebit > walletBalance) {
-      setSubmitError('Insufficient wallet balance. Please fund your settlement wallet.');
+      showToast({
+        type: 'error',
+        message: `Insufficient wallet balance. You need ₦${(amountToDebit - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`,
+      });
       return;
     }
 
@@ -835,7 +903,6 @@ export default function ElectricityPage() {
   const handleExecutePurchase = async () => {
     if (!selectedDisco) return;
     setIsSubmitting(true);
-    setSubmitError(null);
 
     try {
       const authToken = getStoredAuthToken();
@@ -882,6 +949,7 @@ export default function ElectricityPage() {
         status: payload.status,
         disco: selectedDisco.code,
         discoName: selectedDisco.name,
+        discoLogo: selectedDisco.logo,
         meterNumber,
         meterType: selectedDisco.meterType,
         customerName: verifiedMeter?.customerName || payload.customerName,
@@ -901,8 +969,9 @@ export default function ElectricityPage() {
 
       loadWallets();
     } catch (err: any) {
-      setSubmitError(err.message || 'Payment failed. Please try again.');
+      const msg = err?.message || 'Payment failed. Please try again.';
       setIsConfirmModalOpen(false);
+      showToast({ type: 'error', title: 'Electricity payment failed', message: msg });
     } finally {
       setIsSubmitting(false);
     }
@@ -913,19 +982,20 @@ export default function ElectricityPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-[#070E1C]">
+    <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       {isSubmitting && <BaxatoLoader variant="overlay" />}
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
         kycStatus={kycStatus}
+        userRole={userRole}
         onOpenKycModal={() => setIsKycModalOpen(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Content Area - normal document scrolling on mobile */}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -933,19 +1003,21 @@ export default function ElectricityPage() {
           merchantName={merchantName}
           businessName={businessName}
           kycStatus={kycStatus}
+          userRole={userRole}
           isRefreshing={isRefreshing}
           onRefresh={handleRefreshBalance}
           sticky={false}
         />
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-4">
+        <main className="flex-1 px-4 py-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
           {!canExecuteServices ? (
-            <AccessRestricted description="Electricity bill payments and prepaid token vending are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+            <AccessRestricted description="Electricity bill payments and token purchases are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
           ) : (
             <>
               {/* Identity Verification Warning Banner */}
               <KycBanner
                 kycStatus={kycStatus}
+                userRole={userRole}
                 onOpenKycModal={() => setIsKycModalOpen(true)}
               />
 
@@ -953,115 +1025,110 @@ export default function ElectricityPage() {
           {/* VIEW 1: ALL BILLERS CATALOG (Displayed when no DISCO is selected) */}
           {/* ======================================================== */}
           {!selectedDisco ? (
-            <div className="space-y-4">
-              {/* Back to Dashboard & Refresh */}
-              <div className="flex items-center justify-between">
+            <div className="space-y-6">
+              {/* Navigation Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   <span>Back to Dashboard</span>
                 </Link>
 
-                <div className="flex items-center gap-2">
-                  <Link
-                    href="/dashboard/ledger?service=ELECTRICITY"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Electricity History</span>
-                  </Link>
-
-                  <button
-                    onClick={handleRefreshBalance}
-                    disabled={isRefreshing}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
-                </div>
+                <Link
+                  href="/dashboard/ledger?service=ELECTRICITY"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Electricity History</span>
+                </Link>
               </div>
 
-              {/* Page Heading & Settlement Balance */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-500 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-500/20">
-                      <Zap className="w-4 h-4" />
-                    </div>
-                    <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              {/* Page Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Image
+                    src="/logos/categories/electricity.svg"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 shrink-0 rounded-xl"
+                  />
+                  <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
                       Electricity
                     </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 text-pretty">
+                      Prepaid meter tokens and postpaid bills across Nigerian DisCos.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Select your electricity distribution company to vend prepaid STS tokens or settle postpaid bills
-                  </p>
                 </div>
 
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
-                  <Wallet className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Settlement Balance:</span>
+                {/* Compact Balance Indicator */}
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
                   {isLoadingBalance ? (
-                    <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
                   ) : (
-                    <span className="font-extrabold text-slate-900 dark:text-white">
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
                       ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Compact Filters & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white dark:bg-[#0B1528] p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              {/* Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-[#0B1528] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                 {/* Tabs */}
-                <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-[#070D18] rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#070D18] rounded-lg border border-slate-200 dark:border-slate-800">
                   {(['ALL', 'PREPAID', 'POSTPAID'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setFilterType(t)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                         filterType === t
                           ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      {t === 'ALL' && 'All Providers (24)'}
-                      {t === 'PREPAID' && 'Prepaid Tokens (12)'}
-                      {t === 'POSTPAID' && 'Postpaid Bills (12)'}
+                      {t === 'ALL' && 'All'}
+                      {t === 'PREPAID' && 'Prepaid'}
+                      {t === 'POSTPAID' && 'Postpaid'}
                     </button>
                   ))}
                 </div>
 
                 {/* Search DISCO */}
                 <div className="relative flex-1 sm:max-w-xs">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                   <input
                     type="text"
                     placeholder="Search company or state..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-8 pl-8 pr-3 text-xs rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                    className="w-full h-10 pl-8 pr-3 text-xs sm:text-sm rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-colors"
                   />
                 </div>
               </div>
 
-              {/* COMPACT BILLERS GRID: Sleek, high-density tiles */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {/* BILLERS GRID */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {filteredDiscos.map((opt) => {
                   const isPrepaid = opt.meterType === 'PREPAID';
                   return (
-                    <div
+                    <button
                       key={opt.id}
+                      type="button"
                       onClick={() => handleSelectBiller(opt)}
-                      className="group relative p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] hover:shadow-sm transition-all duration-150 cursor-pointer flex flex-col justify-between"
+                      className="group relative p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] text-left transition-colors duration-150 cursor-pointer flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-[#126BEB]"
                     >
                       <div>
-                        {/* Top: Logo & Meter Tag */}
-                        <div className="flex items-center justify-between gap-1.5 mb-2">
-                          <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center p-1 shrink-0 group-hover:scale-105 transition-transform">
+                        {/* Top: Crisp White-Backed Logo & Meter Tag */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
                             <Image
                               src={opt.logo}
                               alt={opt.shortName}
@@ -1075,7 +1142,7 @@ export default function ElectricityPage() {
                           </div>
 
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                               isPrepaid
                                 ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                                 : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
@@ -1086,85 +1153,68 @@ export default function ElectricityPage() {
                         </div>
 
                         {/* Title & Coverage */}
-                        <h3 className="font-extrabold text-xs text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors truncate">
+                        <h3 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#126BEB] transition-colors truncate">
                           {opt.shortName}
                         </h3>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                           {opt.coverage}
                         </p>
                       </div>
 
-                      {/* Footer: Discount (if set by admin) & Arrow leading to page */}
-                      <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[10px]">
+                      {/* Footer: Discount (if set) & Action */}
+                      <div className="pt-2 mt-2.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[11px]">
                         {opt.discountBps > 0 ? (
-                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                             {(opt.discountBps / 100).toFixed(1)}% off
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            Instant Token
-                          </span>
+                          <span className="text-slate-400 dark:text-slate-500">Meter</span>
                         )}
 
-                        <span className="inline-flex items-center gap-0.5 font-bold text-[#126BEB] group-hover:translate-x-0.5 transition-transform">
-                          <span>Pay</span>
-                          <ArrowRight className="w-3 h-3" />
+                        <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                          Pay
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
 
               {filteredDiscos.length === 0 && (
                 <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
-                  No electricity distribution company matches &quot;{searchQuery}&quot;.
+                  No electricity provider matches &quot;{searchQuery}&quot;.
                 </div>
               )}
             </div>
           ) : (
             /* ======================================================== */
-            /* VIEW 2: DEDICATED BILLER PAGE (e.g. IBEDC Prepaid Page) */
+            /* VIEW 2: DEDICATED BILLER PAGE                            */
             /* ======================================================== */
-            <div className="space-y-4 max-w-xl mx-auto">
-              {/* Back to All Providers Navigation Bar */}
-              <div className="flex items-center justify-between">
+            <div className="space-y-6">
+              {/* Clean Top Navigation Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={handleBackToCatalog}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#126BEB] hover:text-[#126BEB] dark:hover:text-[#126BEB] transition-all shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   <span>Back to Providers</span>
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <Link
-                    href="/dashboard/ledger?service=ELECTRICITY"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Electricity History</span>
-                  </Link>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                    <Wallet className="w-3 h-3 text-amber-500" />
-                    <span>Balance:</span>
-                    {isLoadingBalance ? (
-                      <span className="inline-block w-14 h-3 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
-                    ) : (
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                <Link
+                  href="/dashboard/ledger?service=ELECTRICITY"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Electricity History</span>
+                </Link>
               </div>
 
-              {/* Compact Dedicated Biller Hero Banner */}
-              <div className="p-4 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0">
+              {/* Biller Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
                     <Image
                       src={selectedDisco.logo}
                       alt={selectedDisco.shortName}
@@ -1174,12 +1224,12 @@ export default function ElectricityPage() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h1 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
                         {selectedDisco.name}
                       </h1>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                           selectedDisco.meterType === 'PREPAID'
                             ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                             : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
@@ -1187,310 +1237,276 @@ export default function ElectricityPage() {
                       >
                         {selectedDisco.meterType}
                       </span>
+                      {selectedDisco.discountBps > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                          {(selectedDisco.discountBps / 100).toFixed(1)}% off
+                        </span>
+                      )}
                     </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {selectedDisco.coverage}
                     </p>
                   </div>
                 </div>
 
-                {selectedDisco.discountBps > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                    {(selectedDisco.discountBps / 100).toFixed(1)}% Cashback
-                  </span>
-                )}
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
+                  {isLoadingBalance ? (
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                  ) : (
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                      ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Dedicated Focused Vending Form Card */}
-              <div className="bg-white dark:bg-[#0B1528] rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-                <form onSubmit={handleOpenConfirm} className="space-y-4">
-                  
-                  {/* 1. METER NUMBER INPUT WITH AUTO-VERIFICATION ON 11 DIGITS */}
+              {/* Centered Electricity Payment Form */}
+              <form
+                onSubmit={handleOpenConfirm}
+                noValidate
+                aria-label="Electricity payment form"
+                className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
+              >
+                  {/* 1. Meter / Account Number */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                        {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}
-                      </label>
-                      <span className="text-[10px] text-slate-400 font-medium">Standard 11 digits</span>
-                    </div>
+                    <label
+                      htmlFor="electricity-meter-input"
+                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                    >
+                      {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}{' '}
+                      <span aria-hidden="true" className="text-red-500">*</span>
+                    </label>
 
                     <div className="relative">
                       <input
+                        id="electricity-meter-input"
                         type="text"
-                        placeholder="e.g. 04218392193"
+                        inputMode="numeric"
+                        placeholder="Enter meter number"
                         value={meterNumber}
                         onChange={(e) => handleMeterChange(e.target.value)}
                         maxLength={13}
-                        className={`w-full h-11 pl-3.5 pr-28 rounded-xl bg-slate-50 dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none transition-all shadow-xs ${
+                        className={`w-full h-11 pl-3.5 pr-24 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-mono font-semibold placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
                           verifiedMeter
-                            ? 'border-emerald-500/60 ring-2 ring-emerald-500/15 bg-emerald-50/10'
+                            ? 'border-emerald-500/70 focus:border-emerald-500 focus:ring-emerald-500/20'
                             : isVerifying
-                            ? 'border-[#126BEB] ring-2 ring-[#126BEB]/20'
+                            ? 'border-[#126BEB] focus:ring-[#126BEB]/20'
                             : verificationError
-                            ? 'border-rose-400 focus:border-rose-500'
-                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20'
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
                         }`}
                         required
                       />
 
-                      {/* State indicator / action inside input */}
                       <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
                         {isVerifying ? (
-                          <div className="h-8 px-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[#126BEB] dark:text-blue-400 text-xs font-bold flex items-center gap-1 shadow-xs">
-                            <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Verifying...</span>
-                          </div>
+                          <span className="h-8 px-2.5 rounded-md bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold flex items-center gap-1.5">
+                            <RotateCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                            <span>Verifying</span>
+                          </span>
                         ) : verifiedMeter ? (
-                          <div className="h-8 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1 shadow-xs">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="h-8 px-2.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                             <span>Verified</span>
-                          </div>
+                          </span>
                         ) : (
                           <button
                             type="button"
                             onClick={handleVerifyMeter}
                             disabled={meterNumber.length < 8}
-                            className="h-8 px-3 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                            className="h-8 px-3 rounded-md bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>Verify</span>
+                            Verify
                           </button>
                         )}
                       </div>
                     </div>
 
-                    {/* Typing digit counter & verification feedback */}
-                    {meterNumber.length > 0 && !verifiedMeter && !isVerifying && !verificationError && (
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 pt-0.5">
-                        <span>{meterNumber.length}/11 digits entered</span>
-                        {meterNumber.length === 11 ? (
-                          <span className="text-[#126BEB] dark:text-blue-400 font-semibold flex items-center gap-1">
-                            <RotateCw className="w-3 h-3 animate-spin" /> Verifying meter...
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Enter 11 digits to verify</span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Verification Error Alert */}
-                    {verificationError && (
-                      <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-150">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {/* Concise inline verification retry state (detail also surfaces via toast) */}
+                    {verificationError && !isVerifying && !verifiedMeter && (
+                      <div className="flex items-center justify-between gap-2 text-xs text-red-600 dark:text-red-400 pt-0.5">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                           <span className="truncate">{verificationError}</span>
-                        </div>
+                        </span>
                         <button
                           type="button"
                           onClick={handleVerifyMeter}
-                          className="text-xs font-bold underline hover:no-underline shrink-0 cursor-pointer"
+                          className="font-semibold underline hover:no-underline shrink-0 cursor-pointer"
                         >
                           Retry
                         </button>
                       </div>
                     )}
 
-                    {/* METER TYPE MISMATCH NOTICE & 1-CLICK SWITCH BUTTON */}
+                    {/* Meter Type Mismatch Notice & Switch */}
                     {meterMismatch && selectedDisco && (
-                      <div className="p-3.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 text-xs space-y-2.5 animate-in fade-in duration-200 shadow-xs">
+                      <div className="p-3.5 rounded-lg bg-amber-500/10 dark:bg-amber-950/35 border border-amber-500/30 text-xs space-y-2.5">
                         <div className="flex items-start gap-2.5">
-                          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-                            <ArrowRightLeft className="w-4 h-4" />
-                          </div>
+                          <ArrowRightLeft className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-extrabold text-amber-900 dark:text-amber-300 text-xs flex items-center gap-1.5">
-                              <span>Meter Type Mismatch</span>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-800 dark:text-amber-300">
-                                {meterMismatch.detectedMeterType}
-                              </span>
-                            </h4>
-                            <p className="text-[11px] text-amber-800/90 dark:text-amber-400/90 mt-0.5 leading-relaxed">
-                              {meterMismatch.customerName ? (
-                                <>
-                                  Meter <span className="font-mono font-bold">#{meterMismatch.meterNumber}</span> is registered as a{' '}
-                                  <strong className="underline">{meterMismatch.detectedMeterType}</strong> account under{' '}
-                                  {selectedDisco.shortName} ({meterMismatch.customerName}).
-                                </>
-                              ) : (
-                                meterMismatch.responseMessage
-                              )}
+                            <p className="font-semibold text-amber-900 dark:text-amber-200">
+                              Meter registered as {meterMismatch.detectedMeterType}
+                            </p>
+                            <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                              {meterMismatch.customerName
+                                ? `#${meterMismatch.meterNumber} (${meterMismatch.customerName}) belongs to ${selectedDisco.shortName} ${meterMismatch.detectedMeterType}.`
+                                : meterMismatch.responseMessage}
                             </p>
                           </div>
                         </div>
 
-                        <div className="pt-1 flex items-center justify-between gap-2 border-t border-amber-500/20">
-                          <span className="text-[10px] text-amber-700/80 dark:text-amber-400/70">
-                            Switching preserves your meter number & customer verification
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSwitchMeterType(meterMismatch)}
-                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
-                          >
-                            <span>Switch to {selectedDisco.shortName} {meterMismatch.detectedMeterType}</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchMeterType(meterMismatch)}
+                          className="w-full h-9 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+                        >
+                          Switch to {selectedDisco.shortName} {meterMismatch.detectedMeterType}
+                        </button>
                       </div>
                     )}
 
-                    {/* VERIFIED ACCOUNT INFORMATION CARD (Real customer name returned from DISCO) */}
+                    {/* Verified Customer Information */}
                     {verifiedMeter && (
-                      <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1.5 animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-extrabold text-[10px] uppercase tracking-wider">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>Verified Account Information</span>
+                      <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>{verifiedMeter.customerName || 'Verified Meter'}</span>
                         </div>
-
-                        <div className="pt-0.5">
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold uppercase">
-                            Customer Account
-                          </span>
-                          <span className="font-extrabold text-slate-900 dark:text-white uppercase text-xs block">
-                            {verifiedMeter.customerName || 'Validated & Active Meter'}
-                          </span>
-                        </div>
-
                         {verifiedMeter.customerAddress && (
-                          <div>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold uppercase">
-                              Service Address
-                            </span>
-                            <span className="text-slate-700 dark:text-slate-300 text-[11px] line-clamp-2">
-                              {verifiedMeter.customerAddress}
-                            </span>
-                          </div>
+                          <p className="text-slate-600 dark:text-slate-300 text-[11px] line-clamp-2">
+                            {verifiedMeter.customerAddress}
+                          </p>
                         )}
                       </div>
                     )}
                   </div>
 
-                  {/* 2. RECHARGE AMOUNT (EMPTY BY DEFAULT - NEVER AUTO-SELECTED) */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                        Recharge Amount (₦)
+                  {/* 2. Amount */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="electricity-amount-input"
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Amount (₦) <span aria-hidden="true" className="text-red-500">*</span>
                       </label>
-                      {confirmedMinAmount && confirmedMinAmount > 1 ? (
-                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                          Min: ₦{confirmedMinAmount.toLocaleString()}
-                        </span>
-                      ) : null}
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        ₦{effectiveMinAmount.toLocaleString()} – ₦100,000
+                      </span>
                     </div>
 
-                    <input
-                      type="number"
-                      placeholder={
-                        confirmedMinAmount && confirmedMinAmount > 1
-                          ? `Enter amount in ₦ (Min: ₦${confirmedMinAmount.toLocaleString()})`
-                          : 'Enter recharge amount in ₦'
-                      }
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      min={confirmedMinAmount && confirmedMinAmount > 1 ? confirmedMinAmount : 100}
-                      max={100000}
-                      className="w-full h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm font-extrabold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
-                      required
-                    />
-
-                    {/* Preset Chips (Purely optional shortcuts - NONE auto-selected on load) */}
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-0.5">
-                      {dynamicPresetAmounts.map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => setAmount(val.toString())}
-                          className={`py-1.5 px-1 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
-                            numericAmount === val
-                              ? 'bg-[#126BEB] text-white border-[#126BEB] shadow-xs'
-                              : 'bg-slate-50 dark:bg-[#070D18] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                          }`}
-                        >
-                          ₦{val >= 1000 ? `${val / 1000}k` : val}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {dynamicPresetAmounts.map((val) => {
+                        const isActive = numericAmount === val;
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setAmount(val.toString())}
+                            aria-pressed={isActive}
+                            className={`min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-semibold tabular-nums border transition-colors cursor-pointer ${
+                              isActive
+                                ? 'bg-[#126BEB] text-white border-[#126BEB]'
+                                : 'bg-slate-50/70 dark:bg-[#070D18] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                            }`}
+                          >
+                            ₦{val >= 1000 ? `${val / 1000}k` : val}
+                          </button>
+                        );
+                      })}
                     </div>
+
+                    <div className="relative">
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400 select-none"
+                      >
+                        ₦
+                      </span>
+                      <input
+                        id="electricity-amount-input"
+                        type="number"
+                        inputMode="decimal"
+                        placeholder="Enter amount"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        min={effectiveMinAmount}
+                        max={100000}
+                        className="w-full h-11 pl-8 pr-3.5 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-sm sm:text-base font-semibold tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-colors"
+                        required
+                      />
+                    </div>
+
+                    {numericAmount > 0 && amountToDebit > walletBalance && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-lg px-3 py-2">
+                        Amount exceeds your current wallet balance.
+                      </p>
+                    )}
                   </div>
 
-                  {/* 3. CUSTOMER PHONE (OPTIONAL) */}
+                  {/* 3. Customer Phone (Optional) */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                      Customer phone number (Optional)
+                    <label
+                      htmlFor="electricity-phone-input"
+                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
+                    >
+                      Phone Number <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <input
+                      id="electricity-phone-input"
                       type="tel"
+                      inputMode="tel"
                       placeholder="e.g. 08012345678"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full h-10 px-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-mono font-bold placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-all shadow-xs"
+                      className="w-full h-11 px-3.5 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-colors"
                     />
                   </div>
 
-                  {/* 4. FINANCIAL SUMMARY */}
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
+                  {/* 4. Payment Summary */}
+                  <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs space-y-2">
                     <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                      <span>Recharge Face Value</span>
-                      <span className="font-bold text-slate-900 dark:text-white">
+                      <span>Amount</span>
+                      <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
                         {numericAmount > 0 ? `₦${numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '₦0.00'}
                       </span>
                     </div>
 
-                    {discountAmount > 0 && selectedDisco && selectedDisco.discountBps > 0 && (
+                    {discountAmount > 0 && selectedDisco.discountBps > 0 && (
                       <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                        <span className="flex items-center gap-1.5 font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          <span>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</span>
-                        </span>
-                        <span className="font-bold">
-                          {numericAmount > 0 ? `-₦${discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
+                        <span>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</span>
+                        <span className="font-semibold tabular-nums">
+                          -₦{discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     )}
 
-                    <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-black text-xs">
-                      <span>Amount to Debit Wallet</span>
-                      <span className="text-[#126BEB] dark:text-[#38BDF8]">
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-semibold">
+                      <span>Total Debit</span>
+                      <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] tabular-nums">
                         {numericAmount > 0 ? `₦${amountToDebit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
                       </span>
                     </div>
                   </div>
 
-                  {/* SUBMIT BUTTON */}
+                  {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={isSubmitting || !verifiedMeter || !numericAmount || numericAmount < effectiveMinAmount || amountToDebit > walletBalance}
-                    className="w-full h-11 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-blue-500/20"
+                    disabled={isSubmitting}
+                    className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? (
-                      <>
-                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Processing Transaction...</span>
-                      </>
-                    ) : !verifiedMeter ? (
-                      <span>Verify Meter Number to Proceed</span>
-                    ) : !numericAmount ? (
-                      <span>Enter Recharge Amount to Proceed</span>
-                    ) : (
-                      <>
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>
-                          {selectedDisco.meterType === 'PREPAID'
-                            ? `Vend ₦${numericAmount.toLocaleString()} Prepaid Token`
-                            : `Pay ₦${numericAmount.toLocaleString()} Postpaid Bill`}
-                        </span>
-                      </>
-                    )}
+                    {selectedDisco.meterType === 'PREPAID'
+                      ? numericAmount > 0
+                        ? `Buy ₦${numericAmount.toLocaleString()} Token`
+                        : 'Buy Token'
+                      : numericAmount > 0
+                      ? `Pay ₦${numericAmount.toLocaleString()} Bill`
+                      : 'Pay Bill'}
                   </button>
-
-                  {/* Submit Error Alert */}
-                  {submitError && (
-                    <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>{submitError}</span>
-                    </div>
-                  )}
-                </form>
-              </div>
+              </form>
             </div>
           )}
         </>
@@ -1498,84 +1514,89 @@ export default function ElectricityPage() {
     </main>
       </div>
 
-      {/* CONFIRMATION SUMMARY MODAL */}
+      {/* CONFIRMATION MODAL */}
       <ModalDialog
         isOpen={Boolean(isConfirmModalOpen && selectedDisco && !isSubmitting)}
         onClose={() => setIsConfirmModalOpen(false)}
         dismissible={!isSubmitting}
         ariaLabel="Confirm Electricity Purchase"
-        maxWidthClass="max-w-md"
-        className="dark:bg-[#0B1528]"
+        maxWidthClass="max-w-sm"
+        className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
       >
         {selectedDisco && (
-          <div className="p-6 space-y-4">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                  Confirm Electricity Purchase
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Please review the vending parameters before dispatch
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs py-2">
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400">DISCO Operator:</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDisco.name}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400">Account Type:</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDisco.meterType}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400">Meter / Account No:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{meterNumber}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400">Customer Name:</span>
-                <span className="font-bold text-slate-900 dark:text-white uppercase">
-                  {verifiedMeter?.customerName || 'Validated & Active Meter'}
-                </span>
-              </div>
-              {verifiedMeter?.customerAddress && (
-                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                  <span className="text-slate-400">Service Address:</span>
-                  <span className="text-slate-700 dark:text-slate-300 text-right max-w-[200px] truncate">
-                    {verifiedMeter.customerAddress}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400">Recharge Amount:</span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60 text-emerald-600 dark:text-emerald-400">
-                <span>1.2% Merchant Cashback:</span>
-                <span className="font-bold">
-                  -₦{discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5 text-sm font-extrabold text-slate-900 dark:text-white">
-                <span>Total to Debit Wallet:</span>
-                <span className="text-[#126BEB] dark:text-[#38BDF8]">
-                  ₦{amountToDebit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Confirm Electricity Purchase
+              </h2>
               <button
                 type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
                 disabled={isSubmitting}
-                className="flex-1 h-10 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Close confirmation"
+                className="relative text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 after:content-[''] after:absolute after:-inset-2 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <dl className="space-y-3 py-1 text-xs">
+              <div className="flex justify-between items-center">
+                <dt className="text-slate-500 dark:text-slate-400">Provider</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shrink-0">
+                    <Image
+                      src={selectedDisco.logo}
+                      alt={selectedDisco.shortName}
+                      width={18}
+                      height={18}
+                      className="object-contain"
+                    />
+                  </span>
+                  <span>{selectedDisco.shortName} ({selectedDisco.meterType})</span>
+                </dd>
+              </div>
+              <div className="flex justify-between items-center">
+                <dt className="text-slate-500 dark:text-slate-400">Meter Number</dt>
+                <dd className="font-mono font-semibold text-slate-900 dark:text-white">
+                  {meterNumber}
+                </dd>
+              </div>
+              <div className="flex justify-between items-center gap-3">
+                <dt className="text-slate-500 dark:text-slate-400 shrink-0">Customer</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white uppercase text-right truncate">
+                  {verifiedMeter?.customerName || 'Verified Meter'}
+                </dd>
+              </div>
+              <div className="flex justify-between items-center">
+                <dt className="text-slate-500 dark:text-slate-400">Amount</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white tabular-nums">
+                  ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </dd>
+              </div>
+              {selectedDisco.discountBps > 0 && discountAmount > 0 && (
+                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
+                  <dt>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</dt>
+                  <dd className="font-semibold tabular-nums">
+                    -₦{discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </dd>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <dt className="font-semibold text-slate-900 dark:text-white">Total Debit</dt>
+                <dd className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base tabular-nums">
+                  ₦{amountToDebit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setIsConfirmModalOpen(false)}
+                disabled={isSubmitting}
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1583,18 +1604,15 @@ export default function ElectricityPage() {
                 type="button"
                 onClick={handleExecutePurchase}
                 disabled={isSubmitting}
-                className="flex-1 h-10 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-blue-500/20"
+                className="flex-1 min-h-[44px] px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
-                    <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Vending...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Processing</span>
                   </>
                 ) : (
-                  <>
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Confirm & Pay</span>
-                  </>
+                  <span>Confirm</span>
                 )}
               </button>
             </div>
@@ -1607,6 +1625,20 @@ export default function ElectricityPage() {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
         receipt={receiptData}
+        onVendAnother={() => {
+          setIsReceiptModalOpen(false);
+          setMeterNumber('');
+          setAmount('');
+          setVerifiedMeter(null);
+          setMeterMismatch(null);
+          setVerificationError(null);
+          lastVerifiedKeyRef.current = '';
+          void loadWallets();
+        }}
+        onStatusUpdated={(updated) => {
+          setReceiptData(updated);
+          void loadWallets();
+        }}
       />
 
       {/* KYC UPGRADE MODAL */}
@@ -1616,7 +1648,18 @@ export default function ElectricityPage() {
         onSuccess={() => {
           setKycStatus('VERIFIED');
           setIsKycModalOpen(false);
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({ ...JSON.parse(raw), kycStatus: 'VERIFIED' }),
+              );
+            }
+          } catch {}
         }}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
       />
     </div>
   );

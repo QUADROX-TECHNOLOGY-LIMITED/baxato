@@ -36,6 +36,7 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import { useWalletBalance } from '@/lib/use-wallet-balance';
+import { showToast } from '@/lib/toast';
 
 export type CableOperatorCode = 'DSTV' | 'GOTV' | 'STARTIMES';
 
@@ -311,7 +312,6 @@ export default function CableVendingPage() {
   // Checkout & Submission State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Receipt Modal State
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -423,9 +423,9 @@ export default function CableVendingPage() {
     const cleanNum = raw.replace(/[\s\-()]/g, '');
 
     if (cleanNum.length < selectedOperator.minDigits) {
-      setValidationError(
-        `${selectedOperator.shortName} requires at least ${selectedOperator.minDigits} digits.`,
-      );
+      const msg = `${selectedOperator.shortName} requires at least ${selectedOperator.minDigits} digits.`;
+      setValidationError(msg);
+      showToast({ type: 'error', title: 'Invalid decoder number', message: msg });
       return;
     }
 
@@ -462,9 +462,12 @@ export default function CableVendingPage() {
           data?.data?.responseMessage ||
           'Decoder validation failed. Please check the smartcard number.';
         setValidationError(errorMsg);
+        showToast({ type: 'error', title: 'Decoder verification failed', message: errorMsg });
       }
     } catch {
-      setValidationError('Network error while validating decoder. Please try again.');
+      const errMsg = 'Network error while validating decoder. Please try again.';
+      setValidationError(errMsg);
+      showToast({ type: 'error', title: 'Decoder verification failed', message: errMsg });
     } finally {
       setIsValidating(false);
     }
@@ -475,7 +478,6 @@ export default function CableVendingPage() {
     setSmartcard(val);
     setVerifiedDecoder(null);
     setValidationError(null);
-    setSubmitError(null);
 
     if (autoVerifyTimeoutRef.current) {
       clearTimeout(autoVerifyTimeoutRef.current);
@@ -497,7 +499,6 @@ export default function CableVendingPage() {
     setCustomerMobile('');
     setVerifiedDecoder(null);
     setValidationError(null);
-    setSubmitError(null);
     setIsBouquetDropdownOpen(false);
   };
 
@@ -507,29 +508,29 @@ export default function CableVendingPage() {
     setCustomerMobile('');
     setVerifiedDecoder(null);
     setValidationError(null);
-    setSubmitError(null);
     setIsBouquetDropdownOpen(false);
   };
 
   // Open Confirmation Modal
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitError(null);
 
     if (!selectedOperator || !currentBouquet) return;
 
     const clean = smartcard.replace(/[\s\-()]/g, '');
     if (clean.length < selectedOperator.minDigits) {
-      setSubmitError(
-        `Please enter a valid ${selectedOperator.shortName} ${selectedOperator.customerField}.`,
-      );
+      showToast({
+        type: 'error',
+        message: `Please enter a valid ${selectedOperator.shortName} ${selectedOperator.customerField}.`,
+      });
       return;
     }
 
     if (!hasSufficientBalance) {
-      setSubmitError(
-        `Insufficient wallet balance. Total cost is ₦${amountToDebitNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}. Please fund your wallet.`,
-      );
+      showToast({
+        type: 'error',
+        message: `Insufficient wallet balance. Total cost is ₦${amountToDebitNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}.`,
+      });
       return;
     }
 
@@ -541,7 +542,6 @@ export default function CableVendingPage() {
     if (!selectedOperator || !currentBouquet) return;
 
     setIsSubmitting(true);
-    setSubmitError(null);
 
     const clean = smartcard.replace(/[\s\-()]/g, '');
     const clientRef = `BX-CAB-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -606,12 +606,16 @@ export default function CableVendingPage() {
         setVerifiedDecoder(null);
       } else {
         const msg = data?.error?.message || 'Subscription failed. Please verify smartcard.';
-        setSubmitError(msg);
         setIsConfirmModalOpen(false);
+        showToast({ type: 'error', title: 'Cable subscription failed', message: msg });
       }
     } catch {
-      setSubmitError('Network failure occurred. Please check history to verify status.');
       setIsConfirmModalOpen(false);
+      showToast({
+        type: 'error',
+        title: 'Cable subscription failed',
+        message: 'Network failure occurred. Please check history to verify status.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1039,13 +1043,6 @@ export default function CableVendingPage() {
 
                   {/* 4. TOTAL & SUBMIT BUTTON */}
                   <div className="pt-2">
-                    {submitError && (
-                      <div className="p-3 mb-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>{submitError}</span>
-                      </div>
-                    )}
-
                     <div className="flex items-center justify-between mb-3 text-xs">
                       <span className="text-slate-500 dark:text-slate-400">Total Subscription Cost</span>
                       <span className="font-extrabold text-base text-slate-900 dark:text-white">
@@ -1055,7 +1052,7 @@ export default function CableVendingPage() {
 
                     <button
                       type="submit"
-                      disabled={isSubmitting || !smartcard || !currentBouquet}
+                      disabled={isSubmitting || !currentBouquet}
                       className="w-full py-3 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-bold text-sm shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>Proceed to Payment</span>

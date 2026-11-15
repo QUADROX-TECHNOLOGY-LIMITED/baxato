@@ -219,7 +219,6 @@ export default function DataBundlesPage() {
   // Modals & Request State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
@@ -461,7 +460,6 @@ export default function DataBundlesPage() {
     const normalized = normalizeNigerianPhone(raw);
     setPhone(normalized);
     setPhoneEdited(true);
-    setErrorMessage(null);
     if (normalized.length === 11) {
       clearBlurAnnouncement();
     }
@@ -480,7 +478,6 @@ export default function DataBundlesPage() {
     const normalized = normalizeNigerianPhone(ben.phoneNumber);
     setPhone(normalized);
     setPhoneEdited(true);
-    setErrorMessage(null);
     clearBlurAnnouncement();
 
     const mappedNetwork = normalizeBeneficiaryNetwork(ben.network);
@@ -522,7 +519,6 @@ export default function DataBundlesPage() {
       setSelectedPlanId('');
       setPlanSearch('');
     }
-    setErrorMessage(null);
   };
 
   const selectCategoryTab = (cat: string, focusTab = false) => {
@@ -552,7 +548,6 @@ export default function DataBundlesPage() {
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
 
     if (!isVerified) {
       setIsKycModalOpen(true);
@@ -562,9 +557,10 @@ export default function DataBundlesPage() {
     setSubmitAttempted(true);
 
     if (allNetworksDisabled) {
-      const msg = 'Data bundle service is temporarily unavailable across all networks.';
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: 'Data bundle service is temporarily unavailable across all networks.',
+      });
       return;
     }
 
@@ -576,9 +572,10 @@ export default function DataBundlesPage() {
     }
 
     if (activeNetworkConfig.enabled === false) {
-      const msg = `${activeNetworkConfig.name} data bundles are currently unavailable.`;
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: `${activeNetworkConfig.name} data bundles are currently unavailable.`,
+      });
       return;
     }
 
@@ -591,9 +588,10 @@ export default function DataBundlesPage() {
     }
 
     if (exceedsBalance) {
-      const msg = `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`;
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`,
+      });
       return;
     }
 
@@ -605,7 +603,6 @@ export default function DataBundlesPage() {
 
     try {
       setIsSubmitting(true);
-      setErrorMessage(null);
       const token = getStoredAuthToken();
       if (!token) {
         clearSessionAndRedirect('expired');
@@ -640,9 +637,8 @@ export default function DataBundlesPage() {
           data?.error?.message ||
           data?.message ||
           'Data purchase failed. Please try again.';
-        setErrorMessage(msg);
-        showToast({ type: 'error', title: 'Data purchase failed', message: msg });
         setIsConfirmModalOpen(false);
+        showToast({ type: 'error', title: 'Data purchase failed', message: msg });
         void fetchCatalog();
         return;
       }
@@ -697,9 +693,8 @@ export default function DataBundlesPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error. Please try again.';
-      setErrorMessage(msg);
-      showToast({ type: 'error', title: 'Data purchase failed', message: msg });
       setIsConfirmModalOpen(false);
+      showToast({ type: 'error', title: 'Data purchase failed', message: msg });
     } finally {
       setIsSubmitting(false);
     }
@@ -812,27 +807,6 @@ export default function DataBundlesPage() {
                   )}
                 </div>
               </div>
-
-              {/* API / Server Error Alert */}
-              {errorMessage && (
-                <div
-                  role="alert"
-                  className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/35 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start justify-between gap-3"
-                >
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" aria-hidden="true" />
-                    <span className="leading-relaxed">{errorMessage}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setErrorMessage(null)}
-                    aria-label="Dismiss error"
-                    className="relative shrink-0 p-1 text-red-500 hover:text-red-700 dark:hover:text-red-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                </div>
-              )}
 
               {/* Unified Data Bundle Purchase Form */}
               <form
@@ -1105,7 +1079,6 @@ export default function DataBundlesPage() {
                                   aria-describedby={showPlanError ? planErrorId : undefined}
                                   onChange={() => {
                                     setSelectedPlanId(plan.id);
-                                    setErrorMessage(null);
                                     clearBlurAnnouncement();
                                   }}
                                   className="sr-only"

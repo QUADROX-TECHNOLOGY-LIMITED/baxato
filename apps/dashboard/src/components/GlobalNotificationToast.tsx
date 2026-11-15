@@ -1,8 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { consumePendingToast, type ToastData } from '@/lib/toast';
+
+interface ActiveToast extends ToastData {
+  seq: number;
+}
 
 function hasOpenModalDialog(): boolean {
   if (typeof document === 'undefined') return false;
@@ -10,15 +14,20 @@ function hasOpenModalDialog(): boolean {
 }
 
 export default function GlobalNotificationToast() {
-  const [toast, setToast] = useState<ToastData | null>(null);
+  const popoverId = useId();
+  const [toast, setToast] = useState<ActiveToast | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingQueueRef = useRef<ToastData[]>([]);
   const remainingMsRef = useRef<number>(0);
   const startedAtRef = useRef<number>(0);
+  const seqRef = useRef<number>(0);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const clearTimers = () => {
     if (dismissTimerRef.current) {
@@ -31,22 +40,45 @@ export default function GlobalNotificationToast() {
     }
   };
 
+  const restorePreviousFocusIfNeeded = useCallback(() => {
+    const el = popoverRef.current;
+    if (el && document.activeElement && el.contains(document.activeElement)) {
+      const prev = previousFocusRef.current;
+      if (prev && prev.isConnected && typeof prev.focus === 'function') {
+        prev.focus();
+      }
+      previousFocusRef.current = null;
+    }
+  }, []);
+
+  const finishClose = useCallback(() => {
+    clearTimers();
+    restorePreviousFocusIfNeeded();
+    const el = popoverRef.current;
+    try {
+      if (el && typeof el.hidePopover === 'function' && el.matches(':popover-open')) {
+        el.hidePopover();
+      }
+    } catch {}
+    setToast(null);
+    setIsClosing(false);
+  }, [restorePreviousFocusIfNeeded]);
+
   const dismissToast = useCallback(() => {
     clearTimers();
+    restorePreviousFocusIfNeeded();
     setIsClosing(true);
 
     closeAnimTimerRef.current = setTimeout(() => {
-      try {
-        popoverRef.current?.hidePopover?.();
-      } catch {}
-      setToast(null);
-      setIsClosing(false);
-    }, 210);
-  }, []);
+      finishClose();
+    }, 220);
+  }, [finishClose, restorePreviousFocusIfNeeded]);
 
   const scheduleAutoDismiss = useCallback(
     (durationMs: number) => {
-      clearTimeout(dismissTimerRef.current ?? undefined);
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+      }
       remainingMsRef.current = durationMs;
       startedAtRef.current = Date.now();
       dismissTimerRef.current = setTimeout(() => {
@@ -60,36 +92,68 @@ export default function GlobalNotificationToast() {
     (data: ToastData) => {
       clearTimers();
       setIsClosing(false);
-      setToast(data);
+      seqRef.current += 1;
+      setToast({ ...data, seq: seqRef.current });
 
-      const defaultDuration = data.type === 'error' ? 6500 : data.type === 'warning' ? 5000 : 3200;
+      // Announce message text only (never button controls) via ariaNotify or pre-mounted live region
+      const text = data.title ? `${data.title}. ${data.message}` : data.message;
+      const docWithAriaNotify = document as Document & {
+        ariaNotify?: (announcement: string, options?: { priority?: 'normal' | 'high' }) => void;
+      };
+      if (typeof docWithAriaNotify.ariaNotify === 'function') {
+        try {
+          docWithAriaNotify.ariaNotify(text, {
+            priority: data.type === 'error' ? 'high' : 'normal',
+          });
+        } catch {
+          setLiveAnnouncement(text);
+        }
+      } else {
+        // Toggle blank first so repeated identical errors still re-announce cleanly
+        setLiveAnnouncement('');
+        requestAnimationFrame(() => setLiveAnnouncement(text));
+      }
+
+      const defaultDuration = data.type === 'error' ? 6000 : data.type === 'warning' ? 5000 : 3200;
       const durationMs = data.durationMs ?? defaultDuration;
       scheduleAutoDismiss(durationMs);
-
-      requestAnimationFrame(() => {
-        const el = popoverRef.current;
-        if (!el) return;
-        try {
-          if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
-            el.showPopover();
-          }
-        } catch {
-          // Safe fallback on browsers without Top Layer Popover support
-        }
-      });
     },
     [scheduleAutoDismiss],
   );
+
+  const flushIfNoModal = useCallback(() => {
+    if (pendingQueueRef.current.length === 0) return;
+    if (!hasOpenModalDialog()) {
+      if (flushRetryTimerRef.current) {
+        clearTimeout(flushRetryTimerRef.current);
+        flushRetryTimerRef.current = null;
+      }
+      const next = pendingQueueRef.current.shift();
+      if (next) {
+        displayToastNow(next);
+      }
+      return;
+    }
+
+    // Fallback safety timer while a modal is transitioning out so queued toasts never stall
+    if (flushRetryTimerRef.current) {
+      clearTimeout(flushRetryTimerRef.current);
+    }
+    flushRetryTimerRef.current = setTimeout(() => {
+      flushIfNoModal();
+    }, 120);
+  }, [displayToastNow]);
 
   const enqueueOrDisplay = useCallback(
     (data: ToastData) => {
       if (hasOpenModalDialog()) {
         pendingQueueRef.current.push(data);
+        flushIfNoModal();
         return;
       }
       displayToastNow(data);
     },
-    [displayToastNow],
+    [displayToastNow, flushIfNoModal],
   );
 
   const handlePauseTimer = () => {
@@ -105,6 +169,41 @@ export default function GlobalNotificationToast() {
     const ms = remainingMsRef.current > 0 ? remainingMsRef.current : 2500;
     scheduleAutoDismiss(ms);
   };
+
+  // Promote rendered popover to Top Layer deterministically after React commits the node
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!el || !toast || isClosing) return;
+
+    // Force initial closed style resolution before showPopover so @starting-style slides cleanly
+    void el.offsetHeight;
+    try {
+      if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
+        el.showPopover();
+      }
+    } catch {
+      // Non-Popover fallback keeps element visible via data-open attribute / fixed positioning
+    }
+  }, [toast, isClosing]);
+
+  // Keep React state in sync if the native close button (popovertargetaction="hide") hides the popover
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!el) return;
+
+    const handleToggle = (e: Event) => {
+      const toggleEvent = e as ToggleEvent;
+      if (toggleEvent.newState === 'closed') {
+        clearTimers();
+        restorePreviousFocusIfNeeded();
+        setToast(null);
+        setIsClosing(false);
+      }
+    };
+
+    el.addEventListener('toggle', handleToggle);
+    return () => el.removeEventListener('toggle', handleToggle);
+  }, [toast?.seq, restorePreviousFocusIfNeeded]);
 
   useEffect(() => {
     const pending = consumePendingToast();
@@ -122,19 +221,10 @@ export default function GlobalNotificationToast() {
       }
     };
 
-    const flushIfNoModal = () => {
-      if (pendingQueueRef.current.length > 0 && !hasOpenModalDialog()) {
-        const next = pendingQueueRef.current.shift();
-        if (next) {
-          displayToastNow(next);
-        }
-      }
-    };
-
     const observer = new MutationObserver(flushIfNoModal);
     observer.observe(document.body, {
       attributes: true,
-      attributeFilter: ['open', 'aria-modal'],
+      attributeFilter: ['open', 'aria-modal', 'data-closing'],
       childList: true,
       subtree: true,
     });
@@ -144,44 +234,48 @@ export default function GlobalNotificationToast() {
 
     return () => {
       clearTimers();
+      if (flushRetryTimerRef.current) {
+        clearTimeout(flushRetryTimerRef.current);
+      }
       observer.disconnect();
       window.removeEventListener('bx_show_toast', handleEvent);
       document.removeEventListener('close', flushIfNoModal, true);
     };
-  }, [displayToastNow, enqueueOrDisplay]);
+  }, [enqueueOrDisplay, flushIfNoModal]);
 
-  if (!toast) return null;
-
-  const variant = toast.type ?? 'success';
-  const isError = variant === 'error';
+  const variant = toast?.type ?? 'success';
 
   const variantStyles = {
     error: {
-      container:
-        'bg-white dark:bg-[#0D1726] border-rose-200 dark:border-rose-800/80 text-slate-900 dark:text-slate-100',
-      iconWrap: 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400',
-      titleColor: 'text-rose-700 dark:text-rose-300',
+      container: 'bg-red-600 border-red-700 text-white shadow-xl shadow-red-950/25',
+      iconWrap: 'bg-white/15 text-white',
+      titleColor: 'text-white font-semibold',
+      messageColor: 'text-white/95',
+      closeBtn: 'text-white/80 hover:text-white hover:bg-white/15',
       Icon: AlertCircle,
     },
     warning: {
-      container:
-        'bg-white dark:bg-[#0D1726] border-amber-200 dark:border-amber-800/80 text-slate-900 dark:text-slate-100',
-      iconWrap: 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400',
-      titleColor: 'text-amber-700 dark:text-amber-300',
+      container: 'bg-amber-700 border-amber-800 text-white shadow-xl shadow-amber-950/25',
+      iconWrap: 'bg-white/15 text-white',
+      titleColor: 'text-white font-semibold',
+      messageColor: 'text-white/95',
+      closeBtn: 'text-white/80 hover:text-white hover:bg-white/15',
       Icon: AlertTriangle,
     },
     info: {
-      container:
-        'bg-white dark:bg-[#0D1726] border-blue-200 dark:border-blue-800/80 text-slate-900 dark:text-slate-100',
-      iconWrap: 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400',
-      titleColor: 'text-blue-700 dark:text-blue-300',
+      container: 'bg-[#126BEB] border-[#0E57C7] text-white shadow-xl shadow-blue-950/25',
+      iconWrap: 'bg-white/15 text-white',
+      titleColor: 'text-white font-semibold',
+      messageColor: 'text-white/95',
+      closeBtn: 'text-white/80 hover:text-white hover:bg-white/15',
       Icon: Info,
     },
     success: {
-      container:
-        'bg-white dark:bg-[#0D1726] border-emerald-200 dark:border-emerald-800/80 text-slate-900 dark:text-slate-100',
-      iconWrap: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400',
-      titleColor: 'text-emerald-700 dark:text-emerald-300',
+      container: 'bg-emerald-700 border-emerald-800 text-white shadow-xl shadow-emerald-950/25',
+      iconWrap: 'bg-white/15 text-white',
+      titleColor: 'text-white font-semibold',
+      messageColor: 'text-white/95',
+      closeBtn: 'text-white/80 hover:text-white hover:bg-white/15',
       Icon: CheckCircle2,
     },
   }[variant];
@@ -189,47 +283,67 @@ export default function GlobalNotificationToast() {
   const Icon = variantStyles.Icon;
 
   return (
-    <div
-      ref={popoverRef}
-      popover="manual"
-      data-closing={isClosing ? 'true' : undefined}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      onMouseEnter={handlePauseTimer}
-      onMouseLeave={handleResumeTimer}
-      onFocus={handlePauseTimer}
-      onBlur={handleResumeTimer}
-      className="baxato-toast-popover fixed top-3 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:top-4 sm:right-4 z-[999] w-[calc(100vw-1.5rem)] max-w-md sm:w-auto sm:min-w-[300px]"
-    >
-      <div
-        className={`pointer-events-auto flex items-start gap-3 px-3.5 py-3 rounded-xl border shadow-lg shadow-slate-900/10 dark:shadow-black/40 ${variantStyles.container}`}
-      >
-        <span
-          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${variantStyles.iconWrap}`}
-        >
-          <Icon className="w-4 h-4" />
-        </span>
-
-        <div className="min-w-0 flex-1">
-          {toast.title && (
-            <p className={`text-xs font-semibold leading-snug ${variantStyles.titleColor}`}>
-              {toast.title}
-            </p>
-          )}
-          <p className="text-xs sm:text-[13px] font-medium text-slate-700 dark:text-slate-200 leading-relaxed break-words">
-            {toast.message}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={dismissToast}
-          aria-label="Dismiss notification"
-          className="p-1 -m-0.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors shrink-0"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+    <div role="region" aria-label="Notifications" className="contents">
+      {/* Always-mounted ARIA live region fallback when ariaNotify is unsupported */}
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {liveAnnouncement}
       </div>
+
+      {toast && (
+        <div
+          key={toast.seq}
+          id={popoverId}
+          ref={popoverRef}
+          popover="manual"
+          data-closing={isClosing ? 'true' : undefined}
+          onMouseEnter={handlePauseTimer}
+          onMouseLeave={handleResumeTimer}
+          onFocusCapture={() => {
+            if (
+              document.activeElement instanceof HTMLElement &&
+              !popoverRef.current?.contains(document.activeElement)
+            ) {
+              previousFocusRef.current = document.activeElement;
+            }
+            handlePauseTimer();
+          }}
+          onBlur={handleResumeTimer}
+          className="baxato-toast-popover fixed top-3 left-3 right-3 mx-auto w-auto max-w-sm sm:left-auto sm:right-4 sm:top-4 sm:mx-0 sm:min-w-[300px] sm:max-w-[380px] z-[999]"
+        >
+          <div
+            className={`pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border ${variantStyles.container}`}
+          >
+            <span
+              className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${variantStyles.iconWrap}`}
+              aria-hidden="true"
+            >
+              <Icon className="w-3.5 h-3.5" />
+            </span>
+
+            <div className="min-w-0 flex-1">
+              {toast.title && (
+                <p className={`text-xs leading-snug ${variantStyles.titleColor}`}>
+                  {toast.title}
+                </p>
+              )}
+              <p className={`text-xs sm:text-[13px] font-medium leading-snug break-words ${variantStyles.messageColor}`}>
+                {toast.message}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              popoverTarget={popoverId}
+              popoverTargetAction="hide"
+              onClick={dismissToast}
+              aria-label="Close"
+              className={`p-1 -m-0.5 rounded-lg transition-colors shrink-0 cursor-pointer ${variantStyles.closeBtn}`}
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

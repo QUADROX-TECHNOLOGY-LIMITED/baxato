@@ -47,6 +47,7 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import { useWalletBalance } from '@/lib/use-wallet-balance';
+import { showToast } from '@/lib/toast';
 
 export interface ExamPackageItem {
   packageCode: string;
@@ -355,7 +356,6 @@ export default function EducationPage() {
   // Purchase & Confirmation State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Receipt Modal State
   const [receiptData, setReceiptData] = useState<ExamPinReceiptData | null>(null);
@@ -432,7 +432,6 @@ export default function EducationPage() {
     setQuantity(1);
     setValidationResult(null);
     setValidationError(null);
-    setSubmitError(null);
   };
 
   // Filtered packages
@@ -453,12 +452,16 @@ export default function EducationPage() {
   const handleValidateCandidate = async () => {
     const cleanId = candidateId.replace(/[\s\-]/g, '');
     if (!cleanId) {
-      setValidationError('Please enter a Candidate Profile Code or Phone number.');
+      const msg = 'Please enter a Candidate Profile Code or Phone number.';
+      setValidationError(msg);
+      showToast({ type: 'error', title: 'Candidate validation failed', message: msg });
       return;
     }
 
     if (currentPackage.examBody === 'JAMB' && !/^\d{10}$/.test(cleanId)) {
-      setValidationError('JAMB Profile Code must be exactly 10 numeric digits.');
+      const msg = 'JAMB Profile Code must be exactly 10 numeric digits.';
+      setValidationError(msg);
+      showToast({ type: 'error', title: 'Candidate validation failed', message: msg });
       return;
     }
 
@@ -495,9 +498,12 @@ export default function EducationPage() {
       } else {
         const errorMsg = data?.error?.message || 'Candidate validation failed. Verify profile code.';
         setValidationError(errorMsg);
+        showToast({ type: 'error', title: 'Candidate validation failed', message: errorMsg });
       }
     } catch {
-      setValidationError('Network error while validating candidate. Please try again.');
+      const errMsg = 'Network error while validating candidate. Please try again.';
+      setValidationError(errMsg);
+      showToast({ type: 'error', title: 'Candidate validation failed', message: errMsg });
     } finally {
       setIsValidating(false);
     }
@@ -521,34 +527,40 @@ export default function EducationPage() {
   // Validation before opening confirmation
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitError(null);
 
     const cleanId = candidateId.replace(/[\s\-]/g, '');
     if (!cleanId) {
-      setSubmitError('Candidate Profile Code or Phone is required.');
+      showToast({ type: 'error', message: 'Candidate Profile Code or Phone is required.' });
       return;
     }
 
     if (currentPackage.examBody === 'JAMB') {
       if (!/^\d{10}$/.test(cleanId)) {
-        setSubmitError('JAMB Profile Code must be exactly 10 numeric digits.');
+        showToast({ type: 'error', message: 'JAMB Profile Code must be exactly 10 numeric digits.' });
         return;
       }
       if (currentPackage.requiresValidation && !validationResult?.isValid) {
-        setSubmitError('Please validate the JAMB profile code first before purchasing.');
+        showToast({
+          type: 'error',
+          message: 'Please validate the JAMB profile code first before purchasing.',
+        });
         return;
       }
     } else {
       if (cleanId.length < 10) {
-        setSubmitError('Recipient phone number must be at least 10 or 11 digits.');
+        showToast({
+          type: 'error',
+          message: 'Recipient phone number must be at least 10 or 11 digits.',
+        });
         return;
       }
     }
 
     if (!hasSufficientBalance) {
-      setSubmitError(
-        `Insufficient wallet balance. Total cost is ₦${totalCostNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}. Please fund your settlement wallet.`,
-      );
+      showToast({
+        type: 'error',
+        message: `Insufficient wallet balance. Total cost is ₦${totalCostNaira.toLocaleString()}, but your balance is ₦${walletBalance.toLocaleString()}.`,
+      });
       return;
     }
 
@@ -558,7 +570,6 @@ export default function EducationPage() {
   // Execute Exam PIN Purchase
   const handleExecutePurchase = async () => {
     setIsSubmitting(true);
-    setSubmitError(null);
 
     const cleanId = candidateId.replace(/[\s\-]/g, '');
     const clientRef = `BX-EDU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -631,12 +642,16 @@ export default function EducationPage() {
         setValidationResult(null);
       } else {
         const msg = data?.error?.message || 'Transaction could not be completed. Please try again.';
-        setSubmitError(msg);
         setIsConfirmModalOpen(false);
+        showToast({ type: 'error', title: 'Exam PIN purchase failed', message: msg });
       }
     } catch {
-      setSubmitError('Network failure occurred. Please check transaction history to verify if debited.');
       setIsConfirmModalOpen(false);
+      showToast({
+        type: 'error',
+        title: 'Exam PIN purchase failed',
+        message: 'Network failure occurred. Please check transaction history to verify if debited.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1097,14 +1112,6 @@ export default function EducationPage() {
                   </div>
                 </div>
 
-                {/* Error Banner */}
-                {submitError && (
-                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{submitError}</span>
-                  </div>
-                )}
-
                 {/* Insufficient Balance Notice */}
                 {!hasSufficientBalance && (
                   <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
@@ -1121,15 +1128,11 @@ export default function EducationPage() {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={
-                    !hasSufficientBalance ||
-                    !candidateId.trim() ||
-                    (currentPackage.requiresValidation && !validationResult?.isValid)
-                  }
-                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Lock className="w-4 h-4" />
-                  <span>Vend Exam PIN • {formatNaira(totalCostNaira)}</span>
+                  <span>Buy Exam PIN • {formatNaira(totalCostNaira)}</span>
                 </button>
               </form>
             </div>
@@ -1221,12 +1224,12 @@ export default function EducationPage() {
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Vending PIN...
+                    Processing...
                   </>
                 ) : (
                   <>
                     <Lock className="w-3.5 h-3.5" />
-                    Confirm & Debit
+                    Confirm
                   </>
                 )}
               </button>

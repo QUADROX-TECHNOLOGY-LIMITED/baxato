@@ -169,31 +169,57 @@ body {
     background: transparent;
     overflow: visible;
     opacity: 0;
-    transform: translateY(-10px) scale(0.97);
     transition:
       opacity 0.22s ease-out,
-      transform 0.22s ease-out,
+      translate 0.22s ease-out,
+      scale 0.22s ease-out,
       display 0.22s ease-out,
       overlay 0.22s ease-out;
     transition-behavior: allow-discrete;
   }
 
+  @media (prefers-reduced-motion: no-preference) {
+    .baxato-toast-popover {
+      translate: 0 -10px;
+      scale: 0.97;
+    }
+
+    .baxato-toast-popover:popover-open:where(:not([data-closing])) {
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
   .baxato-toast-popover:popover-open:where(:not([data-closing])) {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 
   @starting-style {
     .baxato-toast-popover:popover-open:where(:not([data-closing])) {
       opacity: 0;
-      transform: translateY(-10px) scale(0.97);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .baxato-toast-popover:popover-open:where(:not([data-closing])) {
+        translate: 0 -10px;
+        scale: 0.97;
+      }
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .baxato-toast-popover {
       transition-duration: 0.08s;
-      transform: none;
+      translate: none;
+      scale: none;
+    }
+  }
+
+  @supports not selector(:popover-open) {
+    .baxato-toast-popover:where(:not([data-closing])) {
+      opacity: 1;
+      translate: none;
+      scale: none;
     }
   }
 

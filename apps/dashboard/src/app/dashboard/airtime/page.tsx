@@ -202,7 +202,6 @@ export default function AirtimePage() {
   // Modal & Request State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
@@ -395,7 +394,6 @@ export default function AirtimePage() {
     const normalized = normalizeNigerianPhone(raw);
     setPhone(normalized);
     setPhoneEdited(true);
-    setErrorMessage(null);
     if (normalized.length === 11) {
       clearBlurAnnouncement();
     }
@@ -413,7 +411,6 @@ export default function AirtimePage() {
     const normalized = normalizeNigerianPhone(ben.phoneNumber);
     setPhone(normalized);
     setPhoneEdited(true);
-    setErrorMessage(null);
     clearBlurAnnouncement();
 
     const mappedNetwork = normalizeBeneficiaryNetwork(ben.network);
@@ -449,7 +446,6 @@ export default function AirtimePage() {
     const sanitized = sanitizeAmountInput(e.target.value);
     setAmount(sanitized);
     setAmountEdited(true);
-    setErrorMessage(null);
     const val = parseFloat(sanitized);
     if (Number.isFinite(val) && val >= 100 && val <= 50000) {
       clearBlurAnnouncement();
@@ -466,13 +462,11 @@ export default function AirtimePage() {
   const handleSelectPreset = (val: number) => {
     setAmount(val.toString());
     setAmountEdited(true);
-    setErrorMessage(null);
     clearBlurAnnouncement();
   };
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
 
     if (!isVerified) {
       setIsKycModalOpen(true);
@@ -482,9 +476,10 @@ export default function AirtimePage() {
     setSubmitAttempted(true);
 
     if (allNetworksDisabled) {
-      const msg = 'Airtime service is temporarily unavailable across all networks.';
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: 'Airtime service is temporarily unavailable across all networks.',
+      });
       return;
     }
 
@@ -496,9 +491,10 @@ export default function AirtimePage() {
     }
 
     if (activeNetworkConfig.enabled === false) {
-      const msg = `${activeNetworkConfig.name} airtime is currently unavailable.`;
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: `${activeNetworkConfig.name} airtime is currently unavailable.`,
+      });
       return;
     }
 
@@ -510,9 +506,10 @@ export default function AirtimePage() {
     }
 
     if (exceedsBalance) {
-      const msg = `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`;
-      setErrorMessage(msg);
-      showToast({ type: 'error', message: msg });
+      showToast({
+        type: 'error',
+        message: `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`,
+      });
       return;
     }
 
@@ -521,7 +518,6 @@ export default function AirtimePage() {
 
   const handleExecutePurchase = async () => {
     setIsSubmitting(true);
-    setErrorMessage(null);
 
     try {
       const authToken = getStoredAuthToken();
@@ -616,9 +612,8 @@ export default function AirtimePage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction could not be completed.';
-      setErrorMessage(msg);
-      showToast({ type: 'error', title: 'Airtime purchase failed', message: msg });
       setIsConfirmModalOpen(false);
+      showToast({ type: 'error', title: 'Airtime purchase failed', message: msg });
     } finally {
       setIsSubmitting(false);
     }
@@ -732,27 +727,6 @@ export default function AirtimePage() {
                 </div>
               </div>
 
-              {/* API / Server Error Banner */}
-              {errorMessage && (
-                <div
-                  role="alert"
-                  className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/35 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start justify-between gap-3"
-                >
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" aria-hidden="true" />
-                    <span className="leading-relaxed">{errorMessage}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setErrorMessage(null)}
-                    aria-label="Dismiss error"
-                    className="relative shrink-0 p-1 text-red-500 hover:text-red-700 dark:hover:text-red-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                </div>
-              )}
-
               {/* Airtime Purchase Form */}
               <form
                 onSubmit={handleOpenConfirm}
@@ -841,7 +815,6 @@ export default function AirtimePage() {
                               onChange={() => {
                                 if (isDisabled) return;
                                 setSelectedNetwork(network.id);
-                                setErrorMessage(null);
                               }}
                               className="sr-only"
                             />

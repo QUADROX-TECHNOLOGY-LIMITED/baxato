@@ -203,9 +203,9 @@ export default function ElectricityReceiptModal({
       `Amount Debited:     ₦${currentReceipt.amountDebitedNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
       `Transaction Ref:    ${currentReceipt.reference}`,
       `Date & Time:        ${currentReceipt.date}`,
-      'Payment Wallet:     BAXATO Settlement Balance',
+      'Payment Wallet:     BAXATO Wallet',
       '================================',
-      'Thank you for vending with BAXATO',
+      'Thank you for choosing BAXATO',
       'Customer Support: support@baxato.com',
     ].join('\n');
   };
@@ -293,14 +293,14 @@ export default function ElectricityReceiptModal({
             <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
               {isSuccess && 'Token Generated Successfully'}
               {isProcessing && 'Token Generation In Progress'}
-              {isFailed && 'Electricity Vending Failed'}
+              {isFailed && 'Electricity Payment Failed'}
             </h3>
 
             {/* Subtext description */}
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {isSuccess && 'Your electricity token is ready to load into your meter.'}
               {isProcessing && 'Your request is accepted and queued with the electricity distribution company.'}
-              {isFailed && (currentReceipt.errorMessage || 'The electricity operator could not complete this vend. Any wallet deduction has been reversed.')}
+              {isFailed && (currentReceipt.errorMessage || 'The electricity provider could not complete this transaction. Any wallet deduction has been reversed.')}
             </p>
 
             {/* Live Polling Indicator when Processing */}
@@ -401,10 +401,23 @@ export default function ElectricityReceiptModal({
           {/* Consumer & Meter Details Table */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
             {/* DISCO */}
-            <div className="px-3.5 py-2.5 flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">DISCO Operator</span>
-              <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                {currentReceipt.discoName} ({currentReceipt.disco})
+            <div className="px-3.5 py-2.5 flex items-center justify-between gap-2">
+              <span className="text-slate-500 dark:text-slate-400">Provider</span>
+              <span className="font-bold text-slate-900 dark:text-white flex items-center gap-2 min-w-0">
+                {currentReceipt.discoLogo && (
+                  <span className="w-5 h-5 rounded bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-0.5 shrink-0">
+                    <Image
+                      src={currentReceipt.discoLogo}
+                      alt={currentReceipt.discoName}
+                      width={16}
+                      height={16}
+                      className="object-contain"
+                    />
+                  </span>
+                )}
+                <span className="truncate">
+                  {currentReceipt.discoName} ({currentReceipt.disco})
+                </span>
               </span>
             </div>
 
@@ -509,14 +522,13 @@ export default function ElectricityReceiptModal({
               onClick={onVendAnother}
               className="w-full py-3 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
             >
-              <Zap className="w-3.5 h-3.5" />
-              <span>Vend Another Meter</span>
+              <span>New Electricity Payment</span>
             </button>
           )}
 
           {/* Clean Footer Branding */}
           <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 pt-1">
-            Powered by BAXATO Secure Billing Switch • Instant National Settlement
+            Powered by BAXATO
           </p>
         </div>
       </div>

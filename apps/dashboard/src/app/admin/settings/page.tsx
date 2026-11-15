@@ -5,8 +5,6 @@ import {
   Sliders,
   AlertTriangle,
   Power,
-  CheckCircle2,
-  AlertCircle,
   Loader2,
   RefreshCw,
   Shield,
@@ -31,15 +29,12 @@ export default function SuperAdminSettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [planFilterNetwork, setPlanFilterNetwork] = useState<string>('ALL');
   const [planSearchQuery, setPlanSearchQuery] = useState<string>('');
 
   const fetchSettings = async () => {
     try {
       setIsLoading(true);
-      setErrorMessage(null);
       const token = getStoredAuthToken();
       if (!token || isTokenExpired(token)) {
         clearSessionAndRedirect('expired');
@@ -58,10 +53,16 @@ export default function SuperAdminSettingsPage() {
       if (res.ok && json?.success) {
         setSettings(json.data);
       } else {
-        setErrorMessage(json?.error?.message || 'Failed to load system parameters.');
+        showToast({
+          type: 'error',
+          message: json?.error?.message || 'Failed to load system parameters.',
+        });
       }
     } catch {
-      setErrorMessage('Network error fetching platform settings.');
+      showToast({
+        type: 'error',
+        message: 'Network error fetching platform settings.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -74,8 +75,6 @@ export default function SuperAdminSettingsPage() {
   const handleUpdateSettings = async (partialUpdates: any, toastSuccessMessage?: string) => {
     try {
       setIsUpdating(true);
-      setErrorMessage(null);
-      setSuccessMessage(null);
       const token = getStoredAuthToken();
       if (!token || isTokenExpired(token)) {
         clearSessionAndRedirect('expired');
@@ -100,16 +99,13 @@ export default function SuperAdminSettingsPage() {
           ...(json.data?.updated || partialUpdates),
         }));
         const msg = toastSuccessMessage || 'System configuration updated.';
-        setSuccessMessage(msg);
         showToast({ type: 'success', message: msg });
       } else {
         const errMsg = json?.error?.message || 'Failed to update settings.';
-        setErrorMessage(errMsg);
         showToast({ type: 'error', message: errMsg });
       }
     } catch {
       const errMsg = 'Network error updating system settings.';
-      setErrorMessage(errMsg);
       showToast({ type: 'error', message: errMsg });
     } finally {
       setIsUpdating(false);
@@ -240,21 +236,6 @@ export default function SuperAdminSettingsPage() {
           <span>Reload</span>
         </button>
       </div>
-
-      {/* Notices */}
-      {errorMessage && (
-        <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs flex items-center gap-2.5">
-          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2.5">
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
 
       {/* SYSTEM CONTROLS GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
