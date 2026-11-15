@@ -34,6 +34,7 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
+import { useWalletBalance } from '@/lib/use-wallet-balance';
 
 export type MeterType = 'PREPAID' | 'POSTPAID';
 
@@ -383,8 +384,7 @@ export default function ElectricityPage() {
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -419,38 +419,6 @@ export default function ElectricityPage() {
 
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Load Balance & Profile
-  const loadWallets = async () => {
-    try {
-      setIsLoadingBalance(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-
-      const res = await fetch('/api/wallets', {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) {
-        return;
-      }
-
-      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
-        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        if (main) {
-          setWalletBalance(main.balanceNaira || 0);
-        }
-      }
-    } catch {
-    } finally {
-      setIsLoadingBalance(false);
-      setIsInitialLoading(false);
-    }
-  };
-
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
@@ -475,17 +443,15 @@ export default function ElectricityPage() {
 
       if (storedBiz?.name) setBusinessName(storedBiz.name);
     } catch {}
+    setIsInitialLoading(false);
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
       if (b?.role) setUserRole(b.role);
-      loadWallets();
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
-
-    loadWallets();
 
     // Fetch dynamic DISCO directory with admin-configured discount rates and minimum amounts
     const loadDiscosCatalog = async () => {

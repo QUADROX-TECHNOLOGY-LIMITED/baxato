@@ -269,4 +269,53 @@ describe('Wallet Engine & Concurrency Locking Endpoints (/wallets/*)', () => {
     const finalWallet = inMemoryDb.wallets.find((w) => w.id === stressWalletId);
     expect(finalWallet?.balance).toBe(10000n);
   });
+
+  it('GET /wallets/stream streams initial snapshot and live credit updates via SSE', async () => {
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const controller = new AbortController();
+
+    try {
+      const response = await fetch(`${address}/wallets/stream`, {
+        headers: {
+          authorization: `Bearer ${ownerToken}`,
+          'x-business-id': testBizId,
+        },
+        signal: controller.signal,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const readUntil = async (marker: string): Promise<string> => {
+        const deadline = Date.now() + 5000;
+        while (!buffer.includes(marker)) {
+          if (Date.now() > deadline) {
+            throw new Error(`Timed out waiting for marker "${marker}". Buffer: ${buffer}`);
+          }
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+        }
+        return buffer;
+      };
+
+      await readUntil('event: wallet_snapshot');
+      expect(buffer).toContain('wal_main_test');
+
+      // Trigger wallet balance mutation and assert real-time event arrives
+      await walletService.creditWallet('wal_main_test', 50000n);
+      await readUntil('event: wallet_updated');
+      expect(buffer).toContain('"reason":"CREDIT"');
+      expect(buffer).toContain('wal_main_test');
+
+      controller.abort();
+      await reader.cancel().catch(() => {});
+    } finally {
+      controller.abort();
+    }
+  });
 });

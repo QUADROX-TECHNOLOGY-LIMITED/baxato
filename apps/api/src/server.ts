@@ -28,6 +28,8 @@ import { transactionRoutes } from './routes/transactions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { teamRoutes, inviteOnboardingRoutes } from './routes/team.js';
 import { adminRoutes } from './routes/admin.js';
+import { beneficiaryRoutes } from './routes/beneficiaries.js';
+import { realtimeService } from './services/realtime.service.js';
 
 export function buildServer(): FastifyInstance {
   const app = Fastify({
@@ -282,6 +284,12 @@ export function buildServer(): FastifyInstance {
   app.register(inviteOnboardingRoutes, { prefix: '/invites' });
   app.register(adminRoutes, { prefix: '/admin' });
   app.register(adminRoutes, { prefix: '/v1/admin' });
+  app.register(beneficiaryRoutes, { prefix: '/beneficiaries' });
+  app.register(beneficiaryRoutes, { prefix: '/v1/beneficiaries' });
+
+  app.addHook('onClose', async () => {
+    await realtimeService.close();
+  });
 
   return app;
 }

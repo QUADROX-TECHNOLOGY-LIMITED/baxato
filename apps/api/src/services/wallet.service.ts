@@ -9,6 +9,7 @@ import {
   type WalletBalanceDto,
 } from '@baxato/common';
 import { db, wallets, eq, and, sql } from '@baxato/database';
+import { realtimeService } from './realtime.service.js';
 
 export class WalletService {
   /**
@@ -122,7 +123,9 @@ export class WalletService {
         .returning();
 
       if (updated) {
-        return this.toWalletDto(updated);
+        const dto = this.toWalletDto(updated);
+        realtimeService.publishWalletUpdate(updated.businessId, dto, 'CREDIT');
+        return dto;
       }
 
       // If version conflict occurred, backoff and retry
@@ -180,7 +183,9 @@ export class WalletService {
         .returning();
 
       if (updated) {
-        return this.toWalletDto(updated);
+        const dto = this.toWalletDto(updated);
+        realtimeService.publishWalletUpdate(updated.businessId, dto, 'DEBIT');
+        return dto;
       }
 
       if (attempt === maxRetries) {
@@ -238,7 +243,9 @@ export class WalletService {
         .returning();
 
       if (updated) {
-        return this.toWalletDto(updated);
+        const dto = this.toWalletDto(updated);
+        realtimeService.publishWalletUpdate(updated.businessId, dto, 'LOCK');
+        return dto;
       }
 
       if (attempt === maxRetries) {
@@ -302,7 +309,13 @@ export class WalletService {
         .returning();
 
       if (updated) {
-        return this.toWalletDto(updated);
+        const dto = this.toWalletDto(updated);
+        realtimeService.publishWalletUpdate(
+          updated.businessId,
+          dto,
+          shouldDeduct ? 'UNLOCK_SETTLE' : 'UNLOCK_REFUND',
+        );
+        return dto;
       }
 
       if (attempt === maxRetries) {

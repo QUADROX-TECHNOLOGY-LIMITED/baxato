@@ -160,6 +160,55 @@ body {
       transition-duration: 0.1s;
     }
   }
+
+  .baxato-toast-popover {
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+    transition:
+      opacity 0.22s ease-out,
+      transform 0.22s ease-out,
+      display 0.22s ease-out,
+      overlay 0.22s ease-out;
+    transition-behavior: allow-discrete;
+  }
+
+  .baxato-toast-popover:popover-open:where(:not([data-closing])) {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  @starting-style {
+    .baxato-toast-popover:popover-open:where(:not([data-closing])) {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.97);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .baxato-toast-popover {
+      transition-duration: 0.08s;
+      transform: none;
+    }
+  }
+
+  .baxato-anchored-popover {
+    inset: auto;
+    margin: 0;
+  }
+
+  @supports (position-area: block-end) {
+    .baxato-anchored-popover {
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+      margin-top: 6px;
+    }
+  }
 }
 
 @keyframes baxato-spin {

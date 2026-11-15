@@ -30,6 +30,7 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import ModalDialog from '@/components/ModalDialog';
+import { useWalletBalance } from '@/lib/use-wallet-balance';
 
 interface ServiceProviderBadge {
   name: string;
@@ -177,9 +178,21 @@ export default function DashboardOverviewPage() {
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
   const [hideBalance, setHideBalance] = useState<boolean>(true);
 
-  const [walletBalance, setWalletBalance] = useState<string>('₦0.00');
-  const [commissionBalance, setCommissionBalance] = useState<string>('₦0.00');
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const {
+    walletBalance: mainBalanceNaira,
+    commissionBalance: commBalanceNaira,
+    isLoadingBalance,
+    refreshWallets: loadWallets,
+  } = useWalletBalance();
+
+  const walletBalance = `₦${mainBalanceNaira.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+  const commissionBalance = `₦${commBalanceNaira.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
   const [todayTelemetry, setTodayTelemetry] = useState<TodayTelemetry>({
     formattedTotalVolume: '₦0.00',
@@ -228,35 +241,6 @@ export default function DashboardOverviewPage() {
         }
       }
     } catch {}
-  }, [getRequestHeaders]);
-
-  const loadWallets = useCallback(async () => {
-    const headers = getRequestHeaders();
-    if (!headers) return;
-
-    try {
-      setIsLoadingBalance(true);
-      const res = await fetch('/api/wallets', { headers });
-      const data = await res.json().catch(() => null);
-      if (handleAuthResponse(res, data)) return;
-
-      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
-        const formatWallet = (wallet: any) =>
-          wallet?.formattedBalance ||
-          `₦${(wallet?.balanceNaira || 0).toLocaleString('en-NG', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`;
-
-        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        const commission = data.data.wallets.find((w: any) => w.type === 'COMMISSION');
-        if (main) setWalletBalance(formatWallet(main));
-        if (commission) setCommissionBalance(formatWallet(commission));
-      }
-    } catch {
-    } finally {
-      setIsLoadingBalance(false);
-    }
   }, [getRequestHeaders]);
 
   const loadTodayAnalytics = useCallback(async () => {
@@ -365,7 +349,6 @@ export default function DashboardOverviewPage() {
     setIsHydrated(true);
 
     void syncUserPreferences();
-    void loadWallets();
     void loadTodayAnalytics();
     void loadRecentTransactions();
 
@@ -374,14 +357,13 @@ export default function DashboardOverviewPage() {
       if (updatedBiz?.id) setBusinessId(updatedBiz.id);
       if (updatedBiz?.name) setBusinessName(updatedBiz.name);
       if (updatedBiz?.role) setUserRole(updatedBiz.role);
-      void loadWallets();
       void loadTodayAnalytics();
       void loadRecentTransactions();
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
     return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
-  }, [router, syncUserPreferences, loadWallets, loadTodayAnalytics, loadRecentTransactions]);
+  }, [router, syncUserPreferences, loadTodayAnalytics, loadRecentTransactions]);
 
   const handleToggleHideBalance = async () => {
     const nextValue = !hideBalance;

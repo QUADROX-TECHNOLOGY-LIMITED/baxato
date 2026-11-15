@@ -6,17 +6,25 @@ import {
   TelecomNetwork,
 } from '@baxato/common';
 import { airtimeService } from '../../services/airtime.service.js';
+import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 import { authenticate } from '../../plugins/auth.plugin.js';
 
 export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /services/airtime/networks
-   * Returns list of supported mobile network operators, active discount margins, and prefix ranges.
+   * Returns list of supported mobile network operators, active discount margins, enabled status, and prefix ranges.
    */
   fastify.get('/networks', async (request, reply) => {
-    const adminDiscounts = await airtimeService.getAdminDiscounts();
-    const networks = airtimeService.getNetworkOptions(adminDiscounts);
+    const [adminDiscounts, controls] = await Promise.all([
+      airtimeService.getAdminDiscounts(),
+      serviceControlsService.getSettings(),
+    ]);
+    const disabledNetworks =
+      controls.maintenanceMode || controls.killSwitches.AIRTIME
+        ? Object.values(TelecomNetwork)
+        : controls.disabledNetworks.AIRTIME;
+    const networks = airtimeService.getNetworkOptions(adminDiscounts, disabledNetworks);
     return reply.status(200).send(createSuccessResponse(networks, request.id));
   });
 

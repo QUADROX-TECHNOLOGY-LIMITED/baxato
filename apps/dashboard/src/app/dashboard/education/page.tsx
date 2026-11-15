@@ -46,6 +46,7 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
+import { useWalletBalance } from '@/lib/use-wallet-balance';
 
 export interface ExamPackageItem {
   packageCode: string;
@@ -329,8 +330,7 @@ export default function EducationPage() {
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -363,38 +363,6 @@ export default function EducationPage() {
 
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Load Wallets
-  const loadWallets = async () => {
-    try {
-      setIsLoadingBalance(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-
-      const res = await fetch('/api/wallets', {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) return;
-
-      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
-        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        if (main) {
-          setWalletBalance(main.balanceNaira || Number(main.balanceKobo || '0') / 100);
-        }
-      }
-    } catch {
-      // Fallback
-    } finally {
-      setIsLoadingBalance(false);
-      setIsInitialLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
   // Load Exam Packages from Backend
   const loadPackages = async () => {
     try {
@@ -426,15 +394,14 @@ export default function EducationPage() {
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     else setKycStatus('UNVERIFIED');
     if (biz?.name) setBusinessName(biz.name);
+    setIsInitialLoading(false);
 
-    loadWallets();
     loadPackages();
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
       if (b?.role) setUserRole(b.role);
-      loadWallets();
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
@@ -654,8 +621,7 @@ export default function EducationPage() {
 
         setIsReceiptModalOpen(true);
 
-        // Update local wallet balance
-        setWalletBalance((prev) => Math.max(0, prev - totalCostNaira));
+        // Trigger explicit sync in addition to live SSE push
         loadWallets();
 
         // Reset inputs

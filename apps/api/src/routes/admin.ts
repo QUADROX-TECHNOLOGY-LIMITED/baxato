@@ -35,6 +35,12 @@ import {
   ProviderRoutingStrategy,
 } from '../services/providers/index.js';
 import { auditService } from '../services/audit.service.js';
+import {
+  serviceControlsService,
+  type UpdateSystemSettingsInput,
+} from '../services/service-controls.service.js';
+import { airtimeService } from '../services/airtime.service.js';
+import { dataService } from '../services/data.service.js';
 
 export const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // All admin routes strictly require Platform Staff or Super Admin authentication
@@ -1487,33 +1493,34 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /admin/settings
-   * Platform-wide sovereign configuration: kill switches, maintenance mode, fee margins.
+   * Platform-wide sovereign configuration: kill switches, maintenance mode, fee margins,
+   * plus per-network & per-plan enablement controls.
    */
   fastify.get('/settings', { preHandler: [requirePlatformAdmin] }, async (request, reply) => {
+    const [settings, catalogPlans] = await Promise.all([
+      serviceControlsService.getSettings(),
+      dataService.getAdminCatalogPlans(),
+    ]);
+
+    const airtimeNetworks = airtimeService.getNetworkOptions(undefined, settings.disabledNetworks.AIRTIME).map((n) => ({
+      network: n.network,
+      name: n.name,
+      primaryColor: n.primaryColor,
+    }));
+    const dataNetworks = dataService.getNetworkOptions(settings.disabledNetworks.DATA).map((n) => ({
+      network: n.network,
+      name: n.name,
+      primaryColor: n.primaryColor,
+    }));
+
     return reply.status(200).send(
       createSuccessResponse(
         {
-          maintenanceMode: false,
-          maintenanceNotice: '',
-          killSwitches: {
-            AIRTIME: false,
-            DATA: false,
-            ELECTRICITY: false,
-            CABLE: false,
-            EDUCATION: false,
-            TRANSFERS: false,
-          },
-          feeSchedules: {
-            airtimeDiscountBps: 250, // 2.5%
-            dataDiscountBps: 300,    // 3.0%
-            electricityFeeNaira: 100, // ₦100 convenience
-            cableFeeNaira: 100,
-            educationPinMarkupNaira: 250,
-          },
-          securityPolicies: {
-            compulsoryStaff2Fa: true,
-            sessionExpiryHours: 24,
-            maxFailedLoginsBeforeLock: 5,
+          ...settings,
+          catalogControls: {
+            airtimeNetworks,
+            dataNetworks,
+            dataPlans: catalogPlans,
           },
         },
         request.id,
@@ -1523,24 +1530,25 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * PATCH /admin/settings
-   * Updates sovereign system parameters.
+   * Updates sovereign system parameters and persists service/network/plan controls.
    */
   fastify.patch('/settings', { preHandler: [requirePlatformAdmin] }, async (request, reply) => {
-    const body = request.body as any;
+    const body = (request.body || {}) as UpdateSystemSettingsInput;
+    const updatedSettings = await serviceControlsService.updateSettings(body, request.user?.id);
 
     await auditService.log({
       userId: request.user?.id,
       action: 'ADMIN_SYSTEM_SETTINGS_UPDATE',
       resourceType: 'SYSTEM_SETTINGS',
       resourceId: 'GLOBAL',
-      changes: body,
+      changes: body as Record<string, unknown>,
     });
 
     return reply.status(200).send(
       createSuccessResponse(
         {
           message: 'System settings updated successfully.',
-          updated: body,
+          updated: updatedSettings,
         },
         request.id,
       ),

@@ -10,6 +10,7 @@ import {
   type DataPlanCategory,
   type DataDeliveryType,
 } from '../../services/data.service.js';
+import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 
 const VALID_DATA_CATEGORIES: DataPlanCategory[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'MEGA', 'SME'];
@@ -26,6 +27,20 @@ function parseNetworkFilter(network?: string): TelecomNetwork | undefined {
 }
 
 export const dataRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /services/data/networks
+   * Returns supported mobile networks for Data Bundles with admin-configured enabled flags.
+   */
+  fastify.get('/networks', async (request, reply) => {
+    const controls = await serviceControlsService.getSettings();
+    const disabledNetworks =
+      controls.maintenanceMode || controls.killSwitches.DATA
+        ? Object.values(TelecomNetwork)
+        : controls.disabledNetworks.DATA;
+    const networks = dataService.getNetworkOptions(disabledNetworks);
+    return reply.status(200).send(createSuccessResponse(networks, request.id));
+  });
+
   /**
    * GET /services/data/categories
    * Returns available data categories and delivery types for the active provider configuration.

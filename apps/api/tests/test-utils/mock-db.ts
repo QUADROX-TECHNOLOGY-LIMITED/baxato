@@ -193,6 +193,30 @@ export interface MockAuditLog {
   createdAt: Date;
 }
 
+export interface MockBeneficiary {
+  id: string;
+  businessId: string;
+  userId?: string | null;
+  phoneNumber: string;
+  network?: string | null;
+  label?: string | null;
+  serviceType?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MockSystemSetting {
+  id: string;
+  key: string;
+  maintenanceMode: boolean;
+  killSwitches: Record<string, boolean>;
+  disabledNetworks: { AIRTIME?: string[]; DATA?: string[] };
+  disabledDataPlans: string[];
+  updatedById?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export class InMemoryTestDb {
   public users: MockUser[] = [];
   public businesses: MockBusiness[] = [];
@@ -207,6 +231,8 @@ export class InMemoryTestDb {
   public webhookDeliveries: MockWebhookDelivery[] = [];
   public auditLogs: MockAuditLog[] = [];
   public teamInvitations: MockTeamInvitation[] = [];
+  public beneficiaries: MockBeneficiary[] = [];
+  public systemSettings: MockSystemSetting[] = [];
 
   public reset() {
     this.users = [];
@@ -222,6 +248,8 @@ export class InMemoryTestDb {
     this.webhookDeliveries = [];
     this.auditLogs = [];
     this.teamInvitations = [];
+    this.beneficiaries = [];
+    this.systemSettings = [];
   }
 }
 
@@ -298,8 +326,9 @@ function isServiceTransactionsTable(t: unknown): boolean {
   if (typeof t === 'object' && t !== null) {
     const obj = t as Record<string, unknown>;
     return (
-      'serviceType' in obj ||
-      'service_type' in obj ||
+      (('serviceType' in obj || 'service_type' in obj) &&
+        !('phoneNumber' in obj) &&
+        !('phone_number' in obj)) ||
       obj._name === 'service_transactions' ||
       obj.name === 'service_transactions'
     );
@@ -413,11 +442,43 @@ function isTeamInvitationsTable(t: unknown): boolean {
   return false;
 }
 
+function isBeneficiariesTable(t: unknown): boolean {
+  if (t === 'beneficiaries') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      ('phoneNumber' in obj && 'serviceType' in obj) ||
+      ('phone_number' in obj && 'service_type' in obj) ||
+      obj._name === 'beneficiaries' ||
+      obj.name === 'beneficiaries'
+    );
+  }
+  return false;
+}
+
+function isSystemSettingsTable(t: unknown): boolean {
+  if (t === 'system_settings' || t === 'systemSettings') return true;
+  if (typeof t === 'object' && t !== null) {
+    const obj = t as Record<string, unknown>;
+    return (
+      'disabledNetworks' in obj ||
+      'disabled_networks' in obj ||
+      'disabledDataPlans' in obj ||
+      'disabled_data_plans' in obj ||
+      'killSwitches' in obj ||
+      'kill_switches' in obj ||
+      obj._name === 'system_settings' ||
+      obj.name === 'system_settings'
+    );
+  }
+  return false;
+}
+
 /**
  * Creates a Vitest mock instance of `@baxato/database`
  */
 export function createMockDatabase() {
-  const executeInsert = (data: unknown) => {
+  const executeInsert = (data: unknown, table?: unknown) => {
     if (Array.isArray(data)) {
       const results: unknown[] = [];
       for (const item of data) {
@@ -459,6 +520,40 @@ export function createMockDatabase() {
 
     if (typeof data === 'object' && data !== null) {
       const u = data as Record<string, unknown>;
+
+      if (table && isBeneficiariesTable(table)) {
+        const now = new Date();
+        const ben: MockBeneficiary = {
+          id: String(u.id || `ben_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+          businessId: String(u.businessId),
+          userId: u.userId ? String(u.userId) : null,
+          phoneNumber: String(u.phoneNumber),
+          network: u.network ? String(u.network) : null,
+          label: u.label ? String(u.label) : null,
+          serviceType: u.serviceType ? String(u.serviceType) : null,
+          createdAt: (u.createdAt as Date) || now,
+          updatedAt: (u.updatedAt as Date) || now,
+        };
+        inMemoryDb.beneficiaries.push(ben);
+        return [ben];
+      }
+
+      if (table && isSystemSettingsTable(table)) {
+        const now = new Date();
+        const sys: MockSystemSetting = {
+          id: String(u.id || `set_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+          key: String(u.key),
+          maintenanceMode: Boolean(u.maintenanceMode ?? false),
+          killSwitches: (u.killSwitches as Record<string, boolean>) || {},
+          disabledNetworks: (u.disabledNetworks as { AIRTIME?: string[]; DATA?: string[] }) || {},
+          disabledDataPlans: Array.isArray(u.disabledDataPlans) ? (u.disabledDataPlans as string[]) : [],
+          updatedById: u.updatedById ? String(u.updatedById) : null,
+          createdAt: (u.createdAt as Date) || now,
+          updatedAt: (u.updatedAt as Date) || now,
+        };
+        inMemoryDb.systemSettings.push(sys);
+        return [sys];
+      }
 
       if ('entryType' in u || 'direction' in u || 'category' in u) {
         const entry: MockLedgerEntry = {
@@ -662,6 +757,40 @@ export function createMockDatabase() {
         inMemoryDb.auditLogs.push(aud);
         return [aud];
       }
+
+      if ('phoneNumber' in u && 'businessId' in u && !('email' in u)) {
+        const now = new Date();
+        const ben: MockBeneficiary = {
+          id: String(u.id || `ben_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+          businessId: String(u.businessId),
+          userId: u.userId ? String(u.userId) : null,
+          phoneNumber: String(u.phoneNumber),
+          network: u.network ? String(u.network) : null,
+          label: u.label ? String(u.label) : null,
+          serviceType: u.serviceType ? String(u.serviceType) : null,
+          createdAt: (u.createdAt as Date) || now,
+          updatedAt: (u.updatedAt as Date) || now,
+        };
+        inMemoryDb.beneficiaries.push(ben);
+        return [ben];
+      }
+
+      if ('key' in u && ('maintenanceMode' in u || 'killSwitches' in u || 'disabledNetworks' in u || 'disabledDataPlans' in u)) {
+        const now = new Date();
+        const sys: MockSystemSetting = {
+          id: String(u.id || `set_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+          key: String(u.key),
+          maintenanceMode: Boolean(u.maintenanceMode ?? false),
+          killSwitches: (u.killSwitches as Record<string, boolean>) || {},
+          disabledNetworks: (u.disabledNetworks as { AIRTIME?: string[]; DATA?: string[] }) || {},
+          disabledDataPlans: Array.isArray(u.disabledDataPlans) ? (u.disabledDataPlans as string[]) : [],
+          updatedById: u.updatedById ? String(u.updatedById) : null,
+          createdAt: (u.createdAt as Date) || now,
+          updatedAt: (u.updatedAt as Date) || now,
+        };
+        inMemoryDb.systemSettings.push(sys);
+        return [sys];
+      }
     }
 
     return [];
@@ -819,6 +948,29 @@ export function createMockDatabase() {
       isPrimary: 'is_primary',
       config: 'config',
     },
+    beneficiaries: {
+      id: 'id',
+      businessId: 'business_id',
+      userId: 'user_id',
+      phoneNumber: 'phone_number',
+      network: 'network',
+      label: 'label',
+      serviceType: 'service_type',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    },
+    systemSettings: {
+      id: 'id',
+      key: 'key',
+      maintenanceMode: 'maintenance_mode',
+      killSwitches: 'kill_switches',
+      disabledNetworks: 'disabled_networks',
+      disabledDataPlans: 'disabled_data_plans',
+      updatedById: 'updated_by_id',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    },
+    inArray: (col: unknown, val: unknown[]) => ({ type: 'inArray', col: getColName(col), val }),
     desc: (col: unknown) => ({ type: 'desc', col }),
     asc: (col: unknown) => ({ type: 'asc', col }),
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values }),
@@ -1144,14 +1296,75 @@ export function createMockDatabase() {
               ];
             }
 
+            if (isBeneficiariesTable(table)) {
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'id') return inMemoryDb.beneficiaries.filter((b) => b.id === p.val);
+                  if (col === 'business_id' || col === 'businessid') return inMemoryDb.beneficiaries.filter((b) => b.businessId === p.val);
+                }
+                if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
+                  return inMemoryDb.beneficiaries.filter((b) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (col === 'id' && b.id !== c.val) return false;
+                      if ((col === 'business_id' || col === 'businessid') && b.businessId !== c.val) return false;
+                      if ((col === 'phone_number' || col === 'phonenumber') && b.phoneNumber !== c.val) return false;
+                    }
+                    return true;
+                  });
+                }
+              }
+              return inMemoryDb.beneficiaries;
+            }
+
+            if (isSystemSettingsTable(table)) {
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'key') return inMemoryDb.systemSettings.filter((s) => s.key === p.val);
+                  if (col === 'id') return inMemoryDb.systemSettings.filter((s) => s.id === p.val);
+                }
+              }
+              return inMemoryDb.systemSettings;
+            }
+
             return [];
           };
 
           const createQueryChain = (items: unknown[]) => {
             let current = [...items];
+            const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, ch: string) => ch.toUpperCase());
             const chain = {
               groupBy: () => chain,
-              orderBy: () => chain,
+              orderBy: (...clauses: unknown[]) => {
+                if (clauses.length > 0) {
+                  current.sort((a, b) => {
+                    for (const clause of clauses) {
+                      if (clause && typeof clause === 'object' && 'type' in clause && 'col' in clause) {
+                        const c = clause as { type: string; col: unknown };
+                        const colName = getColName(c.col);
+                        const camelKey = toCamel(colName);
+                        const recA = a as Record<string, unknown>;
+                        const recB = b as Record<string, unknown>;
+                        const valA = recA[camelKey] ?? recA[colName];
+                        const valB = recB[camelKey] ?? recB[colName];
+                        const numA = valA instanceof Date ? valA.getTime() : String(valA ?? '');
+                        const numB = valB instanceof Date ? valB.getTime() : String(valB ?? '');
+                        if (numA !== numB) {
+                          const cmp = numA < numB ? -1 : 1;
+                          return c.type === 'desc' ? -cmp : cmp;
+                        }
+                      }
+                    }
+                    return 0;
+                  });
+                }
+                return chain;
+              },
               limit: (num: number) => {
                 current = current.slice(0, num);
                 return chain;
@@ -1203,7 +1416,7 @@ export function createMockDatabase() {
       }),
       insert: (table: unknown) => ({
         values: (data: unknown) => {
-          const res = executeInsert(data);
+          const res = executeInsert(data, table);
           return {
             returning: async () => res,
             then: (resolve: (data: unknown) => void) => resolve(res),
@@ -1441,6 +1654,58 @@ export function createMockDatabase() {
               }
             }
 
+            if (isBeneficiariesTable(table)) {
+              let ben: MockBeneficiary | undefined;
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'id') ben = inMemoryDb.beneficiaries.find((b) => b.id === p.val);
+                } else if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
+                  ben = inMemoryDb.beneficiaries.find((b) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (col === 'id' && b.id !== c.val) return false;
+                      if ((col === 'business_id' || col === 'businessid') && b.businessId !== c.val) return false;
+                      if ((col === 'phone_number' || col === 'phonenumber') && b.phoneNumber !== c.val) return false;
+                    }
+                    return true;
+                  });
+                }
+              } else if (targetVal) {
+                ben = inMemoryDb.beneficiaries.find((b) => b.id === targetVal);
+              }
+              if (ben) {
+                Object.assign(ben, data);
+                return {
+                  returning: async () => [ben],
+                  then: (resolve: (data: unknown) => void) => resolve([ben]),
+                };
+              }
+            }
+
+            if (isSystemSettingsTable(table)) {
+              let sys: MockSystemSetting | undefined;
+              if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+                const p = predicate as Record<string, unknown>;
+                if (p.type === 'eq') {
+                  const col = getColName(p.col);
+                  if (col === 'key') sys = inMemoryDb.systemSettings.find((s) => s.key === p.val);
+                  else if (col === 'id') sys = inMemoryDb.systemSettings.find((s) => s.id === p.val);
+                }
+              } else if (targetVal) {
+                sys = inMemoryDb.systemSettings.find((s) => s.key === targetVal || s.id === targetVal);
+              }
+              if (sys) {
+                Object.assign(sys, data);
+                return {
+                  returning: async () => [sys],
+                  then: (resolve: (data: unknown) => void) => resolve([sys]),
+                };
+              }
+            }
+
             return {
               returning: async () => [],
               then: (resolve: (data: unknown) => void) => resolve([]),
@@ -1450,6 +1715,44 @@ export function createMockDatabase() {
       }),
       delete: (table: unknown) => ({
         where: (predicate: unknown) => {
+          if (isBeneficiariesTable(table)) {
+            let deleted: MockBeneficiary[] = [];
+            if (predicate && typeof predicate === 'object' && 'type' in predicate) {
+              const p = predicate as Record<string, unknown>;
+              if (p.type === 'eq') {
+                const col = getColName(p.col);
+                if (col === 'id') {
+                  deleted = inMemoryDb.beneficiaries.filter((b) => b.id === p.val);
+                  inMemoryDb.beneficiaries = inMemoryDb.beneficiaries.filter((b) => b.id !== p.val);
+                }
+              } else if (p.type === 'inArray' && Array.isArray(p.val)) {
+                const ids = new Set(p.val as string[]);
+                deleted = inMemoryDb.beneficiaries.filter((b) => ids.has(b.id));
+                inMemoryDb.beneficiaries = inMemoryDb.beneficiaries.filter((b) => !ids.has(b.id));
+              } else if (p.type === 'and' && Array.isArray(p.conditions)) {
+                const conds = p.conditions as Array<{ type?: string; col: unknown; val: unknown }>;
+                const matches = (b: MockBeneficiary) => {
+                  for (const c of conds) {
+                    const col = getColName(c.col);
+                    if (c.type === 'inArray' && Array.isArray(c.val)) {
+                      if (col === 'id' && !(c.val as unknown[]).includes(b.id)) return false;
+                      continue;
+                    }
+                    if (col === 'id' && b.id !== c.val) return false;
+                    if ((col === 'business_id' || col === 'businessid') && b.businessId !== c.val) return false;
+                  }
+                  return true;
+                };
+                deleted = inMemoryDb.beneficiaries.filter(matches);
+                inMemoryDb.beneficiaries = inMemoryDb.beneficiaries.filter((b) => !matches(b));
+              }
+            }
+            return {
+              returning: async () => deleted,
+              then: (resolve: (data: unknown) => void) => resolve(deleted),
+            };
+          }
+
           if (isIdempotencyKeysTable(table)) {
             if (predicate && typeof predicate === 'object' && 'type' in predicate) {
               const p = predicate as Record<string, unknown>;

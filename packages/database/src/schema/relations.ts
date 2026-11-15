@@ -1,7 +1,7 @@
 import { relations } from 'drizzle-orm';
-import { users, businesses, businessMembers, kycVerifications, teamInvitations } from './core.js';
+import { users, businesses, businessMembers, kycVerifications, teamInvitations, systemSettings } from './core.js';
 import { wallets, financialLedger } from './wallets.js';
-import { serviceTransactions, providerTransactions, examPins } from './services.js';
+import { serviceTransactions, providerTransactions, examPins, beneficiaries } from './services.js';
 import { apiKeys, idempotencyKeys, webhookDeliveries, auditLogs } from './security.js';
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -33,6 +33,7 @@ export const businessesRelations = relations(businesses, ({ one, many }) => ({
   apiKeys: many(apiKeys),
   idempotencyKeys: many(idempotencyKeys),
   webhookDeliveries: many(webhookDeliveries),
+  beneficiaries: many(beneficiaries),
 }));
 
 export const businessMembersRelations = relations(businessMembers, ({ one }) => ({
@@ -136,5 +137,23 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   business: one(businesses, {
     fields: [auditLogs.businessId],
     references: [businesses.id],
+  }),
+}));
+
+export const beneficiariesRelations = relations(beneficiaries, ({ one }) => ({
+  business: one(businesses, {
+    fields: [beneficiaries.businessId],
+    references: [businesses.id],
+  }),
+  user: one(users, {
+    fields: [beneficiaries.userId],
+    references: [users.id],
+  }),
+}));
+
+export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [systemSettings.updatedById],
+    references: [users.id],
   }),
 }));

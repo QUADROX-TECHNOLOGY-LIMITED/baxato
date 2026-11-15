@@ -183,6 +183,25 @@ export const teamInvitations = pgTable(
   ],
 );
 
+// 6. Platform System Settings Table (singleton/keyed config & kill switches)
+export const systemSettings = pgTable(
+  'system_settings',
+  {
+    id: text('id').primaryKey().$defaultFn(() => generateEntityId('set')),
+    key: text('key').notNull().unique(),
+    maintenanceMode: boolean('maintenance_mode').default(false).notNull(),
+    killSwitches: jsonb('kill_switches').$type<Record<string, boolean>>().default({}).notNull(),
+    disabledNetworks: jsonb('disabled_networks').$type<{ AIRTIME?: string[]; DATA?: string[] }>().default({}).notNull(),
+    disabledDataPlans: jsonb('disabled_data_plans').$type<string[]>().default([]).notNull(),
+    updatedById: text('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('system_settings_key_idx').on(table.key),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Business = typeof businesses.$inferSelect;
@@ -193,3 +212,5 @@ export type KycVerification = typeof kycVerifications.$inferSelect;
 export type NewKycVerification = typeof kycVerifications.$inferInsert;
 export type TeamInvitation = typeof teamInvitations.$inferSelect;
 export type NewTeamInvitation = typeof teamInvitations.$inferInsert;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type NewSystemSetting = typeof systemSettings.$inferInsert;

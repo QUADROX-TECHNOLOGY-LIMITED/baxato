@@ -31,7 +31,13 @@ import {
   providerRouterService,
   ProviderRouterService,
 } from './providers/index.js';
-import { TELCO_PREFIXES } from './airtime.service.js';
+import { TELCO_CONFIGS } from './airtime.service.js';
+import {
+  TELCO_PREFIXES,
+  normalizeNigerianPhone,
+  detectTelcoNetwork,
+} from './telco.utils.js';
+import { serviceControlsService } from './service-controls.service.js';
 import {
   DATA_PLANS,
   filterCatalogForProvider,
@@ -99,38 +105,14 @@ export class DataService {
    * Normalizes Nigerian phone number to 11-digit local format.
    */
   public normalizePhoneNumber(phone: string): string {
-    let clean = phone.replace(/[\s\-()]/g, '');
-    if (clean.startsWith('+234')) {
-      clean = '0' + clean.slice(4);
-    } else if (clean.startsWith('234')) {
-      clean = '0' + clean.slice(3);
-    }
-
-    if (!/^0[789][01]\d{8}$/.test(clean)) {
-      throw new ValidationError(
-        `Invalid Nigerian phone number format: '${phone}'. Must be an 11-digit number.`,
-      );
-    }
-
-    return clean;
+    return normalizeNigerianPhone(phone);
   }
 
   /**
    * Auto-detects telecom operator from Nigerian phone prefix.
    */
   public detectNetwork(phone: string): TelecomNetwork {
-    const normalized = this.normalizePhoneNumber(phone);
-    const prefix = normalized.slice(0, 4);
-
-    for (const [network, prefixes] of Object.entries(TELCO_PREFIXES)) {
-      if (prefixes.includes(prefix)) {
-        return network as TelecomNetwork;
-      }
-    }
-
-    throw new ValidationError(
-      `Could not auto-detect telecom operator for prefix '${prefix}'. Please select network manually.`,
-    );
+    return detectTelcoNetwork(phone);
   }
 
   /**
@@ -206,32 +188,80 @@ export class DataService {
   }
 
   /**
+   * Returns supported mobile networks for Data Bundles along with their admin-configured enabled state.
+   */
+  public getNetworkOptions(disabledNetworks: TelecomNetwork[] = []) {
+    const disabledSet = new Set(disabledNetworks);
+    return Object.values(TELCO_CONFIGS).map((config) => ({
+      network: config.network,
+      name: config.name,
+      primaryColor: config.primaryColor,
+      supportedPrefixes: TELCO_PREFIXES[config.network],
+      enabled: !disabledSet.has(config.network),
+    }));
+  }
+
+  /**
+   * Retrieves unfiltered active-provider catalog items for administrative controls.
+   */
+  public async getAdminCatalogPlans(): Promise<PublicDataPlanDto[]> {
+    const primaryProvider = await this.resolveActivePrimaryProvider();
+    return filterCatalogForProvider(DATA_PLANS, primaryProvider).map(toPublicDataPlanDto);
+  }
+
+  /**
    * Retrieves data plans supported by the currently activated provider,
-   * optionally filtered by network, category, and delivery type (DIRECT vs SME).
+   * excluding admin-disabled networks and plans.
    */
   public async getDataPlans(
     network?: TelecomNetwork,
     category?: DataPlanCategory,
     dataType?: DataDeliveryType,
   ): Promise<PublicDataPlanDto[]> {
-    const primaryProvider = await this.resolveActivePrimaryProvider();
+    const [primaryProvider, controls] = await Promise.all([
+      this.resolveActivePrimaryProvider(),
+      serviceControlsService.getSettings(),
+    ]);
+
+    if (controls.maintenanceMode || controls.killSwitches.DATA) {
+      return [];
+    }
+
+    const disabledNetworks = new Set(controls.disabledNetworks.DATA);
+    const disabledPlans = new Set(controls.disabledDataPlans);
+
     const filtered = filterCatalogForProvider(DATA_PLANS, primaryProvider, {
       network,
       category,
       dataType,
-    });
+    }).filter((plan) => !disabledNetworks.has(plan.network) && !disabledPlans.has(plan.id));
+
     return filtered.map(toPublicDataPlanDto);
   }
 
   /**
-   * Returns categories and delivery types available for the currently activated provider.
+   * Returns categories and delivery types available for the currently activated provider
+   * after applying admin network/plan enablement controls.
    */
   public async getAvailableCategories(network?: TelecomNetwork): Promise<{
     categories: DataPlanCategory[];
     dataTypes: DataDeliveryType[];
   }> {
-    const primaryProvider = await this.resolveActivePrimaryProvider();
-    const plans = filterCatalogForProvider(DATA_PLANS, primaryProvider, { network });
+    const [primaryProvider, controls] = await Promise.all([
+      this.resolveActivePrimaryProvider(),
+      serviceControlsService.getSettings(),
+    ]);
+
+    if (controls.maintenanceMode || controls.killSwitches.DATA) {
+      return { categories: [], dataTypes: [] };
+    }
+
+    const disabledNetworks = new Set(controls.disabledNetworks.DATA);
+    const disabledPlans = new Set(controls.disabledDataPlans);
+
+    const plans = filterCatalogForProvider(DATA_PLANS, primaryProvider, { network }).filter(
+      (plan) => !disabledNetworks.has(plan.network) && !disabledPlans.has(plan.id),
+    );
     const categories = getAvailableCategoriesForPlans(plans);
     const dataTypes: DataDeliveryType[] = [];
     if (plans.some((p) => p.dataType === 'DIRECT')) dataTypes.push('DIRECT');
@@ -252,7 +282,7 @@ export class DataService {
 
   /**
    * End-to-end Data Bundle Purchase workflow:
-   * 1. Active Provider Eligibility, Phone & Plan Validation
+   * 1. Active Provider Eligibility, Admin Controls, Phone & Plan Validation
    * 2. Idempotency Lock Check
    * 3. Concurrency-safe Wallet Debit (with merchant discount)
    * 4. Multi-provider Vending with Automatic Failover
@@ -262,7 +292,20 @@ export class DataService {
   public async purchaseDataBundle(input: PurchaseDataInput): Promise<DataReceiptDto> {
     const normalizedPhone = this.normalizePhoneNumber(input.phone);
     const plan = this.getPlanById(input.planId);
-    const primaryProvider = await this.resolveActivePrimaryProvider();
+    const [primaryProvider, controls] = await Promise.all([
+      this.resolveActivePrimaryProvider(),
+      serviceControlsService.getSettings(),
+    ]);
+
+    if (controls.maintenanceMode || controls.killSwitches.DATA) {
+      throw new ValidationError('Data service is currently unavailable. Please try again later.');
+    }
+    if (controls.disabledNetworks.DATA.includes(plan.network)) {
+      throw new ValidationError(`${plan.networkName} data bundles are currently unavailable.`);
+    }
+    if (controls.disabledDataPlans.includes(plan.id)) {
+      throw new ValidationError(`The selected data plan '${plan.name}' is currently unavailable.`);
+    }
 
     if (!plan.supportedProviders.includes(primaryProvider)) {
       throw new ValidationError(

@@ -87,6 +87,40 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT;`;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS phone_number TEXT;`;
 
+    // Idempotent schema guarantee for Platform System Settings
+    await sql`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id TEXT PRIMARY KEY,
+        key TEXT NOT NULL UNIQUE,
+        maintenance_mode BOOLEAN DEFAULT false NOT NULL,
+        kill_switches JSONB DEFAULT '{}'::jsonb NOT NULL,
+        disabled_networks JSONB DEFAULT '{}'::jsonb NOT NULL,
+        disabled_data_plans JSONB DEFAULT '[]'::jsonb NOT NULL,
+        updated_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+    `;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS system_settings_key_idx ON system_settings(key);`;
+
+    // Idempotent schema guarantee for Saved Beneficiaries
+    await sql`
+      CREATE TABLE IF NOT EXISTS beneficiaries (
+        id TEXT PRIMARY KEY,
+        business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        phone_number TEXT NOT NULL,
+        network TEXT,
+        label TEXT,
+        service_type TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS beneficiaries_business_id_idx ON beneficiaries(business_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS beneficiaries_created_at_idx ON beneficiaries(created_at);`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_phone_idx ON beneficiaries(business_id, phone_number);`;
+
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;
   } catch (err: any) {

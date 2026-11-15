@@ -33,6 +33,14 @@ import {
   ProviderRouterService,
 } from './providers/index.js';
 import { auditService } from './audit.service.js';
+import { serviceControlsService } from './service-controls.service.js';
+import {
+  TELCO_PREFIXES,
+  normalizeNigerianPhone,
+  detectTelcoNetwork,
+} from './telco.utils.js';
+
+export { TELCO_PREFIXES };
 
 export interface TelcoNetworkConfig {
   network: TelecomNetwork;
@@ -83,21 +91,6 @@ export const TELCO_CONFIGS: Record<TelecomNetwork, TelcoNetworkConfig> = {
   },
 };
 
-export const TELCO_PREFIXES: Record<TelecomNetwork, string[]> = {
-  [TelecomNetwork.MTN]: [
-    '0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916',
-  ],
-  [TelecomNetwork.AIRTEL]: [
-    '0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912',
-  ],
-  [TelecomNetwork.GLO]: [
-    '0805', '0807', '0705', '0815', '0811', '0905', '0915',
-  ],
-  [TelecomNetwork.NINEMOBILE]: [
-    '0809', '0817', '0818', '0909', '0908',
-  ],
-};
-
 export interface PurchaseAirtimeInput {
   businessId: string;
   userId: string;
@@ -141,38 +134,14 @@ export class AirtimeService {
    * Normalizes Nigerian phone number to standard 11-digit local format (e.g. 08031234567).
    */
   public normalizePhoneNumber(phone: string): string {
-    let clean = phone.replace(/[\s\-()]/g, '');
-    if (clean.startsWith('+234')) {
-      clean = '0' + clean.slice(4);
-    } else if (clean.startsWith('234')) {
-      clean = '0' + clean.slice(3);
-    }
-
-    if (!/^0[789][01]\d{8}$/.test(clean)) {
-      throw new ValidationError(
-        `Invalid Nigerian phone number format: '${phone}'. Must be an 11-digit number.`,
-      );
-    }
-
-    return clean;
+    return normalizeNigerianPhone(phone);
   }
 
   /**
    * Auto-detects the telecom network from the phone number prefix.
    */
   public detectNetwork(phone: string): TelecomNetwork {
-    const normalized = this.normalizePhoneNumber(phone);
-    const prefix = normalized.slice(0, 4);
-
-    for (const [network, prefixes] of Object.entries(TELCO_PREFIXES)) {
-      if (prefixes.includes(prefix)) {
-        return network as TelecomNetwork;
-      }
-    }
-
-    throw new ValidationError(
-      `Could not auto-detect telecom operator for prefix '${prefix}'. Please select network manually.`,
-    );
+    return detectTelcoNetwork(phone);
   }
 
   /**
@@ -210,7 +179,11 @@ export class AirtimeService {
   /**
    * Returns list of supported networks and active commercial parameters.
    */
-  public getNetworkOptions(adminDiscounts?: Record<string, number>) {
+  public getNetworkOptions(
+    adminDiscounts?: Record<string, number>,
+    disabledNetworks: TelecomNetwork[] = [],
+  ) {
+    const disabledSet = new Set(disabledNetworks);
     return Object.values(TELCO_CONFIGS).map((config) => {
       const discountBps = adminDiscounts?.[config.network] ?? adminDiscounts?.default ?? config.discountBps;
       return {
@@ -224,6 +197,7 @@ export class AirtimeService {
         maxAmountNaira: koboToNaira(config.maxAmountKobo),
         primaryColor: config.primaryColor,
         supportedPrefixes: TELCO_PREFIXES[config.network],
+        enabled: !disabledSet.has(config.network),
       };
     });
   }
@@ -244,6 +218,14 @@ export class AirtimeService {
 
     if (!config) {
       throw new ValidationError(`Unsupported telecom network: ${network}`);
+    }
+
+    const controls = await serviceControlsService.getSettings();
+    if (controls.maintenanceMode || controls.killSwitches.AIRTIME) {
+      throw new ValidationError('Airtime service is currently unavailable. Please try again later.');
+    }
+    if (controls.disabledNetworks.AIRTIME.includes(network)) {
+      throw new ValidationError(`${config.name} airtime is currently unavailable.`);
     }
 
     // Validate amount boundaries

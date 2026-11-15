@@ -29,6 +29,12 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
+import { useWalletBalance } from '@/lib/use-wallet-balance';
+import { showToast } from '@/lib/toast';
+import PhoneFieldWithBeneficiaries, {
+  SavedBeneficiary,
+  useSavedBeneficiaries,
+} from '@/components/dashboard/PhoneFieldWithBeneficiaries';
 
 interface NetworkOption {
   id: string;
@@ -39,6 +45,7 @@ interface NetworkOption {
   prefixes: string[];
   activeClasses: string;
   discountBps: number;
+  enabled: boolean;
 }
 
 const NETWORKS: NetworkOption[] = [
@@ -50,6 +57,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
     activeClasses: 'border-amber-400 bg-amber-50/60 dark:bg-amber-400/10 ring-1 ring-amber-400/40',
     discountBps: 0,
+    enabled: true,
   },
   {
     id: 'AIRTEL',
@@ -59,6 +67,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
     activeClasses: 'border-red-500 bg-red-50/50 dark:bg-red-500/10 ring-1 ring-red-500/35',
     discountBps: 0,
+    enabled: true,
   },
   {
     id: 'GLO',
@@ -69,6 +78,7 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
     activeClasses: 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10 ring-1 ring-emerald-500/35',
     discountBps: 0,
+    enabled: true,
   },
   {
     id: '9MOBILE',
@@ -78,8 +88,16 @@ const NETWORKS: NetworkOption[] = [
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
     activeClasses: 'border-teal-500 bg-teal-50/50 dark:bg-teal-500/10 ring-1 ring-teal-500/35',
     discountBps: 0,
+    enabled: true,
   },
 ];
+
+function normalizeBeneficiaryNetwork(network?: string | null): string | null {
+  if (!network) return null;
+  const upper = network.toUpperCase();
+  if (upper === 'NINEMOBILE') return '9MOBILE';
+  return upper;
+}
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
@@ -157,15 +175,21 @@ export default function AirtimePage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const { walletBalance, isLoadingBalance, refreshWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+
+  const {
+    beneficiaries,
+    saveBeneficiary,
+    deleteBeneficiary,
+  } = useSavedBeneficiaries();
 
   // Form State (₦100 default amount)
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
   const [amount, setAmount] = useState<string>('100');
   const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
+  const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState<boolean>(false);
 
   // After-interaction validation tracking
   const [phoneEdited, setPhoneEdited] = useState<boolean>(false);
@@ -182,46 +206,13 @@ export default function AirtimePage() {
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
-  const loadWallets = async () => {
-    try {
-      setIsLoadingBalance(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken) {
-        clearSessionAndRedirect('expired');
-        return;
-      }
-
-      const res = await fetch('/api/wallets', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-      const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) {
-        return;
-      }
-
-      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
-        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        if (main) {
-          setWalletBalance(main.balanceNaira || 0);
-        }
-      }
-    } catch {
-      // Wallet balance load stays resilient; existing UI renders last value or 0
-    } finally {
-      setIsLoadingBalance(false);
-      setIsInitialLoading(false);
-    }
-  };
-
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
       clearSessionAndRedirect('expired');
       return;
     }
+    setIsInitialLoading(false);
 
     try {
       const storedUser = getStoredUser();
@@ -288,16 +279,19 @@ export default function AirtimePage() {
 
     const loadNetworksCatalog = async () => {
       try {
-        const res = await fetch('/api/services/airtime/networks');
+        const res = await fetch('/api/services/airtime/networks', { cache: 'no-store' });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.success && Array.isArray(data.data)) {
           setNetworksList((prev) =>
             prev.map((net) => {
               const matched = data.data.find((n: any) => n.network === net.id);
-              if (matched && typeof matched.discountBps === 'number') {
-                return { ...net, discountBps: matched.discountBps };
-              }
-              return net;
+              if (!matched) return net;
+              return {
+                ...net,
+                discountBps:
+                  typeof matched.discountBps === 'number' ? matched.discountBps : net.discountBps,
+                enabled: matched.enabled !== false,
+              };
             }),
           );
         }
@@ -308,12 +302,10 @@ export default function AirtimePage() {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
       if (b?.role) setUserRole(b.role);
-      void loadWallets();
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
 
-    void loadWallets();
     void syncUserProfile();
     void loadNetworksCatalog();
 
@@ -322,6 +314,16 @@ export default function AirtimePage() {
       if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const current = networksList.find((n) => n.id === selectedNetwork);
+    if (current && current.enabled === false) {
+      const firstEnabled = networksList.find((n) => n.enabled !== false);
+      if (firstEnabled) {
+        setSelectedNetwork(firstEnabled.id);
+      }
+    }
+  }, [networksList, selectedNetwork]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -384,8 +386,13 @@ export default function AirtimePage() {
     setLiveAnnouncement('');
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const normalized = normalizeNigerianPhone(e.target.value);
+  const allNetworksDisabled = useMemo(
+    () => networksList.length > 0 && networksList.every((n) => n.enabled === false),
+    [networksList],
+  );
+
+  const handlePhoneValueChange = (raw: string) => {
+    const normalized = normalizeNigerianPhone(raw);
     setPhone(normalized);
     setPhoneEdited(true);
     setErrorMessage(null);
@@ -396,8 +403,37 @@ export default function AirtimePage() {
     if (normalized.length >= 4) {
       const prefix = normalized.slice(0, 4);
       const match = networksList.find((net) => net.prefixes.includes(prefix));
-      if (match) {
+      if (match && match.enabled !== false) {
         setSelectedNetwork(match.id);
+      }
+    }
+  };
+
+  const handleSelectBeneficiary = (ben: SavedBeneficiary) => {
+    const normalized = normalizeNigerianPhone(ben.phoneNumber);
+    setPhone(normalized);
+    setPhoneEdited(true);
+    setErrorMessage(null);
+    clearBlurAnnouncement();
+
+    const mappedNetwork = normalizeBeneficiaryNetwork(ben.network);
+    const matchedBySaved = mappedNetwork
+      ? networksList.find((n) => n.id === mappedNetwork)
+      : undefined;
+    const matchedByPrefix =
+      normalized.length >= 4
+        ? networksList.find((n) => n.prefixes.includes(normalized.slice(0, 4)))
+        : undefined;
+    const candidate = matchedBySaved || matchedByPrefix;
+
+    if (candidate) {
+      if (candidate.enabled === false) {
+        showToast({
+          type: 'warning',
+          message: `${candidate.name} airtime is currently unavailable.`,
+        });
+      } else {
+        setSelectedNetwork(candidate.id);
       }
     }
   };
@@ -445,15 +481,38 @@ export default function AirtimePage() {
 
     setSubmitAttempted(true);
 
+    if (allNetworksDisabled) {
+      const msg = 'Airtime service is temporarily unavailable across all networks.';
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
+      return;
+    }
+
     if (phoneValidationError) {
       clearBlurAnnouncement();
+      showToast({ type: 'error', message: phoneValidationError });
       phoneInputRef.current?.focus();
+      return;
+    }
+
+    if (activeNetworkConfig.enabled === false) {
+      const msg = `${activeNetworkConfig.name} airtime is currently unavailable.`;
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
       return;
     }
 
     if (amountValidationError) {
       clearBlurAnnouncement();
+      showToast({ type: 'error', message: amountValidationError });
       amountInputRef.current?.focus();
+      return;
+    }
+
+    if (exceedsBalance) {
+      const msg = `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`;
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
       return;
     }
 
@@ -471,6 +530,7 @@ export default function AirtimePage() {
         return;
       }
 
+      const activeBiz = getStoredBusiness();
       const amountKobo = Math.round(numericAmount * 100);
 
       const response = await fetch('/api/services/airtime/purchase', {
@@ -478,6 +538,7 @@ export default function AirtimePage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`,
+          ...(activeBiz?.id ? { 'x-business-id': activeBiz.id } : {}),
         },
         body: JSON.stringify({
           phone,
@@ -544,10 +605,19 @@ export default function AirtimePage() {
       setReceiptData(receiptItem);
       setIsConfirmModalOpen(false);
       setIsReceiptModalOpen(true);
-      void loadWallets();
+      void refreshWallets();
+
+      if (saveBeneficiaryChecked) {
+        void saveBeneficiary({
+          phoneNumber: phone,
+          network: selectedNetwork,
+          serviceType: 'AIRTIME',
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction could not be completed.';
       setErrorMessage(msg);
+      showToast({ type: 'error', title: 'Airtime purchase failed', message: msg });
       setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
@@ -556,7 +626,7 @@ export default function AirtimePage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadWallets();
+    await refreshWallets();
     setTimeout(() => setIsRefreshing(false), 350);
   };
 
@@ -690,16 +760,29 @@ export default function AirtimePage() {
                 aria-label="Airtime purchase form"
                 className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
               >
-                  {/* 1. Recipient Phone Number */}
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <label
-                        htmlFor={phoneId}
-                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
-                      >
+                  {/* 1. Recipient Phone Number & Saved Beneficiaries */}
+                  <PhoneFieldWithBeneficiaries
+                    id={phoneId}
+                    label={
+                      <>
                         Phone Number <span aria-hidden="true" className="text-red-500">*</span>
-                      </label>
-                      {detectedNetwork && (
+                      </>
+                    }
+                    value={phone}
+                    onChange={handlePhoneValueChange}
+                    onBlur={handlePhoneBlur}
+                    inputRef={phoneInputRef}
+                    placeholder="08012345678"
+                    required
+                    errorId={phoneErrorId}
+                    errorText={showPhoneError ? phoneValidationError : null}
+                    beneficiaries={beneficiaries}
+                    onSelectBeneficiary={handleSelectBeneficiary}
+                    onDeleteBeneficiary={deleteBeneficiary}
+                    saveChecked={saveBeneficiaryChecked}
+                    onSaveCheckedChange={setSaveBeneficiaryChecked}
+                    rightBadge={
+                      detectedNetwork ? (
                         <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                           <span
                             className={`w-4 h-4 rounded-full overflow-hidden inline-flex items-center justify-center shrink-0 ${
@@ -718,63 +801,14 @@ export default function AirtimePage() {
                               } ${detectedNetwork.logoScaleClass || ''}`}
                             />
                           </span>
-                          <span>{detectedNetwork.name} prefix</span>
+                          <span>
+                            {detectedNetwork.name}
+                            {detectedNetwork.enabled === false ? ' (Unavailable)' : ' prefix'}
+                          </span>
                         </span>
-                      )}
-                    </div>
-
-                    <div className="relative">
-                      <input
-                        ref={phoneInputRef}
-                        id={phoneId}
-                        name="phone"
-                        type="tel"
-                        inputMode="numeric"
-                        autoComplete="tel-national"
-                        enterKeyHint="next"
-                        maxLength={18}
-                        pattern="\d{11}"
-                        placeholder="08012345678"
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        onBlur={handlePhoneBlur}
-                        aria-invalid={showPhoneError ? 'true' : 'false'}
-                        aria-describedby={showPhoneError ? phoneErrorId : undefined}
-                        required
-                        className={`w-full h-11 pl-3.5 pr-10 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-medium tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
-                          showPhoneError
-                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
-                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
-                        }`}
-                      />
-
-                      {phone.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPhone('');
-                            setPhoneEdited(true);
-                            setErrorMessage(null);
-                            phoneInputRef.current?.focus();
-                          }}
-                          aria-label="Clear phone number"
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
-                        >
-                          <X className="w-4 h-4" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-
-                    {showPhoneError && (
-                      <p
-                        id={phoneErrorId}
-                        className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>{phoneValidationError}</span>
-                      </p>
-                    )}
-                  </div>
+                      ) : undefined
+                    }
+                  />
 
                   {/* 2. Network Radio Selection */}
                   <fieldset className="space-y-2.5">
@@ -784,14 +818,18 @@ export default function AirtimePage() {
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                       {networksList.map((network) => {
-                        const isSelected = selectedNetwork === network.id;
+                        const isDisabled = network.enabled === false;
+                        const isSelected = selectedNetwork === network.id && !isDisabled;
                         return (
                           <label
                             key={network.id}
-                            className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
-                              isSelected
-                                ? network.activeClasses
-                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
+                            aria-disabled={isDisabled}
+                            className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                              isDisabled
+                                ? 'border-slate-200 dark:border-slate-800/80 bg-slate-100/80 dark:bg-slate-900/40 opacity-55 grayscale cursor-not-allowed'
+                                : isSelected
+                                  ? `${network.activeClasses} cursor-pointer`
+                                  : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer'
                             }`}
                           >
                             <input
@@ -799,7 +837,9 @@ export default function AirtimePage() {
                               name="network"
                               value={network.id}
                               checked={isSelected}
+                              disabled={isDisabled}
                               onChange={() => {
+                                if (isDisabled) return;
                                 setSelectedNetwork(network.id);
                                 setErrorMessage(null);
                               }}
@@ -833,20 +873,27 @@ export default function AirtimePage() {
                             <span className="text-xs font-semibold text-slate-900 dark:text-white">
                               {network.name}
                             </span>
+                            {isDisabled && (
+                              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                Unavailable
+                              </span>
+                            )}
                           </label>
                         );
                       })}
                     </div>
 
-                    {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Prefix matches{' '}
-                        <span className="font-medium text-slate-700 dark:text-slate-200">
-                          {detectedNetwork.name}
-                        </span>
-                        ; {activeNetworkConfig.name} will be recharged.
-                      </p>
-                    )}
+                    {detectedNetwork &&
+                      detectedNetwork.enabled !== false &&
+                      selectedNetwork !== detectedNetwork.id && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Prefix matches{' '}
+                          <span className="font-medium text-slate-700 dark:text-slate-200">
+                            {detectedNetwork.name}
+                          </span>
+                          ; {activeNetworkConfig.name} will be recharged.
+                        </p>
+                      )}
                   </fieldset>
 
                   {/* 3. Amount Selection */}
@@ -1072,11 +1119,11 @@ export default function AirtimePage() {
           setPhoneBlurred(false);
           setSubmitAttempted(false);
           setLiveAnnouncement('');
-          void loadWallets();
+          void refreshWallets();
         }}
         onStatusUpdated={(updated) => {
           setReceiptData(updated);
-          void loadWallets();
+          void refreshWallets();
         }}
         pollingEndpoint="/api/services/airtime/status/"
       />

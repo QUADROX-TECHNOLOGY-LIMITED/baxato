@@ -30,6 +30,12 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
+import { useWalletBalance } from '@/lib/use-wallet-balance';
+import { showToast } from '@/lib/toast';
+import PhoneFieldWithBeneficiaries, {
+  SavedBeneficiary,
+  useSavedBeneficiaries,
+} from '@/components/dashboard/PhoneFieldWithBeneficiaries';
 
 interface NetworkOption {
   id: string;
@@ -39,6 +45,7 @@ interface NetworkOption {
   logoScaleClass?: string;
   prefixes: string[];
   activeClasses: string;
+  enabled: boolean;
 }
 
 const NETWORKS: NetworkOption[] = [
@@ -49,6 +56,7 @@ const NETWORKS: NetworkOption[] = [
     fullBleed: true,
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
     activeClasses: 'border-amber-400 bg-amber-50/60 dark:bg-amber-400/10 ring-1 ring-amber-400/40',
+    enabled: true,
   },
   {
     id: 'AIRTEL',
@@ -57,6 +65,7 @@ const NETWORKS: NetworkOption[] = [
     fullBleed: false,
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
     activeClasses: 'border-red-500 bg-red-50/50 dark:bg-red-500/10 ring-1 ring-red-500/35',
+    enabled: true,
   },
   {
     id: 'GLO',
@@ -66,6 +75,7 @@ const NETWORKS: NetworkOption[] = [
     logoScaleClass: 'scale-[1.09]',
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
     activeClasses: 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10 ring-1 ring-emerald-500/35',
+    enabled: true,
   },
   {
     id: '9MOBILE',
@@ -74,8 +84,16 @@ const NETWORKS: NetworkOption[] = [
     fullBleed: false,
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
     activeClasses: 'border-teal-500 bg-teal-50/50 dark:bg-teal-500/10 ring-1 ring-teal-500/35',
+    enabled: true,
   },
 ];
+
+function normalizeBeneficiaryNetwork(network?: string | null): string | null {
+  if (!network) return null;
+  const upper = network.toUpperCase();
+  if (upper === 'NINEMOBILE') return '9MOBILE';
+  return upper;
+}
 
 interface DataPlan {
   id: string;
@@ -172,13 +190,20 @@ export default function DataBundlesPage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const { walletBalance, isLoadingBalance, refreshWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+
+  const {
+    beneficiaries,
+    saveBeneficiary,
+    deleteBeneficiary,
+  } = useSavedBeneficiaries();
 
   // Form & Catalog State
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
+  const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
+  const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [planSearch, setPlanSearch] = useState<string>('');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -198,37 +223,39 @@ export default function DataBundlesPage() {
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
-  const loadWallets = async () => {
+  const fetchCatalog = async () => {
     try {
-      setIsLoadingBalance(true);
-      const authToken = getStoredAuthToken();
-      if (!authToken) {
-        clearSessionAndRedirect('expired');
-        return;
+      setIsLoadingPlans(true);
+      const [plansRes, netsRes] = await Promise.all([
+        fetch('/api/services/data/plans', { cache: 'no-store' }),
+        fetch('/api/services/data/networks', { cache: 'no-store' }),
+      ]);
+
+      const [plansJson, netsJson] = await Promise.all([
+        plansRes.json().catch(() => null),
+        netsRes.json().catch(() => null),
+      ]);
+
+      if (plansRes.ok && plansJson?.success && Array.isArray(plansJson.data)) {
+        setPlans(plansJson.data);
       }
 
-      const res = await fetch('/api/wallets', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-      const data = await res.json().catch(() => null);
-
-      if (handleAuthResponse(res, data)) {
-        return;
-      }
-
-      if (res.ok && data?.success && Array.isArray(data.data?.wallets)) {
-        const main = data.data.wallets.find((w: any) => w.type === 'MAIN');
-        if (main) {
-          setWalletBalance(main.balanceNaira || 0);
-        }
+      if (netsRes.ok && netsJson?.success && Array.isArray(netsJson.data)) {
+        setNetworksList((prev) =>
+          prev.map((net) => {
+            const matched = netsJson.data.find((n: any) => n.network === net.id);
+            if (!matched) return net;
+            return {
+              ...net,
+              enabled: matched.enabled !== false,
+            };
+          }),
+        );
       }
     } catch {
-      // Preserve last loaded balance on transient error
+      // Fallback plans remain available
     } finally {
-      setIsLoadingBalance(false);
-      setIsInitialLoading(false);
+      setIsLoadingPlans(false);
     }
   };
 
@@ -238,6 +265,7 @@ export default function DataBundlesPage() {
       clearSessionAndRedirect('expired');
       return;
     }
+    setIsInitialLoading(false);
 
     try {
       const storedUser = getStoredUser();
@@ -302,39 +330,39 @@ export default function DataBundlesPage() {
       } catch {}
     };
 
-    const fetchPlans = async () => {
-      try {
-        setIsLoadingPlans(true);
-        const res = await fetch('/api/services/data/plans');
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.success && Array.isArray(data.data)) {
-          setPlans(data.data);
-        }
-      } catch {
-        // Fallback plans remain available
-      } finally {
-        setIsLoadingPlans(false);
-      }
-    };
-
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
       if (b?.role) setUserRole(b.role);
-      void loadWallets();
     };
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
 
-    void loadWallets();
     void syncUserProfile();
-    void fetchPlans();
+    void fetchCatalog();
 
     return () => {
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const current = networksList.find((n) => n.id === selectedNetwork);
+    if (current && current.enabled === false) {
+      const firstEnabled = networksList.find((n) => n.enabled !== false);
+      if (firstEnabled) {
+        setSelectedNetwork(firstEnabled.id);
+        setSelectedPlanId('');
+      }
+    }
+  }, [networksList, selectedNetwork]);
+
+  useEffect(() => {
+    if (!isLoadingPlans && selectedPlanId && !plans.some((p) => p.id === selectedPlanId)) {
+      setSelectedPlanId('');
+    }
+  }, [isLoadingPlans, plans, selectedPlanId]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -347,10 +375,15 @@ export default function DataBundlesPage() {
   const detectedNetwork = useMemo(() => {
     if (phone.length >= 4) {
       const prefix = phone.slice(0, 4);
-      return NETWORKS.find((net) => net.prefixes.includes(prefix)) || null;
+      return networksList.find((net) => net.prefixes.includes(prefix)) || null;
     }
     return null;
-  }, [phone]);
+  }, [phone, networksList]);
+
+  const allNetworksDisabled = useMemo(
+    () => networksList.length > 0 && networksList.every((n) => n.enabled === false),
+    [networksList],
+  );
 
   const availableCategories = useMemo(() => {
     const networkPlans = plans.filter(
@@ -382,8 +415,8 @@ export default function DataBundlesPage() {
   }, [plans, selectedPlanId]);
 
   const activeNetworkConfig = useMemo(() => {
-    return NETWORKS.find((n) => n.id === selectedNetwork) || NETWORKS[0];
-  }, [selectedNetwork]);
+    return networksList.find((n) => n.id === selectedNetwork) || networksList[0] || NETWORKS[0];
+  }, [selectedNetwork, networksList]);
 
   const planDiscountBps = activePlan?.discountBps || 0;
   const estimatedDiscountNaira = activePlan
@@ -424,8 +457,8 @@ export default function DataBundlesPage() {
     setLiveAnnouncement('');
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const normalized = normalizeNigerianPhone(e.target.value);
+  const handlePhoneValueChange = (raw: string) => {
+    const normalized = normalizeNigerianPhone(raw);
     setPhone(normalized);
     setPhoneEdited(true);
     setErrorMessage(null);
@@ -435,10 +468,41 @@ export default function DataBundlesPage() {
 
     if (normalized.length >= 4) {
       const prefix = normalized.slice(0, 4);
-      const match = NETWORKS.find((net) => net.prefixes.includes(prefix));
-      if (match && match.id !== selectedNetwork) {
+      const match = networksList.find((net) => net.prefixes.includes(prefix));
+      if (match && match.enabled !== false && match.id !== selectedNetwork) {
         setSelectedNetwork(match.id);
         setSelectedPlanId('');
+      }
+    }
+  };
+
+  const handleSelectBeneficiary = (ben: SavedBeneficiary) => {
+    const normalized = normalizeNigerianPhone(ben.phoneNumber);
+    setPhone(normalized);
+    setPhoneEdited(true);
+    setErrorMessage(null);
+    clearBlurAnnouncement();
+
+    const mappedNetwork = normalizeBeneficiaryNetwork(ben.network);
+    const matchedBySaved = mappedNetwork
+      ? networksList.find((n) => n.id === mappedNetwork)
+      : undefined;
+    const matchedByPrefix =
+      normalized.length >= 4
+        ? networksList.find((n) => n.prefixes.includes(normalized.slice(0, 4)))
+        : undefined;
+    const candidate = matchedBySaved || matchedByPrefix;
+
+    if (candidate) {
+      if (candidate.enabled === false) {
+        showToast({
+          type: 'warning',
+          message: `${candidate.name} data bundles are currently unavailable.`,
+        });
+      } else if (candidate.id !== selectedNetwork) {
+        setSelectedNetwork(candidate.id);
+        setSelectedPlanId('');
+        setPlanSearch('');
       }
     }
   };
@@ -451,6 +515,8 @@ export default function DataBundlesPage() {
   };
 
   const handleSelectNetwork = (networkId: string) => {
+    const target = networksList.find((n) => n.id === networkId);
+    if (target?.enabled === false) return;
     if (networkId !== selectedNetwork) {
       setSelectedNetwork(networkId);
       setSelectedPlanId('');
@@ -495,23 +561,39 @@ export default function DataBundlesPage() {
 
     setSubmitAttempted(true);
 
+    if (allNetworksDisabled) {
+      const msg = 'Data bundle service is temporarily unavailable across all networks.';
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
+      return;
+    }
+
     if (phoneValidationError) {
       clearBlurAnnouncement();
+      showToast({ type: 'error', message: phoneValidationError });
       phoneInputRef.current?.focus();
+      return;
+    }
+
+    if (activeNetworkConfig.enabled === false) {
+      const msg = `${activeNetworkConfig.name} data bundles are currently unavailable.`;
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
       return;
     }
 
     if (!activePlan) {
       clearBlurAnnouncement();
       setLiveAnnouncement('Select a data plan to continue.');
+      showToast({ type: 'error', message: 'Select a data plan to continue.' });
       firstPlanInputRef.current?.focus();
       return;
     }
 
     if (exceedsBalance) {
-      setErrorMessage(
-        `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`,
-      );
+      const msg = `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`;
+      setErrorMessage(msg);
+      showToast({ type: 'error', message: msg });
       return;
     }
 
@@ -530,11 +612,14 @@ export default function DataBundlesPage() {
         return;
       }
 
+      const activeBiz = getStoredBusiness();
+
       const res = await fetch('/api/services/data/purchase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeBiz?.id ? { 'x-business-id': activeBiz.id } : {}),
         },
         body: JSON.stringify({
           phone,
@@ -556,7 +641,9 @@ export default function DataBundlesPage() {
           data?.message ||
           'Data purchase failed. Please try again.';
         setErrorMessage(msg);
+        showToast({ type: 'error', title: 'Data purchase failed', message: msg });
         setIsConfirmModalOpen(false);
+        void fetchCatalog();
         return;
       }
 
@@ -599,10 +686,19 @@ export default function DataBundlesPage() {
       setIsConfirmModalOpen(false);
       setReceiptData(receiptItem);
       setIsReceiptModalOpen(true);
-      void loadWallets();
+      void refreshWallets();
+
+      if (saveBeneficiaryChecked) {
+        void saveBeneficiary({
+          phoneNumber: phone,
+          network: selectedNetwork,
+          serviceType: 'DATA',
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error. Please try again.';
       setErrorMessage(msg);
+      showToast({ type: 'error', title: 'Data purchase failed', message: msg });
       setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
@@ -611,7 +707,7 @@ export default function DataBundlesPage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadWallets();
+    await Promise.all([refreshWallets(), fetchCatalog()]);
     setTimeout(() => setIsRefreshing(false), 350);
   };
 
@@ -745,16 +841,29 @@ export default function DataBundlesPage() {
                 aria-label="Data bundle purchase form"
                 className="max-w-3xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6"
               >
-                {/* 1. Recipient Phone Number */}
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <label
-                      htmlFor={phoneId}
-                      className="text-xs font-semibold text-slate-700 dark:text-slate-300"
-                    >
+                {/* 1. Recipient Phone Number & Saved Beneficiaries */}
+                <PhoneFieldWithBeneficiaries
+                  id={phoneId}
+                  label={
+                    <>
                       Phone Number <span aria-hidden="true" className="text-red-500">*</span>
-                    </label>
-                    {detectedNetwork && (
+                    </>
+                  }
+                  value={phone}
+                  onChange={handlePhoneValueChange}
+                  onBlur={handlePhoneBlur}
+                  inputRef={phoneInputRef}
+                  placeholder="08012345678"
+                  required
+                  errorId={phoneErrorId}
+                  errorText={showPhoneError ? phoneValidationError : null}
+                  beneficiaries={beneficiaries}
+                  onSelectBeneficiary={handleSelectBeneficiary}
+                  onDeleteBeneficiary={deleteBeneficiary}
+                  saveChecked={saveBeneficiaryChecked}
+                  onSaveCheckedChange={setSaveBeneficiaryChecked}
+                  rightBadge={
+                    detectedNetwork ? (
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                         <span
                           className={`w-4 h-4 rounded-full overflow-hidden inline-flex items-center justify-center shrink-0 ${
@@ -773,63 +882,14 @@ export default function DataBundlesPage() {
                             } ${detectedNetwork.logoScaleClass || ''}`}
                           />
                         </span>
-                        <span>{detectedNetwork.name} prefix</span>
+                        <span>
+                          {detectedNetwork.name}
+                          {detectedNetwork.enabled === false ? ' (Unavailable)' : ' prefix'}
+                        </span>
                       </span>
-                    )}
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      ref={phoneInputRef}
-                      id={phoneId}
-                      name="phone"
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      enterKeyHint="next"
-                      maxLength={18}
-                      pattern="\d{11}"
-                      placeholder="08012345678"
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      onBlur={handlePhoneBlur}
-                      aria-invalid={showPhoneError ? 'true' : 'false'}
-                      aria-describedby={showPhoneError ? phoneErrorId : undefined}
-                      required
-                      className={`w-full h-11 pl-3.5 pr-10 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-medium tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
-                        showPhoneError
-                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
-                          : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
-                      }`}
-                    />
-
-                    {phone.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhone('');
-                          setPhoneEdited(true);
-                          setErrorMessage(null);
-                          phoneInputRef.current?.focus();
-                        }}
-                        aria-label="Clear phone number"
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
-                      >
-                        <X className="w-4 h-4" aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-
-                  {showPhoneError && (
-                    <p
-                      id={phoneErrorId}
-                      className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                      <span>{phoneValidationError}</span>
-                    </p>
-                  )}
-                </div>
+                    ) : undefined
+                  }
+                />
 
                 {/* 2. Network Selection */}
                 <fieldset className="space-y-2.5">
@@ -838,15 +898,19 @@ export default function DataBundlesPage() {
                   </legend>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {NETWORKS.map((network) => {
-                      const isSelected = selectedNetwork === network.id;
+                    {networksList.map((network) => {
+                      const isDisabled = network.enabled === false;
+                      const isSelected = selectedNetwork === network.id && !isDisabled;
                       return (
                         <label
                           key={network.id}
-                          className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
-                            isSelected
-                              ? network.activeClasses
-                              : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
+                          aria-disabled={isDisabled}
+                          className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                            isDisabled
+                              ? 'border-slate-200 dark:border-slate-800/80 bg-slate-100/80 dark:bg-slate-900/40 opacity-55 grayscale cursor-not-allowed'
+                              : isSelected
+                                ? `${network.activeClasses} cursor-pointer`
+                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer'
                           }`}
                         >
                           <input
@@ -854,6 +918,7 @@ export default function DataBundlesPage() {
                             name="network"
                             value={network.id}
                             checked={isSelected}
+                            disabled={isDisabled}
                             onChange={() => handleSelectNetwork(network.id)}
                             className="sr-only"
                           />
@@ -885,16 +950,23 @@ export default function DataBundlesPage() {
                           <span className="text-xs font-semibold text-slate-900 dark:text-white">
                             {network.name}
                           </span>
+                          {isDisabled && (
+                            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                              Unavailable
+                            </span>
+                          )}
                         </label>
                       );
                     })}
                   </div>
 
-                  {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Number prefix matches {detectedNetwork.name}. Data plans must match the recipient&apos;s network.
-                    </p>
-                  )}
+                  {detectedNetwork &&
+                    detectedNetwork.enabled !== false &&
+                    selectedNetwork !== detectedNetwork.id && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Number prefix matches {detectedNetwork.name}. Data plans must match the recipient&apos;s network.
+                      </p>
+                    )}
                 </fieldset>
 
                 {/* 3. Data Bundle Catalog */}
@@ -974,20 +1046,20 @@ export default function DataBundlesPage() {
                     aria-labelledby={`${tabsPrefixId}-tab-${selectedCategory}`}
                   >
                     {isLoadingPlans ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      <div className="grid grid-cols-2 gap-2">
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <div
                             key={idx}
                             aria-hidden="true"
-                            className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#070D18] space-y-2.5 animate-pulse"
+                            className="p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#070D18] space-y-2 animate-pulse"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded" />
-                              <div className="h-4 w-12 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-3.5 w-12 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-3.5 w-10 bg-slate-200 dark:bg-slate-800 rounded" />
                             </div>
                             <div className="h-3 w-3/4 bg-slate-200/70 dark:bg-slate-800/70 rounded" />
-                            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                              <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
+                            <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-800">
+                              <div className="h-3.5 w-14 bg-slate-200 dark:bg-slate-800 rounded" />
                             </div>
                           </div>
                         ))}
@@ -1011,14 +1083,14 @@ export default function DataBundlesPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="max-h-[340px] sm:max-h-[380px] overflow-y-auto p-1 -m-1">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      <div className="max-h-[340px] sm:max-h-[380px] overflow-y-auto overscroll-contain p-1 -m-1">
+                        <div className="grid grid-cols-2 gap-2">
                           {filteredPlans.map((plan, index) => {
                             const isSelected = selectedPlanId === plan.id;
                             return (
                               <label
                                 key={plan.id}
-                                className={`relative min-h-[96px] p-3.5 rounded-xl border text-left transition-colors flex flex-col justify-between gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                                className={`relative min-h-[76px] p-2.5 sm:p-3 rounded-xl border text-left transition-colors flex flex-col justify-between gap-1.5 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
                                   isSelected
                                     ? 'border-[#126BEB] ring-2 ring-[#126BEB]/25 bg-blue-50/40 dark:bg-blue-950/25'
                                     : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
@@ -1039,19 +1111,19 @@ export default function DataBundlesPage() {
                                   className="sr-only"
                                 />
 
-                                <div className="space-y-1 min-w-0">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
                                       {plan.dataAllowance}
                                     </span>
 
                                     <div className="flex items-center gap-1 shrink-0">
                                       {(plan.dataType === 'SME' || plan.category === 'SME') && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] font-semibold">
+                                        <span className="text-[9px] sm:text-[10px] px-1 py-0.5 rounded bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] font-semibold">
                                           SME
                                         </span>
                                       )}
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
                                         {plan.validity}
                                       </span>
                                     </div>
@@ -1062,8 +1134,8 @@ export default function DataBundlesPage() {
                                   </p>
                                 </div>
 
-                                <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                                  <span className="text-sm font-bold text-slate-900 dark:text-white tabular-nums">
+                                <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                                  <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tabular-nums">
                                     ₦{plan.priceNaira.toLocaleString()}
                                   </span>
 
@@ -1262,11 +1334,11 @@ export default function DataBundlesPage() {
           setSelectedPlanId('');
           setSubmitAttempted(false);
           clearBlurAnnouncement();
-          void loadWallets();
+          void refreshWallets();
         }}
         onStatusUpdated={(updated) => {
           setReceiptData(updated);
-          void loadWallets();
+          void refreshWallets();
         }}
       />
 

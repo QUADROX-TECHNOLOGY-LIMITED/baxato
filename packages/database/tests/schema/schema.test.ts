@@ -15,6 +15,8 @@ import {
   webhookDeliveries,
   auditLogs,
   kycVerifications,
+  beneficiaries,
+  systemSettings,
 } from '../../src/schema/index';
 
 describe('Database Schemas Specification', () => {
@@ -102,5 +104,24 @@ describe('Database Schemas Specification', () => {
     const idempCols = getTableColumns(idempotencyKeys);
     expect(idempCols.key).toBeDefined();
     expect(idempCols.requestHash).toBeDefined();
+  });
+
+  it('correctly configures beneficiaries and systemSettings tables', () => {
+    expect(getTableName(beneficiaries)).toBe('beneficiaries');
+    expect(getTableName(systemSettings)).toBe('system_settings');
+
+    const benCols = getTableColumns(beneficiaries);
+    expect(benCols.id.primary).toBe(true);
+    expect(benCols.businessId).toBeDefined();
+    expect(benCols.phoneNumber).toBeDefined();
+    expect(benCols.network).toBeDefined();
+
+    const sysCols = getTableColumns(systemSettings);
+    expect(sysCols.id.primary).toBe(true);
+    expect(sysCols.key.isUnique).toBe(true);
+    expect(sysCols.maintenanceMode).toBeDefined();
+    expect(sysCols.killSwitches).toBeDefined();
+    expect(sysCols.disabledNetworks).toBeDefined();
+    expect(sysCols.disabledDataPlans).toBeDefined();
   });
 });

@@ -147,6 +147,29 @@ export const examPins = pgTable(
   ],
 );
 
+// 5. Saved Beneficiaries Table (up to 5 per business for Airtime & Data)
+export const beneficiaries = pgTable(
+  'beneficiaries',
+  {
+    id: text('id').primaryKey().$defaultFn(() => generateEntityId('ben')),
+    businessId: text('business_id')
+      .notNull()
+      .references(() => businesses.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    phoneNumber: text('phone_number').notNull(),
+    network: text('network'),
+    label: text('label'),
+    serviceType: text('service_type'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('beneficiaries_business_id_idx').on(table.businessId),
+    index('beneficiaries_created_at_idx').on(table.createdAt),
+    uniqueIndex('beneficiaries_business_phone_idx').on(table.businessId, table.phoneNumber),
+  ],
+);
+
 export type Provider = typeof providers.$inferSelect;
 export type NewProvider = typeof providers.$inferInsert;
 export type ServiceTransaction = typeof serviceTransactions.$inferSelect;
@@ -155,3 +178,5 @@ export type ProviderTransaction = typeof providerTransactions.$inferSelect;
 export type NewProviderTransaction = typeof providerTransactions.$inferInsert;
 export type ExamPin = typeof examPins.$inferSelect;
 export type NewExamPin = typeof examPins.$inferInsert;
+export type Beneficiary = typeof beneficiaries.$inferSelect;
+export type NewBeneficiary = typeof beneficiaries.$inferInsert;
