@@ -383,7 +383,7 @@ export default function AirtimeVendingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
-      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
+      {isSubmitting && <BaxatoLoader variant="overlay" />}
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}

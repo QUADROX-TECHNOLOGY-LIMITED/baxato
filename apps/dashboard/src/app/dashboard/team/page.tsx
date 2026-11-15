@@ -23,7 +23,6 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
-import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -700,11 +699,15 @@ export default function TeamManagementPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                       {isLoading ? (
-                        <tr>
-                          <td colSpan={5} className="p-0">
-                            <BaxatoLoader variant="section" />
-                          </td>
-                        </tr>
+                        Array.from({ length: 4 }).map((_, i) => (
+                          <tr key={i} className="animate-pulse">
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-40 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-20 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded-full" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6 text-right"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded ml-auto" /></td>
+                          </tr>
+                        ))
                       ) : filteredMembers.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-12 text-center">
@@ -858,11 +861,15 @@ export default function TeamManagementPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                       {isLoading ? (
-                        <tr>
-                          <td colSpan={5} className="p-0">
-                            <BaxatoLoader variant="section" />
-                          </td>
-                        </tr>
+                        Array.from({ length: 4 }).map((_, i) => (
+                          <tr key={i} className="animate-pulse">
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-44 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-20 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                            <td className="py-3.5 px-4 sm:px-6 text-right"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded ml-auto" /></td>
+                          </tr>
+                        ))
                       ) : filteredInvitations.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-12 text-center">

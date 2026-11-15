@@ -948,7 +948,7 @@ export default function ElectricityPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#070E1C]">
-      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
+      {isSubmitting && <BaxatoLoader variant="overlay" />}
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}

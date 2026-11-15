@@ -2,24 +2,21 @@ import Image from 'next/image';
 
 export interface BaxatoLoaderProps {
   /**
-   * - `fullscreen`: covers the initial/transition viewport (`min-h-[100dvh]`) with pure theme surface.
-   * - `overlay`: frosted viewport overlay (`fixed inset-0 z-[100]`) during submits or refreshes.
-   * - `section`: compact centered container for data tables, charts, or catalog panels.
+   * - `fullscreen`: covers the viewport (`min-h-[100dvh]`) during page or route loading.
+   * - `overlay`: frosted viewport overlay (`fixed inset-0 z-[100]`) during purchase/vend submissions.
    */
-  variant?: 'fullscreen' | 'overlay' | 'section';
+  variant?: 'fullscreen' | 'overlay';
   className?: string;
 }
 
 export default function BaxatoLoader({
-  variant = 'section',
+  variant = 'fullscreen',
   className = '',
 }: BaxatoLoaderProps) {
   const containerClass =
     variant === 'overlay'
       ? 'fixed inset-0 z-[100] flex items-center justify-center bg-white/80 dark:bg-[#070D18]/85 backdrop-blur-sm select-none h-[100dvh] w-screen overflow-hidden'
-      : variant === 'fullscreen'
-      ? 'min-h-[100dvh] w-full flex items-center justify-center bg-white dark:bg-[#070D18] select-none'
-      : 'w-full min-h-[220px] flex items-center justify-center py-10 select-none';
+      : 'min-h-[100dvh] w-full flex items-center justify-center bg-white dark:bg-[#070D18] select-none';
 
   return (
     <div
@@ -56,4 +53,3 @@ export default function BaxatoLoader({
     </div>
   );
 }
-

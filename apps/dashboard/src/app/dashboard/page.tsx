@@ -30,7 +30,6 @@ import {
   handleAuthResponse,
 } from '@/lib/auth-session';
 import ModalDialog from '@/components/ModalDialog';
-import BaxatoLoader from '@/components/BaxatoLoader';
 
 interface ServiceProviderBadge {
   name: string;
@@ -765,8 +764,6 @@ export default function DashboardOverviewPage() {
         userFirstName={userFirstName}
         userLastName={userLastName}
       />
-
-      {isRefreshing && <BaxatoLoader variant="overlay" />}
 
       {/* Native Top-Layer Fund Wallet Modal */}
       <ModalDialog

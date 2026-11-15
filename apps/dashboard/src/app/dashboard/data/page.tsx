@@ -375,7 +375,7 @@ export default function DataVendingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
-      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
+      {isSubmitting && <BaxatoLoader variant="overlay" />}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -548,7 +548,26 @@ export default function DataVendingPage() {
 
                     {/* Plans Grid */}
                     {isLoadingPlans ? (
-                      <BaxatoLoader variant="section" />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                          <div
+                            key={idx}
+                            aria-hidden="true"
+                            className="p-3.5 rounded-xl border border-slate-800 bg-slate-950 flex flex-col justify-between animate-pulse"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="h-3.5 w-14 bg-slate-800 rounded" />
+                                <div className="h-4 w-12 bg-slate-900 border border-slate-800 rounded" />
+                              </div>
+                              <div className="h-3 w-3/4 bg-slate-800/70 rounded" />
+                            </div>
+                            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                              <div className="h-3.5 w-16 bg-slate-800 rounded" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : filteredPlans.length === 0 ? (
                       <div className="py-12 text-center text-slate-400 text-sm">
                         No bundles found for the selected category.

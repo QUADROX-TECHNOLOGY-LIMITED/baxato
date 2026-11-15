@@ -660,7 +660,7 @@ export default function CableVendingPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
-      {(isSubmitting || isRefreshing) && <BaxatoLoader variant="overlay" />}
+      {isSubmitting && <BaxatoLoader variant="overlay" />}
       {/* Sidebar */}
       <Sidebar
         businessName={businessName}

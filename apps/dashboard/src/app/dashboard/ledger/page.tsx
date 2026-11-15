@@ -628,11 +628,19 @@ function LedgerContent() {
                   }`}
                 >
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={9} className="p-0">
-                        <BaxatoLoader variant="section" />
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-20 h-4 bg-slate-100 dark:bg-slate-800 rounded-full" /></td>
+                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4 text-right"><div className="w-12 h-4 bg-slate-100 dark:bg-slate-800 rounded ml-auto" /></td>
+                      </tr>
+                    ))
                   ) : transactions.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 px-4 text-center">
@@ -779,8 +787,6 @@ function LedgerContent() {
           </div>
         </main>
       </div>
-
-      {isRefreshing && !isLoading && <BaxatoLoader variant="overlay" />}
 
       {/* Native Top-Layer Transaction Detail Modal */}
       <ModalDialog

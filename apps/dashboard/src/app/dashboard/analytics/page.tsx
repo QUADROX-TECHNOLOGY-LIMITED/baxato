@@ -44,7 +44,6 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import KycBanner from '@/components/dashboard/KycBanner';
 import KycModal from '@/components/dashboard/KycModal';
-import BaxatoLoader from '@/components/BaxatoLoader';
 import {
   getStoredAuthToken,
   getStoredUser,
@@ -633,7 +632,6 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
-      {isRefreshing && !isLoading && <BaxatoLoader variant="overlay" />}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
@@ -1015,7 +1013,15 @@ export default function AnalyticsPage() {
 
             {/* Chart Canvas */}
             {isLoading ? (
-              <BaxatoLoader variant="section" className="h-[260px]" />
+              <div className="w-full h-[260px] rounded-2xl bg-slate-100/80 dark:bg-slate-800/40 animate-pulse p-6 flex items-end gap-3">
+                {[38, 62, 48, 84, 56, 92, 68, 76, 44, 70, 58, 80].map((pct, i) => (
+                  <div
+                    key={i}
+                    style={{ height: `${pct}%` }}
+                    className="flex-1 rounded-t-lg bg-slate-200/90 dark:bg-slate-700/60"
+                  />
+                ))}
+              </div>
             ) : isZeroTxn ? (
               <div className="w-full h-[260px] flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-[#081120]/50 p-6 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] flex items-center justify-center mb-3">
