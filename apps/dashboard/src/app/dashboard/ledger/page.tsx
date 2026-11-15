@@ -1,17 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   FileText,
   ArrowLeft,
-  RefreshCw,
   Search,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  XCircle,
   Copy,
   Check,
   ChevronLeft,
@@ -23,10 +18,6 @@ import {
   Phone,
   Wifi,
   Layers,
-  Filter,
-  ArrowUpDown,
-  ExternalLink,
-  ShieldCheck,
   X,
   Download,
 } from 'lucide-react';
@@ -59,29 +50,69 @@ export interface UnifiedTransaction {
   totalAmountNaira: number;
   channel?: 'API' | 'WEB' | string;
   status: 'SUCCESSFUL' | 'PROCESSING' | 'PENDING' | 'FAILED' | 'REVERSED';
-  providerName?: string;
   metadata?: Record<string, any>;
-  errorMessage?: string;
   createdAt: string;
 }
 
 const SERVICE_OPTIONS = [
-  { value: 'ALL', label: 'All Services', icon: Layers, color: 'text-slate-400' },
-  { value: 'CABLE_TV', label: 'Cable TV (PayTV)', icon: Tv, color: 'text-indigo-500' },
-  { value: 'EXAM_PIN', label: 'Exam PINs (WAEC/JAMB)', icon: GraduationCap, color: 'text-emerald-500' },
-  { value: 'ELECTRICITY', label: 'Electricity Bills', icon: Zap, color: 'text-amber-500' },
-  { value: 'AIRTIME', label: 'Airtime Topup', icon: Phone, color: 'text-blue-500' },
-  { value: 'DATA', label: 'Data Bundles', icon: Wifi, color: 'text-cyan-500' },
+  { value: 'ALL', label: 'All Services', icon: Layers },
+  { value: 'AIRTIME', label: 'Airtime', icon: Phone },
+  { value: 'DATA', label: 'Data Bundles', icon: Wifi },
+  { value: 'ELECTRICITY', label: 'Electricity', icon: Zap },
+  { value: 'CABLE_TV', label: 'Cable TV', icon: Tv },
+  { value: 'EXAM_PIN', label: 'Exam PINs', icon: GraduationCap },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: 'ALL', label: 'All Channels' },
+  { value: 'WEB', label: 'Dashboard' },
+  { value: 'API', label: 'API' },
 ];
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses', dotColor: 'bg-slate-400' },
   { value: 'SUCCESSFUL', label: 'Successful', dotColor: 'bg-emerald-500' },
-  { value: 'PROCESSING', label: 'Processing', dotColor: 'bg-amber-500' },
-  { value: 'PENDING', label: 'Pending', dotColor: 'bg-blue-500' },
+  { value: 'PENDING', label: 'Pending', dotColor: 'bg-amber-500' },
   { value: 'FAILED', label: 'Failed', dotColor: 'bg-rose-500' },
-  { value: 'REVERSED', label: 'Reversed', dotColor: 'bg-purple-500' },
 ];
+
+const SERVICE_LABELS: Record<string, string> = {
+  AIRTIME: 'Airtime',
+  DATA: 'Data Bundles',
+  ELECTRICITY: 'Electricity',
+  CABLE_TV: 'Cable TV',
+  EXAM_PIN: 'Exam PINs',
+};
+
+function getServiceIcon(type: string) {
+  switch (type) {
+    case 'CABLE_TV':
+      return Tv;
+    case 'EXAM_PIN':
+      return GraduationCap;
+    case 'ELECTRICITY':
+      return Zap;
+    case 'AIRTIME':
+      return Phone;
+    case 'DATA':
+      return Wifi;
+    default:
+      return Layers;
+  }
+}
+
+function getServiceDisplayLabel(type: string, metadata?: Record<string, any>): string {
+  if (type === 'CABLE_TV') return metadata?.operatorName || metadata?.operator || 'Cable TV';
+  if (type === 'EXAM_PIN') return metadata?.examBody || 'Exam PINs';
+  if (type === 'ELECTRICITY') return metadata?.disco || 'Electricity';
+  return SERVICE_LABELS[type] || type;
+}
+
+function escapeCsvCell(value: unknown): string {
+  const str = String(value ?? '');
+  const guarded = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
 
 function LedgerContent() {
   const searchParams = useSearchParams();
@@ -108,12 +139,13 @@ function LedgerContent() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Filters & State
+  // Filters & Dropdowns
   const [selectedService, setSelectedService] = useState<string>(initialService);
+  const [selectedChannel, setSelectedChannel] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<'service' | 'channel' | 'status' | null>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
 
   // Data & Pagination
   const [transactions, setTransactions] = useState<UnifiedTransaction[]>([]);
@@ -122,7 +154,8 @@ function LedgerContent() {
   const [page, setPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedTransaction, setSelectedTransaction] = useState<UnifiedTransaction | null>(null);
-  const [copiedRef, setCopiedRef] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   // Initialize Auth Context
   useEffect(() => {
@@ -133,6 +166,27 @@ function LedgerContent() {
     if (user?.firstName) setMerchantName(user.firstName);
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     if (biz?.name) setBusinessName(biz.name);
+  }, []);
+
+  // Close dropdowns on outside click & modal/dropdown on Escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterBarRef.current && !filterBarRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+        setSelectedTransaction(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const isOwnerOrAdmin = userRole === 'BUSINESS_OWNER' || userRole === 'BUSINESS_ADMIN';
@@ -147,6 +201,18 @@ function LedgerContent() {
     }
   }, [searchParams]);
 
+  // Build query parameters shared between list fetch and CSV export
+  const buildFilterParams = (customLimit: number, customOffset: number) => {
+    const params = new URLSearchParams();
+    if (selectedService && selectedService !== 'ALL') params.set('serviceType', selectedService);
+    if (selectedChannel && selectedChannel !== 'ALL') params.set('channel', selectedChannel);
+    if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
+    if (searchQuery.trim()) params.set('search', searchQuery.trim());
+    params.set('limit', customLimit.toString());
+    params.set('offset', customOffset.toString());
+    return params;
+  };
+
   // Load Transactions
   const fetchTransactions = async () => {
     try {
@@ -158,12 +224,7 @@ function LedgerContent() {
       }
 
       const offset = (page - 1) * limit;
-      const params = new URLSearchParams();
-      if (selectedService && selectedService !== 'ALL') params.set('serviceType', selectedService);
-      if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
-      if (searchQuery.trim()) params.set('search', searchQuery.trim());
-      params.set('limit', limit.toString());
-      params.set('offset', offset.toString());
+      const params = buildFilterParams(limit, offset);
 
       const res = await fetch(`/api/transactions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` },
@@ -184,7 +245,7 @@ function LedgerContent() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [selectedService, selectedStatus, page]);
+  }, [selectedService, selectedChannel, selectedStatus, page]);
 
   // Handle Search Debounce
   useEffect(() => {
@@ -195,15 +256,12 @@ function LedgerContent() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const copyToClipboard = (text: string) => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(text);
-      setCopiedRef(text);
-      setTimeout(() => setCopiedRef(null), 2000);
-    }
+  const copyToClipboard = (text: string, key: string = text) => {
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1800);
   };
-
-  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const handleExportCSV = async () => {
     try {
@@ -211,12 +269,7 @@ function LedgerContent() {
       const authToken = getStoredAuthToken();
       if (!authToken) return;
 
-      const params = new URLSearchParams();
-      if (selectedService && selectedService !== 'ALL') params.set('serviceType', selectedService);
-      if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
-      if (searchQuery.trim()) params.set('search', searchQuery.trim());
-      params.set('limit', '1000');
-      params.set('offset', '0');
+      const params = buildFilterParams(1000, 0);
 
       const res = await fetch(`/api/transactions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` },
@@ -229,12 +282,12 @@ function LedgerContent() {
           : transactions;
 
       if (exportList.length === 0) {
-        alert('No transactions to export.');
         return;
       }
 
       const headers = [
         'Reference',
+        'Client Reference',
         'Date & Time',
         'Service',
         'Recipient',
@@ -242,22 +295,23 @@ function LedgerContent() {
         'Amount (NGN)',
         'Amount Paid (NGN)',
         'Status',
-        'Provider Reference',
       ];
 
       const csvRows = [
         headers.join(','),
-        ...exportList.map((t) => [
-          `"${t.reference || ''}"`,
-          `"${new Date(t.createdAt).toLocaleString('en-NG').replace(/"/g, '""')}"`,
-          `"${t.serviceType || ''}"`,
-          `"${t.recipient || ''}"`,
-          `"${t.channel || (t.id.startsWith('key_') ? 'API' : 'WEB')}"`,
-          (t.amountNaira || 0).toFixed(2),
-          (t.totalAmountNaira || t.amountNaira || 0).toFixed(2),
-          `"${t.status || ''}"`,
-          `"${t.providerReference || ''}"`,
-        ].join(',')),
+        ...exportList.map((t) =>
+          [
+            escapeCsvCell(t.reference || ''),
+            escapeCsvCell(t.clientReference || ''),
+            escapeCsvCell(new Date(t.createdAt).toLocaleString('en-NG')),
+            escapeCsvCell(SERVICE_LABELS[t.serviceType] || t.serviceType || ''),
+            escapeCsvCell(t.recipient || ''),
+            escapeCsvCell(t.channel === 'API' ? 'API' : 'Dashboard'),
+            (t.amountNaira || 0).toFixed(2),
+            (t.totalAmountNaira || t.amountNaira || 0).toFixed(2),
+            escapeCsvCell(t.status || ''),
+          ].join(','),
+        ),
       ];
 
       const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvRows.join('\n'));
@@ -270,8 +324,6 @@ function LedgerContent() {
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
-    } catch {
-      alert('Failed to export transactions.');
     } finally {
       setIsExporting(false);
     }
@@ -279,98 +331,61 @@ function LedgerContent() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
-  const activeServiceObj = SERVICE_OPTIONS.find((s) => s.value === selectedService) || SERVICE_OPTIONS[0];
-  const activeStatusObj = STATUS_OPTIONS.find((s) => s.value === selectedStatus) || STATUS_OPTIONS[0];
+  const activeServiceObj =
+    SERVICE_OPTIONS.find((s) => s.value === selectedService) || SERVICE_OPTIONS[0];
+  const activeChannelObj =
+    CHANNEL_OPTIONS.find((c) => c.value === selectedChannel) || CHANNEL_OPTIONS[0];
+  const activeStatusObj =
+    STATUS_OPTIONS.find((s) => s.value === selectedStatus) || STATUS_OPTIONS[0];
 
-  const getServiceBadge = (type: string, metadata?: Record<string, any>) => {
-    switch (type) {
-      case 'CABLE_TV':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-            <Tv className="w-3 h-3" />
-            <span>{metadata?.operator || metadata?.operatorName || 'Cable TV'}</span>
-          </span>
-        );
-      case 'EXAM_PIN':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-            <GraduationCap className="w-3 h-3" />
-            <span>{metadata?.examBody || 'Exam PIN'}</span>
-          </span>
-        );
-      case 'ELECTRICITY':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-            <Zap className="w-3 h-3" />
-            <span>{metadata?.disco || 'Electricity'}</span>
-          </span>
-        );
-      case 'AIRTIME':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-            <Phone className="w-3 h-3" />
-            <span>Airtime</span>
-          </span>
-        );
-      case 'DATA':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-            <Wifi className="w-3 h-3" />
-            <span>Data</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            <Layers className="w-3 h-3" />
-            <span>{type}</span>
-          </span>
-        );
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
+  const renderStatusPill = (status: string) => {
     switch (status) {
       case 'SUCCESSFUL':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             <span>Successful</span>
           </span>
         );
       case 'PROCESSING':
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-            <Clock className="w-3 h-3 animate-spin" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             <span>{status === 'PROCESSING' ? 'Processing' : 'Pending'}</span>
           </span>
         );
       case 'FAILED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-            <XCircle className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             <span>Failed</span>
           </span>
         );
       case 'REVERSED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-            <RefreshCw className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400 border border-purple-200/80 dark:border-purple-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
             <span>Reversed</span>
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
             {status}
           </span>
         );
     }
   };
 
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    selectedService !== 'ALL' ||
+    selectedChannel !== 'ALL' ||
+    selectedStatus !== 'ALL';
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070D18]">
+    <div className="min-h-screen bg-white dark:bg-[#070D18]">
       {/* Sidebar */}
       <Sidebar
         businessName={businessName}
@@ -397,105 +412,71 @@ function LedgerContent() {
           sticky={false}
         />
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-5">
+        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-5">
           <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
 
-          {/* Top Navigation & Action Controls */}
-          <div className="flex items-center justify-between gap-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
-              <span>Back to Dashboard</span>
-            </Link>
+          {/* Clean Top Heading & Actions Bar */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+                <span className="sm:hidden">Back</span>
+              </Link>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                Transaction History
+              </h1>
+            </div>
 
-            <div className="flex items-center gap-2">
-              {canExportReports && (
-                <button
-                  type="button"
-                  onClick={handleExportCSV}
-                  disabled={isExporting}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
-                  title="Export transactions as CSV / Excel spreadsheet"
-                >
-                  <Download className={`w-3.5 h-3.5 text-emerald-500 ${isExporting ? 'animate-bounce' : ''}`} />
-                  <span>{isExporting ? 'Exporting...' : 'Export Excel / CSV'}</span>
-                </button>
-              )}
-
+            {canExportReports && (
               <button
                 type="button"
-                onClick={() => {
-                  setIsRefreshing(true);
-                  fetchTransactions();
-                }}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs cursor-pointer"
+                onClick={handleExportCSV}
+                disabled={isExporting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:opacity-50"
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
+                <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
               </button>
-            </div>
+            )}
           </div>
 
-          {/* Header Title Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#0B1528] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-500 dark:bg-blue-500/15 dark:text-blue-400 border border-blue-500/20">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Transaction History
-                </h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Real-time records of all airtime, data, electricity, cable TV, and exam PIN vending transactions
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Total Recorded:</span>
-              <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-blue-500/10 text-[#126BEB] dark:text-blue-400 border border-blue-500/20">
-                {totalCount.toLocaleString()} {totalCount === 1 ? 'Transaction' : 'Transactions'}
-              </span>
-            </div>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-white dark:bg-[#0B1528] p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          {/* Compact Filter Row */}
+          <div
+            ref={filterBarRef}
+            className="grid grid-cols-2 sm:grid-cols-12 gap-2.5"
+          >
             {/* Search Input */}
-            <div className="sm:col-span-6 relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="col-span-2 sm:col-span-5 relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search reference, recipient, smartcard..."
+                placeholder="Search reference or recipient..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 text-xs rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB]"
+                className="w-full h-10 pl-9 pr-3 text-xs rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/20 focus:border-[#126BEB]"
               />
             </div>
 
-            {/* Custom Service Selector Dropdown */}
-            <div className="sm:col-span-3 relative">
+            {/* Service Selector */}
+            <div className="col-span-1 sm:col-span-3 relative">
               <button
                 type="button"
-                onClick={() => {
-                  setIsServiceDropdownOpen(!isServiceDropdownOpen);
-                  setIsStatusDropdownOpen(false);
-                }}
-                className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700/80 text-xs text-slate-900 dark:text-white flex items-center justify-between font-semibold cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                onClick={() => setOpenDropdown(openDropdown === 'service' ? null : 'service')}
+                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
               >
-                <div className="flex items-center gap-2 truncate">
-                  <activeServiceObj.icon className={`w-3.5 h-3.5 shrink-0 ${activeServiceObj.color}`} />
+                <span className="flex items-center gap-1.5 truncate">
+                  <activeServiceObj.icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                   <span className="truncate">{activeServiceObj.label}</span>
-                </div>
+                </span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
 
-              {isServiceDropdownOpen && (
-                <div className="absolute z-30 left-0 right-0 top-10 mt-1 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-xl overflow-hidden py-1 max-h-60 overflow-y-auto">
+              {openDropdown === 'service' && (
+                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
                   {SERVICE_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     const isSelected = selectedService === opt.value;
@@ -505,20 +486,20 @@ function LedgerContent() {
                         type="button"
                         onClick={() => {
                           setSelectedService(opt.value);
-                          setIsServiceDropdownOpen(false);
+                          setOpenDropdown(null);
                           setPage(1);
                         }}
                         className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-blue-50 dark:bg-[#126BEB]/15 text-[#126BEB] dark:text-blue-400 font-bold'
+                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                         }`}
                       >
-                        <div className="flex items-center gap-2 truncate">
-                          <Icon className={`w-3.5 h-3.5 shrink-0 ${opt.color}`} />
+                        <span className="flex items-center gap-2 truncate">
+                          <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                           <span className="truncate">{opt.label}</span>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#126BEB]" />}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                       </button>
                     );
                   })}
@@ -526,25 +507,61 @@ function LedgerContent() {
               )}
             </div>
 
-            {/* Custom Status Selector Dropdown */}
-            <div className="sm:col-span-3 relative">
+            {/* Channel Selector (Dashboard vs API) */}
+            <div className="col-span-1 sm:col-span-2 relative">
               <button
                 type="button"
-                onClick={() => {
-                  setIsStatusDropdownOpen(!isStatusDropdownOpen);
-                  setIsServiceDropdownOpen(false);
-                }}
-                className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700/80 text-xs text-slate-900 dark:text-white flex items-center justify-between font-semibold cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                onClick={() => setOpenDropdown(openDropdown === 'channel' ? null : 'channel')}
+                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${activeStatusObj.dotColor}`} />
-                  <span>{activeStatusObj.label}</span>
-                </div>
+                <span className="truncate">{activeChannelObj.label}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
 
-              {isStatusDropdownOpen && (
-                <div className="absolute z-30 left-0 right-0 top-10 mt-1 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-xl overflow-hidden py-1">
+              {openDropdown === 'channel' && (
+                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+                  {CHANNEL_OPTIONS.map((opt) => {
+                    const isSelected = selectedChannel === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedChannel(opt.value);
+                          setOpenDropdown(null);
+                          setPage(1);
+                        }}
+                        className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Status Selector */}
+            <div className="col-span-2 sm:col-span-2 relative">
+              <button
+                type="button"
+                onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
+                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${activeStatusObj.dotColor}`} />
+                  <span className="truncate">{activeStatusObj.label}</span>
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </button>
+
+              {openDropdown === 'status' && (
+                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
                   {STATUS_OPTIONS.map((opt) => {
                     const isSelected = selectedStatus === opt.value;
                     return (
@@ -553,20 +570,20 @@ function LedgerContent() {
                         type="button"
                         onClick={() => {
                           setSelectedStatus(opt.value);
-                          setIsStatusDropdownOpen(false);
+                          setOpenDropdown(null);
                           setPage(1);
                         }}
                         className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-blue-50 dark:bg-[#126BEB]/15 text-[#126BEB] dark:text-blue-400 font-bold'
+                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${opt.dotColor}`} />
-                          <span>{opt.label}</span>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#126BEB]" />}
+                        <span className="flex items-center gap-2 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotColor}`} />
+                          <span className="truncate">{opt.label}</span>
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
                       </button>
                     );
                   })}
@@ -575,168 +592,155 @@ function LedgerContent() {
             </div>
           </div>
 
-          {/* Unified Transactions Data Table */}
-          <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-xs overflow-hidden">
+          {/* Clean Transactions Table */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-[#0B1528]">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-[#070D18]/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
-                  <tr>
+              <table className="w-full text-left border-collapse text-xs sm:text-[13px] whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <th className="py-3 px-4">Service</th>
                     <th className="py-3 px-4">Recipient</th>
                     <th className="py-3 px-4">Reference</th>
                     <th className="py-3 px-4">Channel</th>
                     <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Amount Paid</th>
+                    <th className="py-3 px-4">Paid</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date &amp; Time</th>
-                    <th className="py-3 px-4 text-right">Details</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
-                        <td className="py-4 px-4"><div className="w-24 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-32 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-28 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-14 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4"><div className="w-20 h-4 bg-slate-200 dark:bg-slate-800 rounded-full" /></td>
-                        <td className="py-4 px-4"><div className="w-28 h-4 bg-slate-200 dark:bg-slate-800 rounded" /></td>
-                        <td className="py-4 px-4 text-right"><div className="w-12 h-4 bg-slate-200 dark:bg-slate-800 rounded ml-auto" /></td>
+                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-28 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4"><div className="w-20 h-4 bg-slate-100 dark:bg-slate-800 rounded-full" /></td>
+                        <td className="py-3.5 px-4"><div className="w-24 h-4 bg-slate-100 dark:bg-slate-800 rounded" /></td>
+                        <td className="py-3.5 px-4 text-right"><div className="w-12 h-4 bg-slate-100 dark:bg-slate-800 rounded ml-auto" /></td>
                       </tr>
                     ))
                   ) : transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center">
-                        <div className="max-w-xs mx-auto space-y-2">
-                          <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800/60 text-slate-400 flex items-center justify-center mx-auto">
-                            <FileText className="w-6 h-6" />
-                          </div>
-                          <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                      <td colSpan={9} className="py-12 px-4 text-center">
+                        <div className="max-w-xs mx-auto space-y-1.5">
+                          <FileText className="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto" />
+                          <p className="font-semibold text-sm text-slate-800 dark:text-slate-200">
                             No transactions found
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {searchQuery || selectedService !== 'ALL' || selectedStatus !== 'ALL'
-                              ? 'Try adjusting your search criteria or filters.'
-                              : 'Vended transactions and bill payments will appear here in real time.'}
+                            {hasActiveFilters
+                              ? 'Try adjusting your search or filter selections.'
+                              : 'Completed purchases will appear here.'}
                           </p>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    transactions.map((tx) => (
-                      <tr
-                        key={tx.id}
-                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        {/* Service Type */}
-                        <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
-                          {getServiceBadge(tx.serviceType, tx.metadata)}
-                        </td>
+                    transactions.map((tx) => {
+                      const SvcIcon = getServiceIcon(tx.serviceType);
+                      const isApi = tx.channel === 'API';
+                      return (
+                        <tr
+                          key={tx.id}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"
+                        >
+                          <td className="py-3 px-4 font-medium text-slate-900 dark:text-white">
+                            <span className="inline-flex items-center gap-2">
+                              <SvcIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{getServiceDisplayLabel(tx.serviceType, tx.metadata)}</span>
+                            </span>
+                          </td>
 
-                        {/* Recipient / Customer */}
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white truncate max-w-[180px]">
-                            {tx.recipient}
-                          </div>
-                          {tx.metadata?.customerName && (
-                            <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
-                              {tx.metadata.customerName}
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-900 dark:text-white truncate max-w-[180px]">
+                              {tx.recipient}
                             </div>
-                          )}
-                          {tx.metadata?.bouquetName && (
-                            <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
-                              {tx.metadata.bouquetName}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Reference */}
-                        <td className="py-3.5 px-4">
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(tx.reference)}
-                            className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer group"
-                            title="Click to copy reference"
-                          >
-                            <span>{tx.reference.length > 18 ? `${tx.reference.substring(0, 18)}...` : tx.reference}</span>
-                            {copiedRef === tx.reference ? (
-                              <Check className="w-3 h-3 text-emerald-500" />
-                            ) : (
-                              <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity" />
+                            {(tx.metadata?.customerName || tx.metadata?.bouquetName) && (
+                              <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
+                                {tx.metadata.customerName || tx.metadata.bouquetName}
+                              </div>
                             )}
-                          </button>
-                        </td>
+                          </td>
 
-                        {/* Channel (WEB vs API) */}
-                        <td className="py-3.5 px-4">
-                          {tx.channel === 'API' || tx.id.startsWith('key_') ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
-                              API
+                          <td className="py-3 px-4">
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(tx.reference, `row-${tx.id}`)}
+                              className="inline-flex items-center gap-1.5 font-mono text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer group"
+                              title="Copy reference"
+                            >
+                              <span>
+                                {tx.reference.length > 18
+                                  ? `${tx.reference.substring(0, 18)}...`
+                                  : tx.reference}
+                              </span>
+                              {copiedKey === `row-${tx.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity" />
+                              )}
+                            </button>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                              {isApi ? 'API' : 'Dashboard'}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
-                              WEB
-                            </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* Amount (Face Value) */}
-                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                          ₦{(tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                        </td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300 tabular-nums">
+                            ₦{(tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                          </td>
 
-                        {/* Amount Paid */}
-                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                          ₦{(tx.totalAmountNaira || tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                        </td>
+                          <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white tabular-nums">
+                            ₦{(tx.totalAmountNaira || tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                          </td>
 
-                        {/* Status */}
-                        <td className="py-3.5 px-4">
-                          {getStatusBadge(tx.status)}
-                        </td>
+                          <td className="py-3 px-4">{renderStatusPill(tx.status)}</td>
 
-                        {/* Date */}
-                        <td className="py-3.5 px-4 text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {new Date(tx.createdAt).toLocaleDateString('en-NG', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
+                          <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400">
+                            {new Date(tx.createdAt).toLocaleDateString('en-NG', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
 
-                        {/* Action Details */}
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTransaction(tx)}
-                            className="px-2.5 py-1 rounded-md text-[11px] font-bold text-[#126BEB] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/15 transition-colors cursor-pointer"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTransaction(tx)}
+                              className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070D18]/50 text-xs">
+            {/* Compact Pagination Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 dark:border-slate-800 text-xs">
               <span className="text-slate-500 dark:text-slate-400">
                 Showing{' '}
-                <span className="font-bold text-slate-900 dark:text-white">
+                <span className="font-medium text-slate-900 dark:text-white">
                   {transactions.length === 0 ? 0 : (page - 1) * limit + 1}
-                </span>{' '}
-                to{' '}
-                <span className="font-bold text-slate-900 dark:text-white">
+                </span>
+                {' - '}
+                <span className="font-medium text-slate-900 dark:text-white">
                   {Math.min(page * limit, totalCount)}
                 </span>{' '}
-                of <span className="font-bold text-slate-900 dark:text-white">{totalCount}</span> entries
+                of <span className="font-medium text-slate-900 dark:text-white">{totalCount}</span>
               </span>
 
               <div className="flex items-center gap-1.5">
@@ -744,12 +748,12 @@ function LedgerContent() {
                   type="button"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1 || isLoading}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B1528] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
 
-                <span className="px-3 py-1 font-bold text-slate-900 dark:text-white text-xs">
+                <span className="px-2.5 py-1 font-medium text-slate-700 dark:text-slate-200 text-xs">
                   Page {page} of {totalPages}
                 </span>
 
@@ -757,7 +761,7 @@ function LedgerContent() {
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages || isLoading}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B1528] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -767,151 +771,214 @@ function LedgerContent() {
         </main>
       </div>
 
-      {/* Transaction Details Modal */}
+      {/* Soft Transaction Detail Modal */}
       {selectedTransaction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-500 dark:bg-blue-500/15 dark:text-blue-400">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
-                    Transaction Audit Details
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Ref: {selectedTransaction.reference}
-                  </p>
-                </div>
-              </div>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-[2px] animate-in fade-in duration-150"
+          onClick={() => setSelectedTransaction(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-semibold text-base text-slate-900 dark:text-white">
+                Transaction Details
+              </h3>
               <button
                 type="button"
                 onClick={() => setSelectedTransaction(null)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Close"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* Status Header Tile */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
-                    <div className="mt-0.5">{getStatusBadge(selectedTransaction.status)}</div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Channel</span>
-                    <div className="mt-0.5">
-                      {selectedTransaction.channel === 'API' || selectedTransaction.id.startsWith('key_') ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
-                          API
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
-                          WEB
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount Paid</span>
-                  <div className="font-black text-base text-slate-900 dark:text-white">
+            {/* Body */}
+            <div className="p-5 space-y-4 max-h-[75dvh] overflow-y-auto">
+              {/* Calm Top Summary */}
+              <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Amount Paid</span>
+                  <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-0.5">
                     ₦{(selectedTransaction.totalAmountNaira || selectedTransaction.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Face Value: ₦{(selectedTransaction.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                  </div>
+                  {selectedTransaction.amountNaira !== selectedTransaction.totalAmountNaira && (
+                    <span className="text-[11px] text-slate-400">
+                      Face value: ₦{(selectedTransaction.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-end gap-1.5">
+                  {renderStatusPill(selectedTransaction.status)}
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {selectedTransaction.channel === 'API' ? 'API' : 'Dashboard'}
+                  </span>
                 </div>
               </div>
 
-              {/* Data Grid */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Service</span>
-                  <div className="mt-1 font-bold text-slate-900 dark:text-white">
-                    {selectedTransaction.serviceType}
-                  </div>
+              {/* Clean Key-Value List */}
+              <dl className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400">Service</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white text-right">
+                    {SERVICE_LABELS[selectedTransaction.serviceType] || selectedTransaction.serviceType}
+                    {selectedTransaction.metadata?.operator ||
+                    selectedTransaction.metadata?.disco ||
+                    selectedTransaction.metadata?.examBody
+                      ? ` (${
+                          selectedTransaction.metadata.operator ||
+                          selectedTransaction.metadata.disco ||
+                          selectedTransaction.metadata.examBody
+                        })`
+                      : ''}
+                  </dd>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recipient</span>
-                  <div className="mt-1 font-bold text-slate-900 dark:text-white truncate">
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400">Recipient</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white text-right break-all">
                     {selectedTransaction.recipient}
-                  </div>
+                  </dd>
                 </div>
 
                 {selectedTransaction.metadata?.customerName && (
-                  <div className="col-span-2 p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Customer Name</span>
-                    <div className="mt-1 font-bold text-slate-900 dark:text-white">
+                  <div className="py-2.5 flex items-center justify-between gap-4">
+                    <dt className="text-slate-500 dark:text-slate-400">Customer</dt>
+                    <dd className="font-medium text-slate-900 dark:text-white text-right">
                       {selectedTransaction.metadata.customerName}
-                    </div>
+                    </dd>
                   </div>
                 )}
 
                 {selectedTransaction.metadata?.bouquetName && (
-                  <div className="col-span-2 p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Package / Bouquet</span>
-                    <div className="mt-1 font-bold text-slate-900 dark:text-white">
+                  <div className="py-2.5 flex items-center justify-between gap-4">
+                    <dt className="text-slate-500 dark:text-slate-400">Package</dt>
+                    <dd className="font-medium text-slate-900 dark:text-white text-right">
                       {selectedTransaction.metadata.bouquetName}
-                    </div>
+                    </dd>
                   </div>
                 )}
 
                 {selectedTransaction.metadata?.token && (
-                  <div className="col-span-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Electricity Token</span>
-                    <div className="mt-1 font-mono font-black text-sm text-amber-700 dark:text-amber-300 tracking-wider">
-                      {selectedTransaction.metadata.token}
-                    </div>
+                  <div className="py-2.5 flex items-center justify-between gap-4">
+                    <dt className="text-slate-500 dark:text-slate-400">Meter Token</dt>
+                    <dd className="flex items-center gap-2 font-mono font-semibold text-slate-900 dark:text-white">
+                      <span>{selectedTransaction.metadata.token}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(selectedTransaction.metadata!.token, 'modal-token')}
+                        className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                        title="Copy token"
+                      >
+                        {copiedKey === 'modal-token' ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </dd>
                   </div>
                 )}
 
                 {selectedTransaction.metadata?.pins && Array.isArray(selectedTransaction.metadata.pins) && (
-                  <div className="col-span-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-1">
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Exam PINs</span>
-                    {selectedTransaction.metadata.pins.map((p: any, idx: number) => (
-                      <div key={idx} className="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                        PIN: {p.pin} {p.serialNumber && `(S/N: ${p.serialNumber})`}
-                      </div>
-                    ))}
+                  <div className="py-2.5 space-y-1.5">
+                    <dt className="text-slate-500 dark:text-slate-400">Exam PINs</dt>
+                    <dd className="space-y-1">
+                      {selectedTransaction.metadata.pins.map((p: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between gap-2 font-mono text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg"
+                        >
+                          <span>
+                            {p.pin} {p.serialNumber ? `(S/N: ${p.serialNumber})` : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(String(p.pin || ''), `modal-pin-${idx}`)}
+                            className="p-1 rounded hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                            title="Copy PIN"
+                          >
+                            {copiedKey === `modal-pin-${idx}` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </dd>
                   </div>
                 )}
 
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date & Time</span>
-                  <div className="mt-1 font-semibold text-slate-700 dark:text-slate-300 text-[11px]">
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Reference</dt>
+                  <dd className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-mono text-slate-800 dark:text-slate-200 truncate">
+                      {selectedTransaction.reference}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedTransaction.reference, 'modal-ref')}
+                      className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0 cursor-pointer"
+                      title="Copy reference"
+                    >
+                      {copiedKey === 'modal-ref' ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </dd>
+                </div>
+
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Client Reference</dt>
+                  <dd className="flex items-center gap-1.5 min-w-0">
+                    {selectedTransaction.clientReference ? (
+                      <>
+                        <span className="font-mono text-slate-800 dark:text-slate-200 truncate">
+                          {selectedTransaction.clientReference}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(selectedTransaction.clientReference!, 'modal-client-ref')
+                          }
+                          className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0 cursor-pointer"
+                          title="Copy client reference"
+                        >
+                          {copiedKey === 'modal-client-ref' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </dd>
+                </div>
+
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400">Date</dt>
+                  <dd className="text-slate-700 dark:text-slate-300 text-right">
                     {new Date(selectedTransaction.createdAt).toLocaleString('en-NG')}
-                  </div>
+                  </dd>
                 </div>
-
-                <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-200/60 dark:border-slate-800/60">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Client Reference</span>
-                  <div className="mt-1 font-mono text-[11px] text-slate-600 dark:text-slate-400 truncate">
-                    {selectedTransaction.clientReference || 'N/A'}
-                  </div>
-                </div>
-              </div>
-
-              {selectedTransaction.errorMessage && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400">
-                  <span className="font-bold">Error Reason:</span> {selectedTransaction.errorMessage}
-                </div>
-              )}
+              </dl>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#070D18]/50 flex justify-end">
+            {/* Footer */}
+            <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedTransaction(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
               >
                 Close
               </button>
@@ -934,8 +1001,8 @@ export default function LedgerPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#070D18]">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#070D18]">
+          <div className="w-7 h-7 border-2 border-[#126BEB] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

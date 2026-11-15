@@ -33,7 +33,7 @@ export default function RootLayout({
   const isClerkConfigured = Boolean(clerkPubKey && clerkPubKey.startsWith('pk_'));
 
   const content = (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="bg-white dark:bg-[#070D18]" suppressHydrationWarning>
       <head>
         <meta name="theme-color" content="#ffffff" id="meta-theme-color" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -46,6 +46,7 @@ export default function RootLayout({
                   var stored = localStorage.getItem('baxato_theme');
                   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                   var isDark = stored === 'dark' || ((!stored || stored === 'system') && prefersDark);
+                  var bg = isDark ? '#070D18' : '#ffffff';
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.style.colorScheme = 'dark';
@@ -53,9 +54,10 @@ export default function RootLayout({
                     document.documentElement.classList.remove('dark');
                     document.documentElement.style.colorScheme = 'light';
                   }
+                  document.documentElement.style.backgroundColor = bg;
                   var meta = document.getElementById('meta-theme-color');
                   if (meta) {
-                    meta.setAttribute('content', isDark ? '#070D18' : '#ffffff');
+                    meta.setAttribute('content', bg);
                   }
                 } catch (err) {}
               })();

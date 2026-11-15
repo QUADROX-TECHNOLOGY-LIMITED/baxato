@@ -1,47 +1,19 @@
 'use client';
 
 import { useEffect } from 'react';
-
-const DARK_COLOR = '#070D18';
-const LIGHT_COLOR = '#ffffff';
+import { applyThemeChrome, resolveIsDark } from '@/lib/theme-sync';
 
 export default function ThemeSynchronizer() {
   useEffect(() => {
-    const updateThemeMeta = (isDark: boolean) => {
-      let meta = document.getElementById('meta-theme-color') as HTMLMetaElement | null;
-      if (!meta) {
-        meta = document.querySelector('meta[name="theme-color"]');
-      }
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'theme-color';
-        meta.id = 'meta-theme-color';
-        document.head.appendChild(meta);
-      }
-      meta.setAttribute('content', isDark ? DARK_COLOR : LIGHT_COLOR);
-      document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+    const syncFromPreference = () => {
+      applyThemeChrome(resolveIsDark());
     };
 
-    const applyTheme = () => {
-      const stored = localStorage.getItem('baxato_theme');
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const isDark = stored === 'dark' || ((!stored || stored === 'system') && prefersDark);
+    syncFromPreference();
 
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      updateThemeMeta(isDark);
-    };
-
-    // Initial sync
-    applyTheme();
-
-    // Watch for class changes on <html>
     const observer = new MutationObserver(() => {
       const isDark = document.documentElement.classList.contains('dark');
-      updateThemeMeta(isDark);
+      applyThemeChrome(isDark);
     });
 
     observer.observe(document.documentElement, {
@@ -49,27 +21,36 @@ export default function ThemeSynchronizer() {
       attributeFilter: ['class'],
     });
 
-    // Listen for OS system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleMediaChange = () => {
       const stored = localStorage.getItem('baxato_theme');
       if (!stored || stored === 'system') {
-        applyTheme();
+        syncFromPreference();
       }
     };
     mediaQuery.addEventListener('change', handleMediaChange);
 
-    // Listen for storage events across tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'baxato_theme') {
-        applyTheme();
+    // Mobile OS theme flips via notification shade often settle on focus/visibility return
+    const handleResumeSync = () => {
+      if (document.visibilityState === 'visible') {
+        syncFromPreference();
       }
     };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'baxato_theme') {
+        syncFromPreference();
+      }
+    };
+
+    window.addEventListener('focus', syncFromPreference);
+    document.addEventListener('visibilitychange', handleResumeSync);
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
       observer.disconnect();
       mediaQuery.removeEventListener('change', handleMediaChange);
+      window.removeEventListener('focus', syncFromPreference);
+      document.removeEventListener('visibilitychange', handleResumeSync);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);

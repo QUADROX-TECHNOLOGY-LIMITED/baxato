@@ -214,7 +214,7 @@ export default function TransactionReceiptModal({
   return (
     <>
       {/* Modal Backdrop Overlay */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
         {/* Modal Container */}
         <div
           id="baxato-receipt-document"

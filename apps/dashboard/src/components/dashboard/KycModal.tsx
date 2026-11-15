@@ -44,29 +44,16 @@ export default function KycModal({
     }
   }, [initialFirstName, initialLastName, isOpen]);
 
-  // Prevent background scroll and sync status bar color while modal is open
+  // Lock background scrolling while modal is open without overriding theme-color
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      const meta =
-        (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
-        document.querySelector('meta[name="theme-color"]');
-      if (meta) {
-        meta.setAttribute('content', '#070D18');
-      }
     } else {
       document.body.style.overflow = '';
       setIsVerifiedSuccess(false);
       setErrorMessage(null);
       setNin('');
       setDob('');
-      const isDark = document.documentElement.classList.contains('dark');
-      const meta =
-        (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
-        document.querySelector('meta[name="theme-color"]');
-      if (meta) {
-        meta.setAttribute('content', isDark ? '#070D18' : '#ffffff');
-      }
     }
     return () => {
       document.body.style.overflow = '';
@@ -158,7 +145,7 @@ export default function KycModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 dark:bg-black/90 backdrop-blur-md overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/75 backdrop-blur-sm overflow-hidden">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}

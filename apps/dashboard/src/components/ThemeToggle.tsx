@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { Sun, Moon, Laptop, Check } from 'lucide-react';
-
-type ThemeMode = 'light' | 'dark' | 'system';
+import { applyThemeChrome, resolveIsDark, type ThemeMode } from '@/lib/theme-sync';
 
 export default function ThemeToggle() {
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
@@ -29,25 +28,7 @@ export default function ThemeToggle() {
     setThemeMode(mode);
     localStorage.setItem('baxato_theme', mode);
     setIsOpen(false);
-
-    const root = document.documentElement;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
-
-    if (isDark) {
-      root.classList.add('dark');
-      root.style.colorScheme = 'dark';
-    } else {
-      root.classList.remove('dark');
-      root.style.colorScheme = 'light';
-    }
-
-    const meta =
-      (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
-      document.querySelector('meta[name="theme-color"]');
-    if (meta) {
-      meta.setAttribute('content', isDark ? '#070D18' : '#ffffff');
-    }
+    applyThemeChrome(resolveIsDark(mode));
   };
 
   const ActiveIcon = themeMode === 'light' ? Sun : themeMode === 'dark' ? Moon : Laptop;

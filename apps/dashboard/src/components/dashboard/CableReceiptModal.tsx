@@ -108,7 +108,7 @@ export default function CableReceiptModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-sm overflow-y-auto"
       onClick={onClose}
     >
       <div

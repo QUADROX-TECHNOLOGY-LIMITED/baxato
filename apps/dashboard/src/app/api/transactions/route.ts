@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const serviceType = searchParams.get('serviceType') || searchParams.get('service') || '';
     const status = searchParams.get('status') || '';
+    const channel = searchParams.get('channel') || '';
     const search = searchParams.get('search') || '';
     const limit = searchParams.get('limit') || '20';
     const offset = searchParams.get('offset') || '0';
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
     const params = new URLSearchParams();
     if (serviceType && serviceType !== 'ALL') params.set('serviceType', serviceType);
     if (status && status !== 'ALL') params.set('status', status);
+    if (channel && channel !== 'ALL') params.set('channel', channel);
     if (search) params.set('search', search);
     params.set('limit', limit);
     params.set('offset', offset);
