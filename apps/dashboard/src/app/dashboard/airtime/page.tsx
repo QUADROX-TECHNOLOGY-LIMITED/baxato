@@ -1,19 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import {
-  Smartphone,
-  CheckCircle2,
   AlertCircle,
-  Loader2,
-  ArrowRight,
   ArrowLeft,
+  Check,
+  FileText,
+  Loader2,
   Wallet,
   X,
-  FileText,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -37,9 +34,10 @@ interface NetworkOption {
   id: string;
   name: string;
   logo: string;
+  fullBleed?: boolean;
+  logoScaleClass?: string;
   prefixes: string[];
-  borderActive: string;
-  bgActive: string;
+  activeClasses: string;
   discountBps: number;
 }
 
@@ -48,50 +46,102 @@ const NETWORKS: NetworkOption[] = [
     id: 'MTN',
     name: 'MTN',
     logo: '/logos/telecom/mtn.svg',
+    fullBleed: true,
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
-    borderActive: 'border-amber-400 ring-2 ring-amber-400/20',
-    bgActive: 'bg-amber-400/5',
+    activeClasses: 'border-amber-400 bg-amber-50/60 dark:bg-amber-400/10 ring-1 ring-amber-400/40',
     discountBps: 0,
   },
   {
     id: 'AIRTEL',
     name: 'Airtel',
     logo: '/logos/telecom/airtel.svg',
+    fullBleed: false,
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
-    borderActive: 'border-red-500 ring-2 ring-red-500/20',
-    bgActive: 'bg-red-500/5',
+    activeClasses: 'border-red-500 bg-red-50/50 dark:bg-red-500/10 ring-1 ring-red-500/35',
     discountBps: 0,
   },
   {
     id: 'GLO',
     name: 'Glo',
     logo: '/logos/telecom/glo.svg',
+    fullBleed: true,
+    logoScaleClass: 'scale-[1.09]',
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
-    borderActive: 'border-emerald-500 ring-2 ring-emerald-500/20',
-    bgActive: 'bg-emerald-500/5',
+    activeClasses: 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10 ring-1 ring-emerald-500/35',
     discountBps: 0,
   },
   {
     id: '9MOBILE',
     name: '9mobile',
     logo: '/logos/telecom/9mobile.svg',
+    fullBleed: false,
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
-    borderActive: 'border-teal-500 ring-2 ring-teal-500/20',
-    bgActive: 'bg-teal-500/5',
+    activeClasses: 'border-teal-500 bg-teal-50/50 dark:bg-teal-500/10 ring-1 ring-teal-500/35',
     discountBps: 0,
   },
 ];
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 2000, 5000];
 
-export default function AirtimeVendingPage() {
-  const router = useRouter();
+/**
+ * Normalizes Nigerian numbers including pasted +234 / 234 prefixes into local 11-digit format.
+ */
+function normalizeNigerianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('2340') && digits.length >= 14) {
+    return digits.slice(3, 14);
+  }
+  if (digits.startsWith('234') && digits.length >= 13) {
+    return `0${digits.slice(3, 13)}`;
+  }
+  return digits.slice(0, 11);
+}
+
+/**
+ * Sanitizes Naira amount input to digits with an optional 2-decimal fractional suffix.
+ */
+function sanitizeAmountInput(raw: string): string {
+  const cleaned = raw.replace(/[^\d.]/g, '');
+  const dotIndex = cleaned.indexOf('.');
+  if (dotIndex === -1) {
+    return cleaned.slice(0, 7);
+  }
+  const intPart = cleaned.slice(0, dotIndex).slice(0, 5);
+  const decPart = cleaned
+    .slice(dotIndex + 1)
+    .replace(/\./g, '')
+    .slice(0, 2);
+  return `${intPart}.${decPart}`;
+}
+
+export default function AirtimePage() {
+  const phoneId = useId();
+  const phoneErrorId = useId();
+  const amountId = useId();
+  const amountErrorId = useId();
+  const confirmTitleId = useId();
+
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // User & Business State
   const [merchantName, setMerchantName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const u = getStoredUser();
       if (u?.firstName) return u.firstName;
+    }
+    return '';
+  });
+  const [userFirstName, setUserFirstName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser()?.firstName || '';
+    }
+    return '';
+  });
+  const [userLastName, setUserLastName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser()?.lastName || '';
     }
     return '';
   });
@@ -111,13 +161,21 @@ export default function AirtimeVendingPage() {
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
-  // Form State
+  // Form State (₦100 default amount)
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
-  const [amount, setAmount] = useState<string>('500');
+  const [amount, setAmount] = useState<string>('100');
   const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
 
-  // UI Flow & Modals
+  // After-interaction validation tracking
+  const [phoneEdited, setPhoneEdited] = useState<boolean>(false);
+  const [phoneBlurred, setPhoneBlurred] = useState<boolean>(false);
+  const [amountEdited, setAmountEdited] = useState<boolean>(false);
+  const [amountBlurred, setAmountBlurred] = useState<boolean>(false);
+  const [submitAttempted, setSubmitAttempted] = useState<boolean>(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
+
+  // Modal & Request State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -151,13 +209,13 @@ export default function AirtimeVendingPage() {
         }
       }
     } catch {
+      // Wallet balance load stays resilient; existing UI renders last value or 0
     } finally {
       setIsLoadingBalance(false);
       setIsInitialLoading(false);
     }
   };
 
-  // Load user details & wallet balance
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
@@ -172,7 +230,13 @@ export default function AirtimeVendingPage() {
       if (storedUser) {
         if (storedBiz?.role) setUserRole(storedBiz.role);
         else if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
+        if (storedUser.firstName) {
+          setMerchantName(storedUser.firstName);
+          setUserFirstName(storedUser.firstName);
+        }
+        if (storedUser.lastName) {
+          setUserLastName(storedUser.lastName);
+        }
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
         else setKycStatus('UNVERIFIED');
       } else {
@@ -184,18 +248,44 @@ export default function AirtimeVendingPage() {
       }
     } catch {}
 
-    const handleBizSwitched = () => {
-      const b = getStoredBusiness();
-      if (b?.name) setBusinessName(b.name);
-      if (b?.role) setUserRole(b.role);
-      loadWallets();
+    const syncUserProfile = async () => {
+      try {
+        const currentToken = getStoredAuthToken();
+        if (!currentToken) return;
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (handleAuthResponse(res, data)) return;
+        if (res.ok && data?.success && data.data) {
+          const userData = data.data.user || data.data;
+          if (userData.kycStatus) setKycStatus(userData.kycStatus);
+          if (userData.firstName) {
+            setMerchantName(userData.firstName);
+            setUserFirstName(userData.firstName);
+          }
+          if (userData.lastName) {
+            setUserLastName(userData.lastName);
+          }
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({
+                  ...parsed,
+                  kycStatus: userData.kycStatus ?? parsed.kycStatus,
+                  firstName: userData.firstName ?? parsed.firstName,
+                  lastName: userData.lastName ?? parsed.lastName,
+                }),
+              );
+            }
+          } catch {}
+        }
+      } catch {}
     };
 
-    window.addEventListener('bx_business_switched', handleBizSwitched);
-
-    loadWallets();
-
-    // Fetch dynamic network directory with admin-configured discount rates
     const loadNetworksCatalog = async () => {
       try {
         const res = await fetch('/api/services/airtime/networks');
@@ -213,8 +303,24 @@ export default function AirtimeVendingPage() {
         }
       } catch {}
     };
-    loadNetworksCatalog();
-    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
+
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      void loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+
+    void loadWallets();
+    void syncUserProfile();
+    void loadNetworksCatalog();
+
+    return () => {
+      window.removeEventListener('bx_business_switched', handleBizSwitched);
+      if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    };
   }, []);
 
   const canExecuteServices =
@@ -225,7 +331,6 @@ export default function AirtimeVendingPage() {
 
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Detect network from prefix
   const detectedNetwork = useMemo(() => {
     if (phone.length >= 4) {
       const prefix = phone.slice(0, 4);
@@ -234,14 +339,62 @@ export default function AirtimeVendingPage() {
     return null;
   }, [phone, networksList]);
 
-  // Auto-detect network silently as user types
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
-    setPhone(raw);
-    setErrorMessage(null);
+  const activeNetworkConfig = useMemo(() => {
+    return networksList.find((n) => n.id === selectedNetwork) || networksList[0] || NETWORKS[0];
+  }, [selectedNetwork, networksList]);
 
-    if (raw.length >= 4) {
-      const prefix = raw.slice(0, 4);
+  const parsedAmount = parseFloat(amount);
+  const numericAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+  const discountBps = activeNetworkConfig.discountBps || 0;
+  const estimatedDiscountNaira = (numericAmount * discountBps) / 10000;
+  const estimatedDebitNaira = Math.max(0, numericAmount - estimatedDiscountNaira);
+  const exceedsBalance =
+    !isLoadingBalance && numericAmount >= 100 && estimatedDebitNaira > walletBalance;
+
+  const phoneValidationError =
+    phone.length === 0
+      ? 'Enter a recipient phone number.'
+      : phone.length !== 11
+        ? 'Enter a valid 11-digit Nigerian mobile number.'
+        : null;
+
+  const amountValidationError =
+    amount.trim().length === 0 || !Number.isFinite(parsedAmount)
+      ? 'Enter an airtime amount.'
+      : numericAmount < 100 || numericAmount > 50000
+        ? 'Enter an amount between ₦100 and ₦50,000.'
+        : null;
+
+  const showPhoneError = Boolean(phoneValidationError) && (submitAttempted || (phoneBlurred && phoneEdited));
+  const showAmountError = Boolean(amountValidationError) && (submitAttempted || (amountBlurred && amountEdited));
+
+  const scheduleBlurAnnouncement = (message: string) => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    setLiveAnnouncement('');
+    announceTimerRef.current = setTimeout(() => {
+      setLiveAnnouncement(message);
+    }, 450);
+  };
+
+  const clearBlurAnnouncement = () => {
+    if (announceTimerRef.current) {
+      clearTimeout(announceTimerRef.current);
+      announceTimerRef.current = null;
+    }
+    setLiveAnnouncement('');
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const normalized = normalizeNigerianPhone(e.target.value);
+    setPhone(normalized);
+    setPhoneEdited(true);
+    setErrorMessage(null);
+    if (normalized.length === 11) {
+      clearBlurAnnouncement();
+    }
+
+    if (normalized.length >= 4) {
+      const prefix = normalized.slice(0, 4);
       const match = networksList.find((net) => net.prefixes.includes(prefix));
       if (match) {
         setSelectedNetwork(match.id);
@@ -249,11 +402,37 @@ export default function AirtimeVendingPage() {
     }
   };
 
-  const activeNetworkConfig = useMemo(() => {
-    return networksList.find((n) => n.id === selectedNetwork) || networksList[0] || NETWORKS[0];
-  }, [selectedNetwork, networksList]);
+  const handlePhoneBlur = () => {
+    setPhoneBlurred(true);
+    if (phoneEdited && phoneValidationError) {
+      scheduleBlurAnnouncement(`Phone number error: ${phoneValidationError}`);
+    }
+  };
 
-  const numericAmount = parseFloat(amount) || 0;
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const sanitized = sanitizeAmountInput(e.target.value);
+    setAmount(sanitized);
+    setAmountEdited(true);
+    setErrorMessage(null);
+    const val = parseFloat(sanitized);
+    if (Number.isFinite(val) && val >= 100 && val <= 50000) {
+      clearBlurAnnouncement();
+    }
+  };
+
+  const handleAmountBlur = () => {
+    setAmountBlurred(true);
+    if (amountEdited && amountValidationError) {
+      scheduleBlurAnnouncement(`Amount error: ${amountValidationError}`);
+    }
+  };
+
+  const handleSelectPreset = (val: number) => {
+    setAmount(val.toString());
+    setAmountEdited(true);
+    setErrorMessage(null);
+    clearBlurAnnouncement();
+  };
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,13 +443,17 @@ export default function AirtimeVendingPage() {
       return;
     }
 
-    if (phone.length !== 11) {
-      setErrorMessage('Please enter a valid 11-digit Nigerian phone number.');
+    setSubmitAttempted(true);
+
+    if (phoneValidationError) {
+      clearBlurAnnouncement();
+      phoneInputRef.current?.focus();
       return;
     }
 
-    if (numericAmount < 100 || numericAmount > 50000) {
-      setErrorMessage('Airtime recharge amount must be between ₦100 and ₦50,000.');
+    if (amountValidationError) {
+      clearBlurAnnouncement();
+      amountInputRef.current?.focus();
       return;
     }
 
@@ -322,7 +505,7 @@ export default function AirtimeVendingPage() {
       }
 
       if (!response.ok || !result?.success) {
-        const msg = result?.error?.message || result?.message || 'Airtime vending failed. Please try again.';
+        const msg = result?.error?.message || result?.message || 'Airtime purchase failed. Please try again.';
         throw new Error(msg);
       }
 
@@ -331,8 +514,8 @@ export default function AirtimeVendingPage() {
       const discountVal =
         data?.discountNaira !== undefined
           ? data.discountNaira
-          : (numericAmount * (activeNetworkConfig.discountBps || 250)) / 10000;
-      const debitedVal = data?.amountDebitedNaira ?? (faceVal - discountVal);
+          : (numericAmount * discountBps) / 10000;
+      const debitedVal = data?.amountDebitedNaira ?? Math.max(0, faceVal - discountVal);
 
       const receiptItem: TransactionReceiptData = {
         transactionId: data?.transactionId || data?.id || `txn_${Date.now()}`,
@@ -361,7 +544,7 @@ export default function AirtimeVendingPage() {
       setReceiptData(receiptItem);
       setIsConfirmModalOpen(false);
       setIsReceiptModalOpen(true);
-      loadWallets();
+      void loadWallets();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction could not be completed.';
       setErrorMessage(msg);
@@ -371,10 +554,10 @@ export default function AirtimeVendingPage() {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    loadWallets();
-    setTimeout(() => setIsRefreshing(false), 600);
+    await loadWallets();
+    setTimeout(() => setIsRefreshing(false), 350);
   };
 
   if (isInitialLoading) {
@@ -382,19 +565,26 @@ export default function AirtimeVendingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
+    <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       {isSubmitting && <BaxatoLoader variant="overlay" />}
+
+      {/* Polite screen-reader announcer for blur validation */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
+
       {/* Sidebar Navigation */}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
         kycStatus={kycStatus}
+        userRole={userRole}
         onOpenKycModal={() => setIsKycModalOpen(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Container */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -402,311 +592,537 @@ export default function AirtimeVendingPage() {
           merchantName={merchantName}
           businessName={businessName}
           kycStatus={kycStatus}
+          userRole={userRole}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
+          sticky={false}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-5">
+        <main className="flex-1 px-4 py-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
           {!canExecuteServices ? (
-            <AccessRestricted description="Airtime recharge and utility vending are restricted to Workspace Owners, Administrators, Developers, and Operations staff." />
+            <AccessRestricted description="Airtime purchases are restricted to Workspace Owners, Administrators, Developers, and Support staff." />
           ) : (
             <>
-              {/* Identity Verification Warning Banner */}
               <KycBanner
                 kycStatus={kycStatus}
                 userRole={userRole}
                 onOpenKycModal={() => setIsKycModalOpen(true)}
               />
 
-          {/* Navigation Action: Back to Dashboard & Airtime History */}
-          <div className="flex items-center justify-between">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs w-fit"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-400" />
-              <span>Back to Dashboard</span>
-            </Link>
+              {/* Navigation Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  <span>Back to Dashboard</span>
+                </Link>
 
-            <Link
-              href="/dashboard/ledger?service=AIRTIME"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1528] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors shadow-xs"
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-500" />
-              <span>Airtime History</span>
-            </Link>
-          </div>
-
-          {/* Page Heading & Compact Balance */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500/10 text-[#126BEB] dark:bg-blue-500/15 dark:text-[#38BDF8] border border-blue-500/20">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Airtime Recharge
-                </h1>
+                <Link
+                  href="/dashboard/ledger?service=AIRTIME"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Airtime History</span>
+                </Link>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Top up any Nigerian mobile number with instant value delivery
-              </p>
-            </div>
 
-            {/* Compact Balance Indicator */}
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit">
-              <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" />
-              <span>Balance:</span>
-              {isLoadingBalance ? (
-                <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
-              ) : (
-                <span className="font-bold text-slate-900 dark:text-white">
-                  ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Error Alert Message */}
-          {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs flex items-center gap-2.5 shadow-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* Centered, Well-Proportioned Airtime Purchase Card */}
-          <div className="max-w-lg mx-auto w-full pt-1">
-            <div className="bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-              <form onSubmit={handleOpenConfirm} noValidate className="space-y-4">
-                {/* 1. Recipient Phone Number */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={11}
-                    placeholder="08012345678"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    className="w-full h-12 px-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-base font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
-                    required
+              {/* Page Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Image
+                    src="/logos/categories/airtime.svg"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 shrink-0 rounded-xl"
                   />
+                  <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
+                      Airtime
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 text-pretty">
+                      Instant mobile top-ups across Nigerian networks.
+                    </p>
+                  </div>
                 </div>
 
-                {/* 2. Mobile Network Operator Selection */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Select Network
-                  </label>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {networksList.map((network) => {
-                      const isSelected = selectedNetwork === network.id;
-                      return (
-                        <button
-                          key={network.id}
-                          type="button"
-                          onClick={() => setSelectedNetwork(network.id)}
-                          className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
-                            isSelected
-                              ? `${network.borderActive} ${network.bgActive}`
-                              : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070E1C]/50 hover:border-slate-300 dark:hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="h-8 w-12 rounded-lg bg-white border border-slate-100 dark:border-slate-700/80 p-1 flex items-center justify-center relative">
-                            <Image
-                              src={network.logo}
-                              alt={network.name}
-                              width={40}
-                              height={24}
-                              className="object-contain max-h-6 max-w-full"
-                            />
-                          </div>
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {network.name}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Clean, short, neutral mismatch note */}
-                  {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">
-                      Prefix matches <span className="font-semibold text-slate-800 dark:text-slate-200">{detectedNetwork.name}</span>, but <span className="font-semibold text-slate-800 dark:text-slate-200">{activeNetworkConfig.name}</span> is selected.
-                    </p>
+                {/* Compact Balance Indicator */}
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
+                  {isLoadingBalance ? (
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                  ) : (
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                      ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    </span>
                   )}
                 </div>
+              </div>
 
-                {/* 3. Recharge Amount */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Amount (₦)
-                  </label>
-
-                  {/* Preset Amount Chips */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                    {PRESET_AMOUNTS.map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setAmount(val.toString())}
-                        className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all cursor-pointer ${
-                          numericAmount === val
-                            ? 'bg-[#126BEB] text-white border-[#126BEB] shadow-xs'
-                            : 'bg-slate-50 dark:bg-[#070E1C] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
-                        }`}
-                      >
-                        ₦{val.toLocaleString()}
-                      </button>
-                    ))}
+              {/* API / Server Error Banner */}
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/35 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start justify-between gap-3"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" aria-hidden="true" />
+                    <span className="leading-relaxed">{errorMessage}</span>
                   </div>
-
-                  {/* Custom Amount Input */}
-                  <div className="relative mt-2">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-slate-400 select-none">
-                      ₦
-                    </span>
-                    <input
-                      type="number"
-                      min={100}
-                      max={50000}
-                      step="any"
-                      placeholder="Enter custom amount"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="w-full h-12 pl-9 pr-4 rounded-xl bg-slate-50 dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 text-slate-900 dark:text-white text-base font-semibold placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Proceed Button */}
-                <div className="pt-2">
                   <button
-                    type="submit"
-                    disabled={!phone || !numericAmount}
-                    className="w-full py-3.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    type="button"
+                    onClick={() => setErrorMessage(null)}
+                    aria-label="Dismiss error"
+                    className="relative shrink-0 p-1 text-red-500 hover:text-red-700 dark:hover:text-red-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
                   >
-                    <span>Proceed to Recharge</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
+              )}
+
+              {/* Purchase Form & Live Order Summary */}
+              <form
+                onSubmit={handleOpenConfirm}
+                noValidate
+                aria-label="Airtime purchase form"
+                className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
+              >
+                {/* Left Column: Inputs */}
+                <div className="lg:col-span-7 bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6">
+                  {/* 1. Recipient Phone Number */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <label
+                        htmlFor={phoneId}
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Phone Number <span aria-hidden="true" className="text-red-500">*</span>
+                      </label>
+                      {detectedNetwork && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          <span
+                            className={`w-4 h-4 rounded-full overflow-hidden inline-flex items-center justify-center shrink-0 ${
+                              detectedNetwork.fullBleed
+                                ? ''
+                                : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
+                            }`}
+                          >
+                            <Image
+                              src={detectedNetwork.logo}
+                              alt=""
+                              width={16}
+                              height={16}
+                              className={`w-full h-full ${
+                                detectedNetwork.fullBleed ? 'object-cover' : 'object-contain'
+                              } ${detectedNetwork.logoScaleClass || ''}`}
+                            />
+                          </span>
+                          <span>{detectedNetwork.name} prefix</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        ref={phoneInputRef}
+                        id={phoneId}
+                        name="phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        enterKeyHint="next"
+                        maxLength={18}
+                        pattern="\d{11}"
+                        placeholder="08012345678"
+                        value={phone}
+                        onChange={handlePhoneChange}
+                        onBlur={handlePhoneBlur}
+                        aria-invalid={showPhoneError ? 'true' : 'false'}
+                        aria-describedby={showPhoneError ? phoneErrorId : undefined}
+                        required
+                        className={`w-full h-11 pl-3.5 pr-10 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-medium tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                          showPhoneError
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                        }`}
+                      />
+
+                      {phone.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhone('');
+                            setPhoneEdited(true);
+                            setErrorMessage(null);
+                            phoneInputRef.current?.focus();
+                          }}
+                          aria-label="Clear phone number"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+
+                    {showPhoneError && (
+                      <p
+                        id={phoneErrorId}
+                        className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span>{phoneValidationError}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 2. Network Radio Selection */}
+                  <fieldset className="space-y-2.5">
+                    <legend className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Network <span aria-hidden="true" className="text-red-500">*</span>
+                    </legend>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {networksList.map((network) => {
+                        const isSelected = selectedNetwork === network.id;
+                        return (
+                          <label
+                            key={network.id}
+                            className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                              isSelected
+                                ? network.activeClasses
+                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="network"
+                              value={network.id}
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedNetwork(network.id);
+                                setErrorMessage(null);
+                              }}
+                              className="sr-only"
+                            />
+                            {isSelected && (
+                              <span
+                                aria-hidden="true"
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#126BEB] text-white flex items-center justify-center"
+                              >
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </span>
+                            )}
+                            <span
+                              className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
+                                network.fullBleed
+                                  ? ''
+                                  : 'bg-white border border-slate-200/80 dark:border-slate-700 p-1.5'
+                              }`}
+                            >
+                              <Image
+                                src={network.logo}
+                                alt=""
+                                width={36}
+                                height={36}
+                                className={`w-full h-full ${
+                                  network.fullBleed ? 'object-cover' : 'object-contain'
+                                } ${network.logoScaleClass || ''}`}
+                              />
+                            </span>
+                            <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                              {network.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Prefix matches{' '}
+                        <span className="font-medium text-slate-700 dark:text-slate-200">
+                          {detectedNetwork.name}
+                        </span>
+                        ; {activeNetworkConfig.name} will be recharged.
+                      </p>
+                    )}
+                  </fieldset>
+
+                  {/* 3. Amount Selection */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor={amountId}
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        Amount (₦) <span aria-hidden="true" className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        ₦100 – ₦50,000
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {PRESET_AMOUNTS.map((val) => {
+                        const isActive = numericAmount === val;
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleSelectPreset(val)}
+                            aria-pressed={isActive}
+                            className={`min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-semibold tabular-nums border transition-colors cursor-pointer ${
+                              isActive
+                                ? 'bg-[#126BEB] text-white border-[#126BEB]'
+                                : 'bg-slate-50/70 dark:bg-[#070D18] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
+                            }`}
+                          >
+                            ₦{val.toLocaleString()}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="relative">
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400 select-none"
+                      >
+                        ₦
+                      </span>
+                      <input
+                        ref={amountInputRef}
+                        id={amountId}
+                        name="amount"
+                        type="text"
+                        inputMode="decimal"
+                        enterKeyHint="done"
+                        placeholder="Enter amount"
+                        value={amount}
+                        onChange={handleAmountChange}
+                        onBlur={handleAmountBlur}
+                        aria-invalid={showAmountError ? 'true' : 'false'}
+                        aria-describedby={showAmountError ? amountErrorId : undefined}
+                        required
+                        className={`w-full h-11 pl-8 pr-3.5 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-semibold tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                          showAmountError
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                        }`}
+                      />
+                    </div>
+
+                    {showAmountError && (
+                      <p
+                        id={amountErrorId}
+                        className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span>{amountValidationError}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Live Summary & Primary CTA */}
+                <aside className="lg:col-span-5 bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5 lg:sticky lg:top-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      Summary
+                    </h2>
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
+                      <span
+                        className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
+                          activeNetworkConfig.fullBleed
+                            ? ''
+                            : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
+                        }`}
+                      >
+                        <Image
+                          src={activeNetworkConfig.logo}
+                          alt=""
+                          width={20}
+                          height={20}
+                          className={`w-full h-full ${
+                            activeNetworkConfig.fullBleed ? 'object-cover' : 'object-contain'
+                          } ${activeNetworkConfig.logoScaleClass || ''}`}
+                        />
+                      </span>
+                      <span>{activeNetworkConfig.name}</span>
+                    </div>
+                  </div>
+
+                  <dl className="space-y-3 text-xs sm:text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-slate-500 dark:text-slate-400">Recipient</dt>
+                      <dd className="font-medium text-slate-900 dark:text-white tabular-nums">
+                        {phone || '—'}
+                      </dd>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-slate-500 dark:text-slate-400">Airtime Value</dt>
+                      <dd className="font-medium text-slate-900 dark:text-white tabular-nums">
+                        ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                      </dd>
+                    </div>
+
+                    {discountBps > 0 && estimatedDiscountNaira > 0 && (
+                      <div className="flex items-center justify-between gap-4 text-emerald-600 dark:text-emerald-400">
+                        <dt>Discount ({(discountBps / 100).toFixed(1)}%)</dt>
+                        <dd className="font-medium tabular-nums">
+                          -₦{estimatedDiscountNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                        </dd>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                      <dt className="font-semibold text-slate-900 dark:text-white">Total Debit</dt>
+                      <dd className="text-base font-bold text-[#126BEB] dark:text-[#38BDF8] tabular-nums">
+                        ₦{estimatedDebitNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {exceedsBalance && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-lg px-3 py-2">
+                      Amount exceeds your current wallet balance.
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Buy Airtime
+                  </button>
+                </aside>
               </form>
-            </div>
-          </div>
-        </>
-      )}
-    </main>
+            </>
+          )}
+        </main>
       </div>
 
-      {/* Clean Unified Confirmation Modal */}
+      {/* Native Confirmation Modal */}
       <ModalDialog
         isOpen={isConfirmModalOpen && !isSubmitting}
         onClose={() => setIsConfirmModalOpen(false)}
         dismissible={!isSubmitting}
-        ariaLabel="Confirm Airtime Recharge"
+        ariaLabelledBy={confirmTitleId}
         maxWidthClass="max-w-sm"
         className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
       >
         <div className="p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Confirm Airtime Recharge
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsConfirmModalOpen(false)}
-                disabled={isSubmitting}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <h2 id={confirmTitleId} className="text-sm font-semibold text-slate-900 dark:text-white">
+              Confirm Airtime Purchase
+            </h2>
+            <button
+              type="button"
+              onClick={() => setIsConfirmModalOpen(false)}
+              disabled={isSubmitting}
+              aria-label="Close confirmation"
+              className="relative text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 after:content-[''] after:absolute after:-inset-2 cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
 
-            {/* Clean, unified detail rows with seamless styling */}
-            <div className="space-y-3 py-1 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Network</span>
-                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+          <dl className="space-y-3 py-1 text-xs">
+            <div className="flex justify-between items-center">
+              <dt className="text-slate-500 dark:text-slate-400">Network</dt>
+              <dd className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span
+                  className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
+                    activeNetworkConfig.fullBleed
+                      ? ''
+                      : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
+                  }`}
+                >
                   <Image
                     src={activeNetworkConfig.logo}
-                    alt={activeNetworkConfig.name}
+                    alt=""
                     width={20}
-                    height={14}
-                    className="object-contain"
+                    height={20}
+                    className={`w-full h-full ${
+                      activeNetworkConfig.fullBleed ? 'object-cover' : 'object-contain'
+                    } ${activeNetworkConfig.logoScaleClass || ''}`}
                   />
-                  {activeNetworkConfig.name}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Recipient Phone</span>
-                <span className="font-semibold text-slate-900 dark:text-white text-sm">{phone}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 dark:text-slate-400">Airtime Face Value</span>
-                <span className="font-semibold text-slate-900 dark:text-white text-sm">
-                  ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              {activeNetworkConfig.discountBps > 0 && ((numericAmount * activeNetworkConfig.discountBps) / 10000) > 0 && (
-                <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
-                  <span>Merchant Discount ({((activeNetworkConfig.discountBps) / 100).toFixed(1)}%)</span>
-                  <span>
-                    -₦{((numericAmount * activeNetworkConfig.discountBps) / 10000).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
-                <div>
-                  <span className="font-bold text-slate-900 dark:text-white block">Amount to Debit</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">From Main Wallet</span>
-                </div>
-                <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base">
-                  ₦{(numericAmount - ((numericAmount * (activeNetworkConfig.discountBps || 0)) / 10000)).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+                <span>{activeNetworkConfig.name}</span>
+              </dd>
             </div>
-
-            {/* Short Mismatch Notice in Modal */}
-            {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
-              <p className="text-[11.5px] text-slate-500 dark:text-slate-400 text-center">
-                Note: Prefix matches {detectedNetwork.name}, recharging via {activeNetworkConfig.name}.
-              </p>
+            <div className="flex justify-between items-center">
+              <dt className="text-slate-500 dark:text-slate-400">Phone Number</dt>
+              <dd className="font-semibold text-slate-900 dark:text-white text-sm tabular-nums">{phone}</dd>
+            </div>
+            <div className="flex justify-between items-center">
+              <dt className="text-slate-500 dark:text-slate-400">Airtime Value</dt>
+              <dd className="font-semibold text-slate-900 dark:text-white text-sm tabular-nums">
+                ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+              </dd>
+            </div>
+            {discountBps > 0 && estimatedDiscountNaira > 0 && (
+              <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
+                <dt>Discount ({(discountBps / 100).toFixed(1)}%)</dt>
+                <dd className="tabular-nums">
+                  -₦{estimatedDiscountNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </dd>
+              </div>
             )}
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmModalOpen(false)}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecutePurchase}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <span>Confirm & Pay</span>
-                )}
-              </button>
+            <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+              <dt className="font-semibold text-slate-900 dark:text-white">
+                Total Debit
+                <span className="block text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                  Main Wallet
+                </span>
+              </dt>
+              <dd className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base tabular-nums">
+                ₦{estimatedDebitNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+              </dd>
             </div>
+          </dl>
+
+          {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
+            <p className="text-[11.5px] text-slate-500 dark:text-slate-400 text-center">
+              Prefix matches {detectedNetwork.name}; recharging via {activeNetworkConfig.name}.
+            </p>
+          )}
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setIsConfirmModalOpen(false)}
+              disabled={isSubmitting}
+              className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExecutePurchase}
+              disabled={isSubmitting}
+              className="flex-1 min-h-[44px] px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                  <span>Processing</span>
+                </>
+              ) : (
+                <span>Confirm</span>
+              )}
+            </button>
+          </div>
         </div>
       </ModalDialog>
 
-      {/* Sleek Enterprise BAXATO Transaction Receipt Modal with Live Auto-Pinging & PDF Export */}
+      {/* Transaction Receipt Modal */}
       <TransactionReceiptModal
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
@@ -714,11 +1130,15 @@ export default function AirtimeVendingPage() {
         onRechargeAnother={() => {
           setIsReceiptModalOpen(false);
           setPhone('');
-          loadWallets();
+          setPhoneEdited(false);
+          setPhoneBlurred(false);
+          setSubmitAttempted(false);
+          setLiveAnnouncement('');
+          void loadWallets();
         }}
         onStatusUpdated={(updated) => {
           setReceiptData(updated);
-          loadWallets();
+          void loadWallets();
         }}
         pollingEndpoint="/api/services/airtime/status/"
       />
@@ -727,7 +1147,20 @@ export default function AirtimeVendingPage() {
       <KycModal
         isOpen={isKycModalOpen}
         onClose={() => setIsKycModalOpen(false)}
-        onSuccess={() => setKycStatus('VERIFIED')}
+        onSuccess={() => {
+          setKycStatus('VERIFIED');
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({ ...JSON.parse(raw), kycStatus: 'VERIFIED' }),
+              );
+            }
+          } catch {}
+        }}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
       />
     </div>
   );
