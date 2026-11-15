@@ -1,25 +1,14 @@
 'use client';
 
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Bookmark, Check, ChevronDown, Loader2, Phone, X } from 'lucide-react';
 import {
-  getStoredAuthToken,
-  getStoredBusiness,
-  handleAuthResponse,
-  isTokenExpired,
-} from '@/lib/auth-session';
-import { showToast } from '@/lib/toast';
+  useAnchoredPopover,
+  useSavedBeneficiaries,
+  type SavedBeneficiary,
+} from '@/lib/use-saved-beneficiaries';
 
-export interface SavedBeneficiary {
-  id: string;
-  businessId: string;
-  phoneNumber: string;
-  network: string | null;
-  label: string | null;
-  serviceType: 'AIRTIME' | 'DATA' | null;
-  createdAt: string;
-  updatedAt: string;
-}
+export { useSavedBeneficiaries, type SavedBeneficiary };
 
 const NETWORK_BADGES: Record<string, { label: string; colorClass: string }> = {
   MTN: {
@@ -43,124 +32,6 @@ const NETWORK_BADGES: Record<string, { label: string; colorClass: string }> = {
     colorClass: 'bg-teal-50 text-teal-800 border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800/60',
   },
 };
-
-export function useSavedBeneficiaries() {
-  const [beneficiaries, setBeneficiaries] = useState<SavedBeneficiary[]>([]);
-  const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(false);
-
-  const getHeaders = useCallback(() => {
-    const token = getStoredAuthToken();
-    if (!token || isTokenExpired(token)) return null;
-    const biz = getStoredBusiness();
-    return {
-      Authorization: `Bearer ${token}`,
-      ...(biz?.id ? { 'x-business-id': biz.id } : {}),
-    };
-  }, []);
-
-  const fetchBeneficiaries = useCallback(async () => {
-    const headers = getHeaders();
-    if (!headers) return;
-
-    try {
-      setIsLoadingBeneficiaries(true);
-      const res = await fetch('/api/beneficiaries', { headers, cache: 'no-store' });
-      const json = await res.json().catch(() => null);
-      if (handleAuthResponse(res, json)) return;
-      if (res.ok && json?.success && Array.isArray(json.data)) {
-        setBeneficiaries(json.data);
-      }
-    } catch {
-      // Non-blocking
-    } finally {
-      setIsLoadingBeneficiaries(false);
-    }
-  }, [getHeaders]);
-
-  const saveBeneficiary = useCallback(
-    async (params: {
-      phoneNumber: string;
-      network?: string | null;
-      label?: string;
-      serviceType: 'AIRTIME' | 'DATA';
-    }) => {
-      const headers = getHeaders();
-      if (!headers) return;
-
-      try {
-        const res = await fetch('/api/beneficiaries', {
-          method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            phoneNumber: params.phoneNumber,
-            ...(params.network ? { network: params.network } : {}),
-            ...(params.label ? { label: params.label } : {}),
-            serviceType: params.serviceType,
-          }),
-        });
-        const json = await res.json().catch(() => null);
-        if (handleAuthResponse(res, json)) return;
-        if (res.ok && json?.success) {
-          await fetchBeneficiaries();
-        }
-      } catch {
-        // Non-blocking background persistence after purchase
-      }
-    },
-    [fetchBeneficiaries, getHeaders],
-  );
-
-  const deleteBeneficiary = useCallback(
-    async (id: string) => {
-      const headers = getHeaders();
-      if (!headers) return;
-
-      try {
-        const res = await fetch(`/api/beneficiaries/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers,
-        });
-        const json = await res.json().catch(() => null);
-        if (handleAuthResponse(res, json)) return;
-        if (res.ok && json?.success) {
-          setBeneficiaries((prev) => prev.filter((item) => item.id !== id));
-        } else {
-          showToast({
-            type: 'error',
-            message: json?.error?.message || 'Unable to remove saved beneficiary.',
-          });
-        }
-      } catch {
-        showToast({
-          type: 'error',
-          message: 'Network error while removing beneficiary.',
-        });
-      }
-    },
-    [getHeaders],
-  );
-
-  useEffect(() => {
-    fetchBeneficiaries();
-
-    const handleSwitch = () => {
-      fetchBeneficiaries();
-    };
-    window.addEventListener('bx_business_switched', handleSwitch);
-    return () => window.removeEventListener('bx_business_switched', handleSwitch);
-  }, [fetchBeneficiaries]);
-
-  return {
-    beneficiaries,
-    isLoadingBeneficiaries,
-    fetchBeneficiaries,
-    saveBeneficiary,
-    deleteBeneficiary,
-  };
-}
 
 interface PhoneFieldWithBeneficiariesProps {
   id: string;
@@ -203,112 +74,15 @@ export default function PhoneFieldWithBeneficiaries({
   const anchorName = `--ben-anchor-${reactId}`;
   const popoverId = `ben-popover-${reactId}`;
 
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-
-  const [isOpen, setIsOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [fallbackCoords, setFallbackCoords] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
-
-  const supportsAnchorPositioning = () =>
-    typeof CSS !== 'undefined' &&
-    typeof CSS.supports === 'function' &&
-    CSS.supports('position-area', 'block-end');
-
-  const updateFallbackCoords = useCallback(() => {
-    if (supportsAnchorPositioning() || !wrapperRef.current) return;
-    const rect = wrapperRef.current.getBoundingClientRect();
-    setFallbackCoords({
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
-    });
-  }, []);
-
-  const closePopover = useCallback(() => {
-    setIsOpen(false);
-    const el = popoverRef.current;
-    if (!el) return;
-    try {
-      if (typeof el.hidePopover === 'function' && el.matches(':popover-open')) {
-        el.hidePopover();
-      }
-    } catch {}
-  }, []);
-
-  const openPopover = useCallback(() => {
-    if (beneficiaries.length === 0) return;
-    updateFallbackCoords();
-    setIsOpen(true);
-    requestAnimationFrame(() => {
-      const el = popoverRef.current;
-      if (!el) return;
-      try {
-        if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) {
-          el.showPopover();
-        }
-      } catch {}
-    });
-  }, [beneficiaries.length, updateFallbackCoords]);
-
-  const togglePopover = () => {
-    if (isOpen) {
-      closePopover();
-    } else {
-      openPopover();
-    }
-  };
-
-  useEffect(() => {
-    const el = popoverRef.current;
-    if (!el) return;
-
-    const handleNativeToggle = (e: Event) => {
-      const evt = e as Event & { newState?: string };
-      if (evt.newState === 'closed') {
-        setIsOpen(false);
-      } else if (evt.newState === 'open') {
-        setIsOpen(true);
-      }
-    };
-
-    el.addEventListener('toggle', handleNativeToggle);
-    return () => el.removeEventListener('toggle', handleNativeToggle);
-  }, [beneficiaries.length]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        wrapperRef.current &&
-        !wrapperRef.current.contains(target) &&
-        popoverRef.current &&
-        !popoverRef.current.contains(target)
-      ) {
-        closePopover();
-      }
-    };
-
-    const handleResizeOrScroll = () => {
-      updateFallbackCoords();
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    window.addEventListener('resize', handleResizeOrScroll);
-    window.addEventListener('scroll', handleResizeOrScroll, true);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      window.removeEventListener('resize', handleResizeOrScroll);
-      window.removeEventListener('scroll', handleResizeOrScroll, true);
-    };
-  }, [closePopover, isOpen, updateFallbackCoords]);
+  const {
+    wrapperRef,
+    popoverRef,
+    isOpen,
+    fallbackCoords,
+    closePopover,
+    togglePopover,
+  } = useAnchoredPopover(beneficiaries.length > 0);
 
   const handleDelete = async (benId: string) => {
     try {

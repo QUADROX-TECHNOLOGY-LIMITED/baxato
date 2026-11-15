@@ -43,6 +43,13 @@
       "when": 1794752000000,
       "tag": "0005_add_beneficiaries_and_system_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794761000000,
+      "tag": "0006_add_utility_beneficiary_fields",
+      "breakpoints": true
     }
   ]
 }

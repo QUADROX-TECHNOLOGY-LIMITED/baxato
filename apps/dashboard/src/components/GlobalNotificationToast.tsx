@@ -308,7 +308,7 @@ export default function GlobalNotificationToast() {
             handlePauseTimer();
           }}
           onBlur={handleResumeTimer}
-          className="baxato-toast-popover fixed top-3 left-3 right-3 mx-auto w-auto max-w-sm sm:left-auto sm:right-4 sm:top-4 sm:mx-0 sm:min-w-[300px] sm:max-w-[380px] z-[999]"
+          className="baxato-toast-popover fixed top-[calc(env(safe-area-inset-top,0px)+4.25rem)] left-4 right-4 mx-auto w-auto max-w-sm sm:left-auto sm:right-4 sm:top-4 sm:mx-0 sm:min-w-[300px] sm:max-w-[380px] z-[999]"
         >
           <div
             className={`pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border ${variantStyles.container}`}

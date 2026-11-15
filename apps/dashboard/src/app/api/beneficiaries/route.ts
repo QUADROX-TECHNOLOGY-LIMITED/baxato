@@ -6,8 +6,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
+    const url = new URL(request.url);
+    const serviceType = url.searchParams.get('serviceType');
+    const targetPath = serviceType
+      ? `/beneficiaries?serviceType=${encodeURIComponent(serviceType)}`
+      : '/beneficiaries';
     const result = await proxyToBackendApi(
-      '/beneficiaries',
+      targetPath,
       {
         method: 'GET',
         headers: {

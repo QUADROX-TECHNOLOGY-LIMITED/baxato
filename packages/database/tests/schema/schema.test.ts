@@ -114,7 +114,11 @@ describe('Database Schemas Specification', () => {
     expect(benCols.id.primary).toBe(true);
     expect(benCols.businessId).toBeDefined();
     expect(benCols.phoneNumber).toBeDefined();
+    expect(benCols.phoneNumber.notNull).toBe(false);
     expect(benCols.network).toBeDefined();
+    expect(benCols.meterNumber).toBeDefined();
+    expect(benCols.disco).toBeDefined();
+    expect(benCols.meterType).toBeDefined();
 
     const sysCols = getTableColumns(systemSettings);
     expect(sysCols.id.primary).toBe(true);

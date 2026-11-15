@@ -17,10 +17,13 @@ vi.mock('@baxato/database', async () => {
 interface BeneficiaryItem {
   id: string;
   businessId: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   network: TelecomNetwork | null;
+  meterNumber: string | null;
+  disco: string | null;
+  meterType: 'PREPAID' | 'POSTPAID' | null;
   label: string | null;
-  serviceType: 'AIRTIME' | 'DATA' | null;
+  serviceType: 'AIRTIME' | 'DATA' | 'ELECTRICITY' | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -272,5 +275,117 @@ describe('Saved Beneficiaries Endpoints (/beneficiaries)', () => {
       headers: { authorization: `Bearer ${ownerBToken}` },
     });
     expect(ownDelete.statusCode).toBe(200);
+  });
+
+  it('saves, filters, deduplicates, and FIFO-caps electricity meter beneficiaries separately from phone numbers', async () => {
+    // Save a phone beneficiary first — must stay isolated from ELECTRICITY
+    await app.inject({
+      method: 'POST',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+      payload: { phoneNumber: '08031234567', serviceType: 'AIRTIME', label: 'Office Phone' },
+    });
+
+    const firstMeter = await app.inject({
+      method: 'POST',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+      payload: {
+        serviceType: 'ELECTRICITY',
+        meterNumber: '0412 345 6789',
+        disco: 'ikedc',
+        meterType: 'prepaid',
+        label: 'Amina Bello',
+      },
+    });
+    expect(firstMeter.statusCode).toBe(201);
+    const firstJson = firstMeter.json<ApiResponse<BeneficiaryItem>>();
+    expect(firstJson.data.meterNumber).toBe('04123456789');
+    expect(firstJson.data.disco).toBe('IKEDC');
+    expect(firstJson.data.meterType).toBe('PREPAID');
+    expect(firstJson.data.phoneNumber).toBeNull();
+
+    // Upsert same (meterNumber, disco, meterType) updates label without creating duplicate
+    const updatedMeter = await app.inject({
+      method: 'POST',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+      payload: {
+        serviceType: 'ELECTRICITY',
+        meterNumber: '04123456789',
+        disco: 'IKEDC',
+        meterType: 'PREPAID',
+        label: 'Amina Bello HQ',
+      },
+    });
+    expect(updatedMeter.statusCode).toBe(201);
+
+    const metersRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries?serviceType=ELECTRICITY',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    expect(metersRes.statusCode).toBe(200);
+    const meters = metersRes.json<ApiResponse<BeneficiaryItem[]>>().data;
+    expect(meters).toHaveLength(1);
+    expect(meters[0].label).toBe('Amina Bello HQ');
+
+    // Default phone list excludes ELECTRICITY rows
+    const phonesRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    const phones = phonesRes.json<ApiResponse<BeneficiaryItem[]>>().data;
+    expect(phones).toHaveLength(1);
+    expect(phones[0].phoneNumber).toBe('08031234567');
+
+    // Saving 5 more distinct meters caps electricity list at 5 and keeps phone beneficiary untouched
+    const extraMeters = [
+      '45100000001',
+      '45100000002',
+      '45100000003',
+      '45100000004',
+      '45100000005',
+    ];
+    for (let idx = 0; idx < extraMeters.length; idx++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/beneficiaries',
+        headers: { authorization: `Bearer ${ownerAToken}` },
+        payload: {
+          serviceType: 'ELECTRICITY',
+          meterNumber: extraMeters[idx],
+          disco: 'EKEDC',
+          meterType: 'PREPAID',
+          label: `Meter ${idx + 1}`,
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const id = res.json<ApiResponse<BeneficiaryItem>>().data.id;
+      const inMem = inMemoryDb.beneficiaries.find((b) => b.id === id);
+      if (inMem) {
+        const ts = new Date(Date.now() + (idx + 1) * 1000);
+        inMem.createdAt = ts;
+        inMem.updatedAt = ts;
+      }
+    }
+
+    const cappedMetersRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries?serviceType=ELECTRICITY',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    const cappedMeters = cappedMetersRes.json<ApiResponse<BeneficiaryItem[]>>().data;
+    expect(cappedMeters).toHaveLength(5);
+    expect(cappedMeters.map((m) => m.meterNumber)).not.toContain('04123456789');
+
+    // Phone beneficiary must still exist unaffected by electricity eviction
+    const phonesAfterRes = await app.inject({
+      method: 'GET',
+      url: '/beneficiaries',
+      headers: { authorization: `Bearer ${ownerAToken}` },
+    });
+    expect(phonesAfterRes.json<ApiResponse<BeneficiaryItem[]>>().data).toHaveLength(1);
   });
 });

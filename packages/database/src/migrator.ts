@@ -109,17 +109,25 @@ export async function runMigrations(): Promise<boolean> {
         id TEXT PRIMARY KEY,
         business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
         user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-        phone_number TEXT NOT NULL,
+        phone_number TEXT,
         network TEXT,
+        meter_number TEXT,
+        disco TEXT,
+        meter_type TEXT,
         label TEXT,
         service_type TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
     `;
+    await sql`ALTER TABLE beneficiaries ALTER COLUMN phone_number DROP NOT NULL;`;
+    await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS meter_number TEXT;`;
+    await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS disco TEXT;`;
+    await sql`ALTER TABLE beneficiaries ADD COLUMN IF NOT EXISTS meter_type TEXT;`;
     await sql`CREATE INDEX IF NOT EXISTS beneficiaries_business_id_idx ON beneficiaries(business_id);`;
     await sql`CREATE INDEX IF NOT EXISTS beneficiaries_created_at_idx ON beneficiaries(created_at);`;
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_phone_idx ON beneficiaries(business_id, phone_number);`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS beneficiaries_business_meter_idx ON beneficiaries(business_id, meter_number, disco, meter_type);`;
 
     console.log('[Database Migration] PostgreSQL schemas and tables verified & up to date.');
     return true;

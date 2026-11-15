@@ -147,7 +147,7 @@ export const examPins = pgTable(
   ],
 );
 
-// 5. Saved Beneficiaries Table (up to 5 per business for Airtime & Data)
+// 5. Saved Beneficiaries Table (up to 5 phone numbers + up to 5 utility meters per business)
 export const beneficiaries = pgTable(
   'beneficiaries',
   {
@@ -156,8 +156,11 @@ export const beneficiaries = pgTable(
       .notNull()
       .references(() => businesses.id, { onDelete: 'cascade' }),
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-    phoneNumber: text('phone_number').notNull(),
+    phoneNumber: text('phone_number'),
     network: text('network'),
+    meterNumber: text('meter_number'),
+    disco: text('disco'),
+    meterType: text('meter_type'),
     label: text('label'),
     serviceType: text('service_type'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -167,6 +170,12 @@ export const beneficiaries = pgTable(
     index('beneficiaries_business_id_idx').on(table.businessId),
     index('beneficiaries_created_at_idx').on(table.createdAt),
     uniqueIndex('beneficiaries_business_phone_idx').on(table.businessId, table.phoneNumber),
+    uniqueIndex('beneficiaries_business_meter_idx').on(
+      table.businessId,
+      table.meterNumber,
+      table.disco,
+      table.meterType,
+    ),
   ],
 );
 

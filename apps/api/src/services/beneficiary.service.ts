@@ -4,13 +4,19 @@ import { normalizeNigerianPhone, detectTelcoNetwork } from './telco.utils.js';
 
 export const MAX_BENEFICIARIES_PER_BUSINESS = 5;
 
+export type BeneficiaryServiceType = 'AIRTIME' | 'DATA' | 'ELECTRICITY';
+export type ElectricityMeterType = 'PREPAID' | 'POSTPAID';
+
 export interface BeneficiaryDto {
   id: string;
   businessId: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   network: TelecomNetwork | null;
+  meterNumber: string | null;
+  disco: string | null;
+  meterType: ElectricityMeterType | null;
   label: string | null;
-  serviceType: 'AIRTIME' | 'DATA' | null;
+  serviceType: BeneficiaryServiceType | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,52 +30,131 @@ export interface SaveBeneficiaryInput {
   serviceType?: 'AIRTIME' | 'DATA';
 }
 
-function toDto(row: {
+export interface SaveElectricityBeneficiaryInput {
+  businessId: string;
+  userId?: string;
+  meterNumber: string;
+  disco: string;
+  meterType: string;
+  label?: string;
+}
+
+interface BeneficiaryRowLike {
   id: string;
   businessId: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   network: string | null;
+  meterNumber?: string | null;
+  disco?: string | null;
+  meterType?: string | null;
   label: string | null;
   serviceType: string | null;
   createdAt: Date;
   updatedAt: Date;
-}): BeneficiaryDto {
+}
+
+function toDto(row: BeneficiaryRowLike): BeneficiaryDto {
   return {
     id: row.id,
     businessId: row.businessId,
-    phoneNumber: row.phoneNumber,
+    phoneNumber: row.phoneNumber ?? null,
     network: (row.network as TelecomNetwork) || null,
+    meterNumber: row.meterNumber ?? null,
+    disco: row.disco ?? null,
+    meterType: (row.meterType as ElectricityMeterType) || null,
     label: row.label ?? null,
-    serviceType: (row.serviceType as 'AIRTIME' | 'DATA') || null,
+    serviceType: (row.serviceType as BeneficiaryServiceType) || null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
+function isElectricityBeneficiaryRow(row: { serviceType?: string | null; meterNumber?: string | null }): boolean {
+  return row.serviceType === 'ELECTRICITY' && Boolean(row.meterNumber);
+}
+
+function normalizeMeterNumber(rawMeter: string): string {
+  const digits = rawMeter.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 13) {
+    throw new ValidationError('Meter number must be 8 to 13 digits.');
+  }
+  return digits;
+}
+
+function normalizeDiscoCode(rawDisco: string): string {
+  const cleaned = rawDisco.trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{2,32}$/.test(cleaned)) {
+    throw new ValidationError('Invalid electricity DisCo code.');
+  }
+  return cleaned;
+}
+
+function normalizeMeterType(rawType: string): ElectricityMeterType {
+  const cleaned = rawType.trim().toUpperCase();
+  if (cleaned !== 'PREPAID' && cleaned !== 'POSTPAID') {
+    throw new ValidationError('Invalid meterType. Supported: PREPAID, POSTPAID.');
+  }
+  return cleaned;
+}
+
 class BeneficiaryService {
+  private async evictOverflow(
+    businessId: string,
+    matchesCategory: (row: { serviceType: string | null; phoneNumber: string | null; meterNumber?: string | null }) => boolean,
+  ): Promise<void> {
+    const allRows = await db
+      .select()
+      .from(beneficiaries)
+      .where(eq(beneficiaries.businessId, businessId))
+      .orderBy(asc(beneficiaries.createdAt), asc(beneficiaries.updatedAt));
+
+    const categoryRows = allRows.filter(matchesCategory);
+    if (categoryRows.length < MAX_BENEFICIARIES_PER_BUSINESS) {
+      return;
+    }
+
+    const overflowCount = categoryRows.length - MAX_BENEFICIARIES_PER_BUSINESS + 1;
+    const idsToEvict = categoryRows.slice(0, overflowCount).map((r) => r.id);
+    if (idsToEvict.length > 0) {
+      await db
+        .delete(beneficiaries)
+        .where(
+          and(
+            eq(beneficiaries.businessId, businessId),
+            inArray(beneficiaries.id, idsToEvict),
+          ),
+        );
+    }
+  }
+
   /**
-   * Lists saved phone beneficiaries for a business (newest used first, max 5).
+   * Lists saved beneficiaries for a business (newest used first, max 5 per service category).
+   * Defaults to phone beneficiaries (AIRTIME/DATA) when serviceType is omitted or AIRTIME/DATA.
    */
-  public async listBeneficiaries(businessId: string): Promise<BeneficiaryDto[]> {
+  public async listBeneficiaries(
+    businessId: string,
+    serviceType?: BeneficiaryServiceType,
+  ): Promise<BeneficiaryDto[]> {
     const rows = await db
       .select()
       .from(beneficiaries)
       .where(eq(beneficiaries.businessId, businessId))
-      .orderBy(desc(beneficiaries.updatedAt), desc(beneficiaries.createdAt))
-      .limit(MAX_BENEFICIARIES_PER_BUSINESS);
+      .orderBy(desc(beneficiaries.updatedAt), desc(beneficiaries.createdAt));
 
-    return rows.map((row) => toDto({
-      ...row,
-      network: row.network ?? null,
-      label: row.label ?? null,
-      serviceType: row.serviceType ?? null,
-    }));
+    const filtered =
+      serviceType === 'ELECTRICITY'
+        ? rows.filter((row) => isElectricityBeneficiaryRow(row))
+        : rows.filter((row) => row.serviceType !== 'ELECTRICITY' && Boolean(row.phoneNumber));
+
+    return filtered
+      .slice(0, MAX_BENEFICIARIES_PER_BUSINESS)
+      .map((row) => toDto(row));
   }
 
   /**
    * Saves a phone beneficiary for a business.
    * Deduplicates by normalized 11-digit number and enforces a strict 5-item FIFO cap
-   * (saving a 6th distinct phone evicts the oldest created beneficiary).
+   * (saving a 6th distinct phone evicts the oldest created phone beneficiary).
    */
   public async saveBeneficiary(input: SaveBeneficiaryInput): Promise<BeneficiaryDto> {
     const normalizedPhone = normalizeNigerianPhone(input.phoneNumber);
@@ -117,36 +202,14 @@ class BeneficiaryService {
         .where(eq(beneficiaries.id, existing.id))
         .returning();
 
-      const row = updated ?? existing;
-      return toDto({
-        ...row,
-        network: row.network ?? null,
-        label: row.label ?? null,
-        serviceType: row.serviceType ?? null,
-      });
+      return toDto(updated ?? existing);
     }
 
-    // 2. Enforce FIFO max 5 cap by evicting the oldest created beneficiary(ies)
-    const currentRows = await db
-      .select()
-      .from(beneficiaries)
-      .where(eq(beneficiaries.businessId, input.businessId))
-      .orderBy(asc(beneficiaries.createdAt), asc(beneficiaries.updatedAt));
-
-    if (currentRows.length >= MAX_BENEFICIARIES_PER_BUSINESS) {
-      const overflowCount = currentRows.length - MAX_BENEFICIARIES_PER_BUSINESS + 1;
-      const idsToEvict = currentRows.slice(0, overflowCount).map((r) => r.id);
-      if (idsToEvict.length > 0) {
-        await db
-          .delete(beneficiaries)
-          .where(
-            and(
-              eq(beneficiaries.businessId, input.businessId),
-              inArray(beneficiaries.id, idsToEvict),
-            ),
-          );
-      }
-    }
+    // 2. Enforce FIFO max 5 cap within phone beneficiaries
+    await this.evictOverflow(
+      input.businessId,
+      (row) => row.serviceType !== 'ELECTRICITY' && Boolean(row.phoneNumber),
+    );
 
     const now = new Date();
     const [created] = await db
@@ -156,6 +219,9 @@ class BeneficiaryService {
         userId: input.userId ?? null,
         phoneNumber: normalizedPhone,
         network: resolvedNetwork,
+        meterNumber: null,
+        disco: null,
+        meterType: null,
         label: cleanedLabel,
         serviceType: input.serviceType ?? null,
         createdAt: now,
@@ -167,12 +233,81 @@ class BeneficiaryService {
       throw new Error('Failed to persist beneficiary record.');
     }
 
-    return toDto({
-      ...created,
-      network: created.network ?? null,
-      label: created.label ?? null,
-      serviceType: created.serviceType ?? null,
-    });
+    return toDto(created);
+  }
+
+  /**
+   * Saves an electricity meter beneficiary for a business.
+   * Deduplicates by (businessId, meterNumber, disco, meterType) and enforces
+   * a separate 5-item FIFO cap for electricity meters.
+   */
+  public async saveElectricityBeneficiary(
+    input: SaveElectricityBeneficiaryInput,
+  ): Promise<BeneficiaryDto> {
+    const normalizedMeter = normalizeMeterNumber(input.meterNumber);
+    const normalizedDisco = normalizeDiscoCode(input.disco);
+    const normalizedType = normalizeMeterType(input.meterType);
+
+    const cleanedLabel =
+      typeof input.label === 'string' && input.label.trim().length > 0
+        ? input.label.trim().slice(0, 60)
+        : null;
+
+    const [existing] = await db
+      .select()
+      .from(beneficiaries)
+      .where(
+        and(
+          eq(beneficiaries.businessId, input.businessId),
+          eq(beneficiaries.meterNumber, normalizedMeter),
+          eq(beneficiaries.disco, normalizedDisco),
+          eq(beneficiaries.meterType, normalizedType),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db
+        .update(beneficiaries)
+        .set({
+          label: cleanedLabel ?? existing.label ?? null,
+          userId: input.userId ?? existing.userId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(beneficiaries.id, existing.id))
+        .returning();
+
+      return toDto(updated ?? existing);
+    }
+
+    await this.evictOverflow(
+      input.businessId,
+      (row) => isElectricityBeneficiaryRow(row),
+    );
+
+    const now = new Date();
+    const [created] = await db
+      .insert(beneficiaries)
+      .values({
+        businessId: input.businessId,
+        userId: input.userId ?? null,
+        phoneNumber: null,
+        network: null,
+        meterNumber: normalizedMeter,
+        disco: normalizedDisco,
+        meterType: normalizedType,
+        label: cleanedLabel,
+        serviceType: 'ELECTRICITY',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to persist electricity beneficiary record.');
+    }
+
+    return toDto(created);
   }
 
   /**

@@ -197,8 +197,11 @@ export interface MockBeneficiary {
   id: string;
   businessId: string;
   userId?: string | null;
-  phoneNumber: string;
+  phoneNumber: string | null;
   network?: string | null;
+  meterNumber?: string | null;
+  disco?: string | null;
+  meterType?: string | null;
   label?: string | null;
   serviceType?: string | null;
   createdAt: Date;
@@ -527,8 +530,11 @@ export function createMockDatabase() {
           id: String(u.id || `ben_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
           businessId: String(u.businessId),
           userId: u.userId ? String(u.userId) : null,
-          phoneNumber: String(u.phoneNumber),
+          phoneNumber: u.phoneNumber ? String(u.phoneNumber) : null,
           network: u.network ? String(u.network) : null,
+          meterNumber: u.meterNumber ? String(u.meterNumber) : null,
+          disco: u.disco ? String(u.disco) : null,
+          meterType: u.meterType ? String(u.meterType) : null,
           label: u.label ? String(u.label) : null,
           serviceType: u.serviceType ? String(u.serviceType) : null,
           createdAt: (u.createdAt as Date) || now,
@@ -758,14 +764,17 @@ export function createMockDatabase() {
         return [aud];
       }
 
-      if ('phoneNumber' in u && 'businessId' in u && !('email' in u)) {
+      if (('phoneNumber' in u || 'meterNumber' in u) && 'businessId' in u && !('email' in u)) {
         const now = new Date();
         const ben: MockBeneficiary = {
           id: String(u.id || `ben_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
           businessId: String(u.businessId),
           userId: u.userId ? String(u.userId) : null,
-          phoneNumber: String(u.phoneNumber),
+          phoneNumber: u.phoneNumber ? String(u.phoneNumber) : null,
           network: u.network ? String(u.network) : null,
+          meterNumber: u.meterNumber ? String(u.meterNumber) : null,
+          disco: u.disco ? String(u.disco) : null,
+          meterType: u.meterType ? String(u.meterType) : null,
           label: u.label ? String(u.label) : null,
           serviceType: u.serviceType ? String(u.serviceType) : null,
           createdAt: (u.createdAt as Date) || now,
@@ -954,6 +963,9 @@ export function createMockDatabase() {
       userId: 'user_id',
       phoneNumber: 'phone_number',
       network: 'network',
+      meterNumber: 'meter_number',
+      disco: 'disco',
+      meterType: 'meter_type',
       label: 'label',
       serviceType: 'service_type',
       createdAt: 'created_at',
@@ -1312,6 +1324,10 @@ export function createMockDatabase() {
                       if (col === 'id' && b.id !== c.val) return false;
                       if ((col === 'business_id' || col === 'businessid') && b.businessId !== c.val) return false;
                       if ((col === 'phone_number' || col === 'phonenumber') && b.phoneNumber !== c.val) return false;
+                      if ((col === 'meter_number' || col === 'meternumber') && b.meterNumber !== c.val) return false;
+                      if (col === 'disco' && b.disco !== c.val) return false;
+                      if ((col === 'meter_type' || col === 'metertype') && b.meterType !== c.val) return false;
+                      if ((col === 'service_type' || col === 'servicetype') && b.serviceType !== c.val) return false;
                     }
                     return true;
                   });
@@ -1669,6 +1685,10 @@ export function createMockDatabase() {
                       if (col === 'id' && b.id !== c.val) return false;
                       if ((col === 'business_id' || col === 'businessid') && b.businessId !== c.val) return false;
                       if ((col === 'phone_number' || col === 'phonenumber') && b.phoneNumber !== c.val) return false;
+                      if ((col === 'meter_number' || col === 'meternumber') && b.meterNumber !== c.val) return false;
+                      if (col === 'disco' && b.disco !== c.val) return false;
+                      if ((col === 'meter_type' || col === 'metertype') && b.meterType !== c.val) return false;
+                      if ((col === 'service_type' || col === 'servicetype') && b.serviceType !== c.val) return false;
                     }
                     return true;
                   });

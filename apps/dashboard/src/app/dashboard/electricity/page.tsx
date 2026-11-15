@@ -34,6 +34,14 @@ import {
 } from '@/lib/auth-session';
 import { useWalletBalance } from '@/lib/use-wallet-balance';
 import { showToast } from '@/lib/toast';
+import {
+  useSavedBeneficiaries,
+  type SavedElectricityBeneficiary,
+} from '@/lib/use-saved-beneficiaries';
+import {
+  SavedMetersLabelRow,
+  SavedMetersQuickStrip,
+} from '@/components/dashboard/SavedElectricityMeters';
 
 export type MeterType = 'PREPAID' | 'POSTPAID';
 
@@ -409,7 +417,17 @@ export default function ElectricityPage() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const autoVerifyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastVerifiedKeyRef = useRef<string>('');
+  const lastAttemptedKeyRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
+  const meterInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Saved Electricity Beneficiaries State
+  const {
+    beneficiaries: savedMeters,
+    saveBeneficiary: saveMeterBeneficiary,
+    deleteBeneficiary: deleteMeterBeneficiary,
+  } = useSavedBeneficiaries('ELECTRICITY');
+  const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState<boolean>(false);
 
   // Purchase & Modals State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -596,6 +614,7 @@ export default function ElectricityPage() {
     if (lastVerifiedKeyRef.current === verificationKey && verifiedMeter) {
       return;
     }
+    lastAttemptedKeyRef.current = verificationKey;
 
     // Cancel any previous in-flight verification request
     if (abortControllerRef.current) {
@@ -701,6 +720,18 @@ export default function ElectricityPage() {
     }
   };
 
+  const clearPendingVerification = () => {
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsVerifying(false);
+  };
+
   // Switch to the detected meter type when mismatch is identified
   const handleSwitchMeterType = (mismatch: MeterMismatch) => {
     const targetDisco = discosList.find(
@@ -709,6 +740,7 @@ export default function ElectricityPage() {
 
     if (!targetDisco) return;
 
+    clearPendingVerification();
     setSelectedOptionId(targetDisco.id);
     setMeterNumber(mismatch.meterNumber);
     setMeterMismatch(null);
@@ -725,6 +757,7 @@ export default function ElectricityPage() {
     });
 
     lastVerifiedKeyRef.current = `${targetDisco.id}:${mismatch.meterNumber}`;
+    lastAttemptedKeyRef.current = `${targetDisco.id}:${mismatch.meterNumber}`;
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -735,13 +768,16 @@ export default function ElectricityPage() {
 
   // Navigate into Dedicated Biller Page
   const handleSelectBiller = (option: DiscoOption) => {
+    clearPendingVerification();
     setSelectedOptionId(option.id);
     setMeterNumber('');
     setAmount('');
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
+    setSaveBeneficiaryChecked(false);
     lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -750,15 +786,53 @@ export default function ElectricityPage() {
     }
   };
 
+  // Jump directly into a saved electricity meter and verify it live
+  const handleSelectSavedMeter = (ben: SavedElectricityBeneficiary) => {
+    const targetDisco = discosList.find(
+      (d) => d.code === ben.disco && d.meterType === ben.meterType,
+    );
+    if (!targetDisco) {
+      showToast({
+        type: 'error',
+        message: 'Selected electricity provider is currently unavailable.',
+      });
+      return;
+    }
+
+    clearPendingVerification();
+    const cleanMeter = ben.meterNumber.replace(/\D/g, '').slice(0, 13);
+    setSelectedOptionId(targetDisco.id);
+    setMeterNumber(cleanMeter);
+    setVerifiedMeter(null);
+    setMeterMismatch(null);
+    setVerificationError(null);
+    setSaveBeneficiaryChecked(false);
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('provider', targetDisco.id);
+      window.history.pushState({}, '', url.toString());
+    }
+
+    if (cleanMeter.length >= 8) {
+      void executeMeterVerification(cleanMeter, targetDisco);
+    }
+  };
+
   // Navigate back to All Billers Catalog
   const handleBackToCatalog = () => {
+    clearPendingVerification();
     setSelectedOptionId(null);
     setMeterNumber('');
     setAmount('');
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
+    setSaveBeneficiaryChecked(false);
     lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -767,38 +841,68 @@ export default function ElectricityPage() {
     }
   };
 
-  // Handle Meter Number Change: automatically verify as soon as the meter number reaches 11 digits
+  // Abort active verification and unlock meter input for immediate editing
+  const handleCancelVerification = () => {
+    clearPendingVerification();
+    lastVerifiedKeyRef.current = '';
+    lastAttemptedKeyRef.current = '';
+    requestAnimationFrame(() => {
+      meterInputRef.current?.focus();
+    });
+  };
+
+  // Handle Meter Number Change: automatically verify across 10–13 digit Nigerian meter formats
   const handleMeterChange = (val: string) => {
+    if (isVerifying) return;
+
     const clean = val.replace(/\D/g, '').slice(0, 13);
     setMeterNumber(clean);
     setVerifiedMeter(null);
     setMeterMismatch(null);
     setVerificationError(null);
     lastVerifiedKeyRef.current = '';
-
-    // Cancel in-flight validation on typing
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsVerifying(false);
+    lastAttemptedKeyRef.current = '';
 
     if (autoVerifyTimeoutRef.current) {
       clearTimeout(autoVerifyTimeoutRef.current);
       autoVerifyTimeoutRef.current = null;
     }
 
-    // Auto-verify triggered upon reaching standard Nigerian STS meter limit (11 digits) with 600ms debounce
-    if (selectedDisco && clean.length === 11) {
+    if (!selectedDisco) return;
+
+    let delayMs: number | null = null;
+    if (clean.length === 13) {
+      delayMs = 250;
+    } else if (clean.length === 11) {
+      delayMs = 500;
+    } else if (clean.length === 10 || clean.length === 12) {
+      delayMs = 750;
+    }
+
+    if (delayMs !== null) {
       autoVerifyTimeoutRef.current = setTimeout(() => {
         executeMeterVerification(clean, selectedDisco);
-      }, 600);
+      }, delayMs);
     }
+  };
+
+  const handleMeterBlur = () => {
+    if (!selectedDisco || isVerifying || verifiedMeter || meterMismatch) return;
+    const clean = meterNumber.replace(/\D/g, '');
+    if (clean.length < 8) return;
+    const attemptKey = `${selectedDisco.id}:${clean}`;
+    if (lastAttemptedKeyRef.current === attemptKey) return;
+
+    if (autoVerifyTimeoutRef.current) {
+      clearTimeout(autoVerifyTimeoutRef.current);
+      autoVerifyTimeoutRef.current = null;
+    }
+    executeMeterVerification(clean, selectedDisco);
   };
 
   // Manual Verify Meter Action (or Retry)
   const handleVerifyMeter = () => {
-    if (!selectedDisco) return;
+    if (!selectedDisco || isVerifying) return;
     if (autoVerifyTimeoutRef.current) {
       clearTimeout(autoVerifyTimeoutRef.current);
       autoVerifyTimeoutRef.current = null;
@@ -968,6 +1072,16 @@ export default function ElectricityPage() {
       setIsReceiptModalOpen(true);
 
       loadWallets();
+
+      if (saveBeneficiaryChecked) {
+        void saveMeterBeneficiary({
+          serviceType: 'ELECTRICITY',
+          meterNumber,
+          disco: selectedDisco.code,
+          meterType: selectedDisco.meterType,
+          label: verifiedMeter?.customerName || payload.customerName || undefined,
+        });
+      }
     } catch (err: any) {
       const msg = err?.message || 'Payment failed. Please try again.';
       setIsConfirmModalOpen(false);
@@ -1078,6 +1192,13 @@ export default function ElectricityPage() {
                   )}
                 </div>
               </div>
+
+              {/* Saved Electricity Meters Quick Select */}
+              <SavedMetersQuickStrip
+                beneficiaries={savedMeters}
+                onSelectBeneficiary={handleSelectSavedMeter}
+                onDeleteBeneficiary={deleteMeterBeneficiary}
+              />
 
               {/* Filters & Search Bar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-[#0B1528] p-3 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -1271,41 +1392,74 @@ export default function ElectricityPage() {
               >
                   {/* 1. Meter / Account Number */}
                   <div className="space-y-1.5">
-                    <label
-                      htmlFor="electricity-meter-input"
-                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 block"
-                    >
-                      {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}{' '}
-                      <span aria-hidden="true" className="text-red-500">*</span>
-                    </label>
+                    <SavedMetersLabelRow
+                      label={
+                        <label
+                          htmlFor="electricity-meter-input"
+                          className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                        >
+                          {selectedDisco.meterType === 'PREPAID' ? 'Prepaid Meter Number' : 'Postpaid Account Number'}{' '}
+                          <span aria-hidden="true" className="text-red-500">*</span>
+                        </label>
+                      }
+                      beneficiaries={savedMeters}
+                      currentMeterNumber={meterNumber}
+                      currentDisco={selectedDisco.code}
+                      currentMeterType={selectedDisco.meterType}
+                      onSelectBeneficiary={handleSelectSavedMeter}
+                      onDeleteBeneficiary={deleteMeterBeneficiary}
+                    />
 
                     <div className="relative">
                       <input
+                        ref={meterInputRef}
                         id="electricity-meter-input"
+                        name="meterNumber"
                         type="text"
                         inputMode="numeric"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        enterKeyHint="next"
                         placeholder="Enter meter number"
                         value={meterNumber}
                         onChange={(e) => handleMeterChange(e.target.value)}
+                        onBlur={handleMeterBlur}
+                        readOnly={isVerifying}
+                        aria-busy={isVerifying}
+                        aria-invalid={Boolean(verificationError && !isVerifying && !verifiedMeter)}
                         maxLength={13}
-                        className={`w-full h-11 pl-3.5 pr-24 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-mono font-semibold placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
-                          verifiedMeter
-                            ? 'border-emerald-500/70 focus:border-emerald-500 focus:ring-emerald-500/20'
-                            : isVerifying
-                            ? 'border-[#126BEB] focus:ring-[#126BEB]/20'
+                        className={`w-full h-11 pl-3.5 ${
+                          isVerifying ? 'pr-36' : verifiedMeter ? 'pr-28' : 'pr-24'
+                        } rounded-lg border text-slate-900 dark:text-white text-sm sm:text-base font-mono font-semibold placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                          isVerifying
+                            ? 'bg-slate-50 dark:bg-[#0D1726] border-[#126BEB] focus:ring-[#126BEB]/20'
+                            : verifiedMeter
+                            ? 'bg-white dark:bg-[#070D18] border-emerald-500/70 focus:border-emerald-500 focus:ring-emerald-500/20'
                             : verificationError
-                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
-                            : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                            ? 'bg-white dark:bg-[#070D18] border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                            : 'bg-white dark:bg-[#070D18] border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
                         }`}
                         required
                       />
 
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center">
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         {isVerifying ? (
-                          <span className="h-8 px-2.5 rounded-md bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold flex items-center gap-1.5">
-                            <RotateCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                            <span>Verifying</span>
-                          </span>
+                          <>
+                            <span className="h-8 px-2.5 rounded-md bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] text-xs font-semibold flex items-center gap-1.5">
+                              <RotateCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                              <span>Verifying</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleCancelVerification}
+                              aria-label="Cancel verification and edit meter number"
+                              title="Edit meter number"
+                              className="h-8 w-8 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                          </>
                         ) : verifiedMeter ? (
                           <span className="h-8 px-2.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1428,6 +1582,7 @@ export default function ElectricityPage() {
                       </span>
                       <input
                         id="electricity-amount-input"
+                        name="amount"
                         type="number"
                         inputMode="decimal"
                         placeholder="Enter amount"
@@ -1457,8 +1612,10 @@ export default function ElectricityPage() {
                     </label>
                     <input
                       id="electricity-phone-input"
+                      name="phone"
                       type="tel"
                       inputMode="tel"
+                      autoComplete="tel-national"
                       placeholder="e.g. 08012345678"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
@@ -1466,31 +1623,22 @@ export default function ElectricityPage() {
                     />
                   </div>
 
-                  {/* 4. Payment Summary */}
-                  <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-[#070D18] border border-slate-200 dark:border-slate-800 text-xs space-y-2">
-                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                      <span>Amount</span>
-                      <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
-                        {numericAmount > 0 ? `₦${numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '₦0.00'}
-                      </span>
-                    </div>
-
-                    {discountAmount > 0 && selectedDisco.discountBps > 0 && (
-                      <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                        <span>Discount ({(selectedDisco.discountBps / 100).toFixed(1)}%)</span>
-                        <span className="font-semibold tabular-nums">
-                          -₦{discountAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-slate-900 dark:text-white font-semibold">
-                      <span>Total Debit</span>
-                      <span className="font-bold text-[#126BEB] dark:text-[#38BDF8] tabular-nums">
-                        {numericAmount > 0 ? `₦${amountToDebit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '—'}
-                      </span>
-                    </div>
-                  </div>
+                  {/* Save Beneficiary Toggle */}
+                  <label
+                    htmlFor="electricity-save-beneficiary"
+                    className="inline-flex items-center gap-2 cursor-pointer select-none pt-0.5"
+                  >
+                    <input
+                      id="electricity-save-beneficiary"
+                      type="checkbox"
+                      checked={saveBeneficiaryChecked}
+                      onChange={(e) => setSaveBeneficiaryChecked(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-[#126BEB] focus:ring-[#126BEB]/30 bg-white dark:bg-[#070D18]"
+                    />
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                      Save beneficiary
+                    </span>
+                  </label>
 
                   {/* Submit Button */}
                   <button
