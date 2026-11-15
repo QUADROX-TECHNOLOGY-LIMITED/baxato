@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, AlertCircle, AlertTriangle, Loader2, UserCheck, ShieldCheck } from 'lucide-react';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 interface KycModalProps {
   isOpen: boolean;
@@ -44,7 +45,9 @@ export default function KycModal({
     }
   }, [initialFirstName, initialLastName, isOpen]);
 
-  // Lock background scrolling while modal is open without overriding theme-color
+  // Lock background scrolling while modal is open and sync mobile bar theme chrome
+  useModalThemeSync(isOpen);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -145,7 +148,7 @@ export default function KycModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/75 backdrop-blur-sm overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 overflow-hidden">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}

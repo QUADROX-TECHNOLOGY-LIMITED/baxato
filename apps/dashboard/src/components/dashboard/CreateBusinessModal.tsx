@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getStoredAuthToken, setActiveBusiness } from '@/lib/auth-session';
 import { showToast } from '@/lib/toast';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 interface CreateBusinessModalProps {
   isOpen: boolean;
@@ -33,6 +34,8 @@ export default function CreateBusinessModal({
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useModalThemeSync(isOpen);
 
   if (!isOpen) return null;
 
@@ -123,7 +126,7 @@ export default function CreateBusinessModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/35 dark:bg-black/75 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/35 dark:bg-black/70 overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080E1A]">

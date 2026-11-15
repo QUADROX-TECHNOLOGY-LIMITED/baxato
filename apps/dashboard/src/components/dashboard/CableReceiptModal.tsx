@@ -15,6 +15,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { printCableReceipt } from '@/lib/receipt-printer';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 export interface CableReceiptData {
   transactionId: string;
@@ -58,6 +59,8 @@ export default function CableReceiptModal({
 }: CableReceiptModalProps) {
   const [copiedRef, setCopiedRef] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+
+  useModalThemeSync(Boolean(isOpen && receipt));
 
   if (!isOpen || !receipt) return null;
 
@@ -108,7 +111,7 @@ export default function CableReceiptModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 overflow-y-auto"
       onClick={onClose}
     >
       <div

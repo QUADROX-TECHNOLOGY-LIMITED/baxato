@@ -29,6 +29,7 @@ import {
   clearSessionAndRedirect,
   handleAuthResponse,
 } from '@/lib/auth-session';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 interface ServiceProviderBadge {
   name: string;
@@ -191,6 +192,8 @@ export default function DashboardOverviewPage() {
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [copiedWorkspaceRef, setCopiedWorkspaceRef] = useState(false);
 
+  useModalThemeSync(isFundModalOpen);
+
   const getRequestHeaders = useCallback(() => {
     const authToken = getStoredAuthToken();
     if (!authToken || isTokenExpired(authToken)) {
@@ -272,8 +275,8 @@ export default function DashboardOverviewPage() {
       if (res.ok && summary) {
         setTodayTelemetry({
           formattedTotalVolume:
-            summary.formattedTotalVolume ||
-            `₦${Number(summary.totalVolumeNaira || 0).toLocaleString('en-NG', {
+            summary.formattedSuccessfulVolume ||
+            `₦${Number(summary.successfulVolumeNaira || 0).toLocaleString('en-NG', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}`,
@@ -443,9 +446,9 @@ export default function DashboardOverviewPage() {
   };
 
   const todayCountLabel =
-    todayTelemetry.totalCount === 1
-      ? `1 transaction today (${todayTelemetry.successfulCount} successful)`
-      : `${todayTelemetry.totalCount} transactions today`;
+    todayTelemetry.successfulCount === 1
+      ? '1 successful today'
+      : `${todayTelemetry.successfulCount} successful today`;
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
@@ -766,8 +769,14 @@ export default function DashboardOverviewPage() {
 
       {/* Fund Wallet Modal */}
       {isFundModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70"
+          onClick={() => setIsFundModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#126BEB]/10 dark:bg-[#126BEB]/20 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center font-bold">

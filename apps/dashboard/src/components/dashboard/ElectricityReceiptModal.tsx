@@ -17,6 +17,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { printElectricityReceipt } from '@/lib/receipt-printer';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 export interface ElectricityReceiptData {
   transactionId: string;
@@ -75,6 +76,8 @@ export default function ElectricityReceiptModal({
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  useModalThemeSync(Boolean(isOpen && currentReceipt));
 
   useEffect(() => {
     setCurrentReceipt(receipt);
@@ -234,7 +237,7 @@ export default function ElectricityReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/35 dark:bg-black/70 overflow-y-auto animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-white dark:bg-[#0B1528] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-6">
         
         {/* Header Bar */}

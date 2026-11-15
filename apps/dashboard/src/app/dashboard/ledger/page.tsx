@@ -31,6 +31,7 @@ import {
   getStoredBusiness,
   clearSessionAndRedirect,
 } from '@/lib/auth-session';
+import { useModalThemeSync } from '@/lib/use-modal-theme-sync';
 
 export interface UnifiedTransaction {
   id: string;
@@ -144,6 +145,7 @@ function LedgerContent() {
   const [selectedChannel, setSelectedChannel] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [openDropdown, setOpenDropdown] = useState<'service' | 'channel' | 'status' | null>(null);
   const filterBarRef = useRef<HTMLDivElement>(null);
 
@@ -153,9 +155,13 @@ function LedgerContent() {
   const [limit] = useState<number>(20);
   const [page, setPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const hasLoadedOnceRef = useRef<boolean>(false);
   const [selectedTransaction, setSelectedTransaction] = useState<UnifiedTransaction | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  useModalThemeSync(Boolean(selectedTransaction));
 
   // Initialize Auth Context
   useEffect(() => {
@@ -216,7 +222,11 @@ function LedgerContent() {
   // Load Transactions
   const fetchTransactions = async () => {
     try {
-      setIsLoading(true);
+      if (!hasLoadedOnceRef.current) {
+        setIsLoading(true);
+      } else {
+        setIsUpdating(true);
+      }
       const authToken = getStoredAuthToken();
       if (!authToken) {
         clearSessionAndRedirect('expired');
@@ -238,23 +248,27 @@ function LedgerContent() {
     } catch {
       // Graceful error fallback
     } finally {
+      hasLoadedOnceRef.current = true;
       setIsLoading(false);
+      setIsUpdating(false);
       setIsRefreshing(false);
     }
   };
 
+  // Debounce search input without causing a duplicate fetch on initial mount
   useEffect(() => {
-    fetchTransactions();
-  }, [selectedService, selectedChannel, selectedStatus, page]);
-
-  // Handle Search Debounce
-  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
       setPage(1);
-      fetchTransactions();
+      setDebouncedSearch(trimmed);
     }, 350);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [selectedService, selectedChannel, selectedStatus, debouncedSearch, page]);
 
   const copyToClipboard = (text: string, key: string = text) => {
     if (!text || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -415,33 +429,33 @@ function LedgerContent() {
         <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-5">
           <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
 
-          {/* Clean Top Heading & Actions Bar */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
+          {/* Clean Top Actions & Full-Width Page Title */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <Link
                 href="/dashboard"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-                <span className="sm:hidden">Back</span>
+                <span>Back to Dashboard</span>
               </Link>
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                Transaction History
-              </h1>
+
+              {canExportReports && (
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  disabled={isExporting}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                  <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
+                </button>
+              )}
             </div>
 
-            {canExportReports && (
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                disabled={isExporting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
-              </button>
-            )}
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+              Transaction History
+            </h1>
           </div>
 
           {/* Compact Filter Row */}
@@ -609,7 +623,11 @@ function LedgerContent() {
                     <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                <tbody
+                  className={`divide-y divide-slate-100 dark:divide-slate-800/70 transition-opacity duration-150 ${
+                    isUpdating ? 'opacity-60' : ''
+                  }`}
+                >
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
@@ -774,7 +792,7 @@ function LedgerContent() {
       {/* Soft Transaction Detail Modal */}
       {selectedTransaction && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 backdrop-blur-[2px] animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 dark:bg-black/70 animate-in fade-in duration-150"
           onClick={() => setSelectedTransaction(null)}
         >
           <div
@@ -822,6 +840,13 @@ function LedgerContent() {
 
               {/* Clean Key-Value List */}
               <dl className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
+                <div className="py-2.5 flex items-center justify-between gap-4">
+                  <dt className="text-slate-500 dark:text-slate-400">Source</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white text-right">
+                    {selectedTransaction.channel === 'API' ? 'API' : 'Dashboard'}
+                  </dd>
+                </div>
+
                 <div className="py-2.5 flex items-center justify-between gap-4">
                   <dt className="text-slate-500 dark:text-slate-400">Service</dt>
                   <dd className="font-medium text-slate-900 dark:text-white text-right">
