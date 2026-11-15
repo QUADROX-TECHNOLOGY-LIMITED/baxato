@@ -1,21 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import {
-  Wifi,
-  CheckCircle2,
   AlertCircle,
-  Loader2,
-  ArrowRight,
   ArrowLeft,
+  Check,
+  FileText,
+  Loader2,
+  Search,
   Wallet,
   X,
-  FileText,
-  Search,
-  Filter,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -39,9 +35,10 @@ interface NetworkOption {
   id: string;
   name: string;
   logo: string;
+  fullBleed?: boolean;
+  logoScaleClass?: string;
   prefixes: string[];
-  borderActive: string;
-  bgActive: string;
+  activeClasses: string;
 }
 
 const NETWORKS: NetworkOption[] = [
@@ -49,33 +46,34 @@ const NETWORKS: NetworkOption[] = [
     id: 'MTN',
     name: 'MTN',
     logo: '/logos/telecom/mtn.svg',
+    fullBleed: true,
     prefixes: ['0803', '0806', '0703', '0706', '0813', '0816', '0810', '0814', '0903', '0906', '0913', '0916'],
-    borderActive: 'border-amber-400 ring-2 ring-amber-400/20',
-    bgActive: 'bg-amber-400/5',
+    activeClasses: 'border-amber-400 bg-amber-50/60 dark:bg-amber-400/10 ring-1 ring-amber-400/40',
   },
   {
     id: 'AIRTEL',
     name: 'Airtel',
     logo: '/logos/telecom/airtel.svg',
+    fullBleed: false,
     prefixes: ['0802', '0808', '0708', '0812', '0701', '0902', '0901', '0904', '0907', '0912'],
-    borderActive: 'border-red-500 ring-2 ring-red-500/20',
-    bgActive: 'bg-red-500/5',
+    activeClasses: 'border-red-500 bg-red-50/50 dark:bg-red-500/10 ring-1 ring-red-500/35',
   },
   {
     id: 'GLO',
     name: 'Glo',
     logo: '/logos/telecom/glo.svg',
+    fullBleed: true,
+    logoScaleClass: 'scale-[1.09]',
     prefixes: ['0805', '0807', '0705', '0815', '0811', '0905', '0915'],
-    borderActive: 'border-emerald-500 ring-2 ring-emerald-500/20',
-    bgActive: 'bg-emerald-500/5',
+    activeClasses: 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10 ring-1 ring-emerald-500/35',
   },
   {
     id: '9MOBILE',
     name: '9mobile',
     logo: '/logos/telecom/9mobile.svg',
+    fullBleed: false,
     prefixes: ['0809', '0817', '0818', '0909', '0908'],
-    borderActive: 'border-teal-500 ring-2 ring-teal-500/20',
-    bgActive: 'bg-teal-500/5',
+    activeClasses: 'border-teal-500 bg-teal-50/50 dark:bg-teal-500/10 ring-1 ring-teal-500/35',
   },
 ];
 
@@ -89,6 +87,7 @@ interface DataPlan {
   dataType?: 'DIRECT' | 'SME';
   validity: string;
   priceNaira: number;
+  discountBps?: number;
 }
 
 const CATEGORY_ORDER: Array<DataPlan['category']> = [
@@ -100,7 +99,7 @@ const CATEGORY_ORDER: Array<DataPlan['category']> = [
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
-  ALL: 'All Plans',
+  ALL: 'All',
   DAILY: 'Daily',
   WEEKLY: 'Weekly',
   MONTHLY: 'Monthly',
@@ -116,30 +115,83 @@ const FALLBACK_PLANS: DataPlan[] = [
   { id: '9mobile_monthly_4_5gb', network: '9MOBILE', networkName: '9mobile', name: '9mobile 4.5GB Monthly Plan', dataAllowance: '4.5GB', category: 'MONTHLY', dataType: 'DIRECT', validity: '30 Days', priceNaira: 2000 },
 ];
 
-export default function DataVendingPage() {
-  const router = useRouter();
+/**
+ * Normalizes Nigerian phone numbers including pasted +234 / 234 prefixes to 11-digit local format.
+ */
+function normalizeNigerianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('2340') && digits.length >= 14) {
+    return digits.slice(3, 14);
+  }
+  if (digits.startsWith('234') && digits.length >= 13) {
+    return `0${digits.slice(3, 13)}`;
+  }
+  return digits.slice(0, 11);
+}
+
+export default function DataBundlesPage() {
+  const phoneId = useId();
+  const phoneErrorId = useId();
+  const searchInputId = useId();
+  const planErrorId = useId();
+  const tabsPrefixId = useId();
+  const confirmTitleId = useId();
+
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const firstPlanInputRef = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // User & Business State
-  const [merchantName, setMerchantName] = useState<string>('');
-  const [businessName, setBusinessName] = useState<string>('');
+  const [merchantName, setMerchantName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser()?.firstName || '';
+    }
+    return '';
+  });
+  const [userFirstName, setUserFirstName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser()?.firstName || '';
+    }
+    return '';
+  });
+  const [userLastName, setUserLastName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredUser()?.lastName || '';
+    }
+    return '';
+  });
+  const [businessName, setBusinessName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredBusiness()?.name || '';
+    }
+    return '';
+  });
   const [kycStatus, setKycStatus] = useState<string>('INITIALIZING');
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Form State
+  // Form & Catalog State
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [planSearch, setPlanSearch] = useState<string>('');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [plans, setPlans] = useState<DataPlan[]>(FALLBACK_PLANS);
   const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(false);
 
-  // UI Flow & Modals
+  // Validation & Announcements
+  const [phoneEdited, setPhoneEdited] = useState<boolean>(false);
+  const [phoneBlurred, setPhoneBlurred] = useState<boolean>(false);
+  const [submitAttempted, setSubmitAttempted] = useState<boolean>(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
+
+  // Modals & Request State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -173,10 +225,10 @@ export default function DataVendingPage() {
         }
       }
     } catch {
+      // Preserve last loaded balance on transient error
     } finally {
       setIsLoadingBalance(false);
       setIsInitialLoading(false);
-      setIsRefreshing(false);
     }
   };
 
@@ -194,7 +246,13 @@ export default function DataVendingPage() {
       if (storedUser) {
         if (storedBiz?.role) setUserRole(storedBiz.role);
         else if (storedUser.role) setUserRole(storedUser.role);
-        if (storedUser.firstName) setMerchantName(storedUser.firstName);
+        if (storedUser.firstName) {
+          setMerchantName(storedUser.firstName);
+          setUserFirstName(storedUser.firstName);
+        }
+        if (storedUser.lastName) {
+          setUserLastName(storedUser.lastName);
+        }
         if (storedUser.kycStatus) setKycStatus(storedUser.kycStatus);
         else setKycStatus('UNVERIFIED');
       } else {
@@ -206,17 +264,44 @@ export default function DataVendingPage() {
       }
     } catch {}
 
-    const handleBizSwitched = () => {
-      const b = getStoredBusiness();
-      if (b?.name) setBusinessName(b.name);
-      if (b?.role) setUserRole(b.role);
-      loadWallets();
+    const syncUserProfile = async () => {
+      try {
+        const currentToken = getStoredAuthToken();
+        if (!currentToken) return;
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (handleAuthResponse(res, data)) return;
+        if (res.ok && data?.success && data.data) {
+          const userData = data.data.user || data.data;
+          if (userData.kycStatus) setKycStatus(userData.kycStatus);
+          if (userData.firstName) {
+            setMerchantName(userData.firstName);
+            setUserFirstName(userData.firstName);
+          }
+          if (userData.lastName) {
+            setUserLastName(userData.lastName);
+          }
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({
+                  ...parsed,
+                  kycStatus: userData.kycStatus ?? parsed.kycStatus,
+                  firstName: userData.firstName ?? parsed.firstName,
+                  lastName: userData.lastName ?? parsed.lastName,
+                }),
+              );
+            }
+          } catch {}
+        }
+      } catch {}
     };
 
-    window.addEventListener('bx_business_switched', handleBizSwitched);
-    loadWallets();
-
-    // Fetch dynamic catalog tailored to active service routing
     const fetchPlans = async () => {
       try {
         setIsLoadingPlans(true);
@@ -226,13 +311,29 @@ export default function DataVendingPage() {
           setPlans(data.data);
         }
       } catch {
+        // Fallback plans remain available
       } finally {
         setIsLoadingPlans(false);
       }
     };
-    fetchPlans();
 
-    return () => window.removeEventListener('bx_business_switched', handleBizSwitched);
+    const handleBizSwitched = () => {
+      const b = getStoredBusiness();
+      if (b?.name) setBusinessName(b.name);
+      if (b?.role) setUserRole(b.role);
+      void loadWallets();
+    };
+
+    window.addEventListener('bx_business_switched', handleBizSwitched);
+
+    void loadWallets();
+    void syncUserProfile();
+    void fetchPlans();
+
+    return () => {
+      window.removeEventListener('bx_business_switched', handleBizSwitched);
+      if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    };
   }, []);
 
   const canExecuteServices =
@@ -243,23 +344,14 @@ export default function DataVendingPage() {
 
   const isVerified = kycStatus === 'VERIFIED';
 
-  // Handle phone changes and auto-detect network
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
-    setPhone(raw);
-    setErrorMessage(null);
-
-    if (raw.length >= 4) {
-      const prefix = raw.slice(0, 4);
-      const match = NETWORKS.find((net) => net.prefixes.includes(prefix));
-      if (match && match.id !== selectedNetwork) {
-        setSelectedNetwork(match.id);
-        setSelectedPlanId('');
-      }
+  const detectedNetwork = useMemo(() => {
+    if (phone.length >= 4) {
+      const prefix = phone.slice(0, 4);
+      return NETWORKS.find((net) => net.prefixes.includes(prefix)) || null;
     }
-  };
+    return null;
+  }, [phone]);
 
-  // Compute categories dynamically from active provider catalog for selected network
   const availableCategories = useMemo(() => {
     const networkPlans = plans.filter(
       (p) => p.network.toUpperCase() === selectedNetwork.toUpperCase(),
@@ -274,14 +366,16 @@ export default function DataVendingPage() {
     }
   }, [availableCategories, selectedCategory]);
 
-  // Filter plans based on active network and category
   const filteredPlans = useMemo(() => {
+    const query = planSearch.trim().toLowerCase();
     return plans.filter((p) => {
-      const matchNetwork = p.network.toUpperCase() === selectedNetwork.toUpperCase();
-      const matchCategory = selectedCategory === 'ALL' || p.category === selectedCategory;
-      return matchNetwork && matchCategory;
+      if (p.network.toUpperCase() !== selectedNetwork.toUpperCase()) return false;
+      if (selectedCategory !== 'ALL' && p.category !== selectedCategory) return false;
+      if (!query) return true;
+      const haystack = `${p.name} ${p.dataAllowance} ${p.validity} ${p.priceNaira}`.toLowerCase();
+      return haystack.includes(query);
     });
-  }, [plans, selectedNetwork, selectedCategory]);
+  }, [plans, selectedNetwork, selectedCategory, planSearch]);
 
   const activePlan = useMemo(() => {
     return plans.find((p) => p.id === selectedPlanId) || null;
@@ -291,24 +385,150 @@ export default function DataVendingPage() {
     return NETWORKS.find((n) => n.id === selectedNetwork) || NETWORKS[0];
   }, [selectedNetwork]);
 
-  const handlePurchase = async () => {
+  const planDiscountBps = activePlan?.discountBps || 0;
+  const estimatedDiscountNaira = activePlan
+    ? (activePlan.priceNaira * planDiscountBps) / 10000
+    : 0;
+  const estimatedDebitNaira = activePlan
+    ? Math.max(0, activePlan.priceNaira - estimatedDiscountNaira)
+    : 0;
+  const exceedsBalance =
+    !isLoadingBalance && Boolean(activePlan) && estimatedDebitNaira > walletBalance;
+
+  const phoneValidationError =
+    phone.length === 0
+      ? 'Enter a recipient phone number.'
+      : phone.length !== 11
+        ? 'Enter a valid 11-digit Nigerian mobile number.'
+        : null;
+
+  const planValidationError = !activePlan ? 'Select a data plan to continue.' : null;
+
+  const showPhoneError =
+    Boolean(phoneValidationError) && (submitAttempted || (phoneBlurred && phoneEdited));
+  const showPlanError = Boolean(planValidationError) && submitAttempted;
+
+  const scheduleBlurAnnouncement = (message: string) => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    setLiveAnnouncement('');
+    announceTimerRef.current = setTimeout(() => {
+      setLiveAnnouncement(message);
+    }, 450);
+  };
+
+  const clearBlurAnnouncement = () => {
+    if (announceTimerRef.current) {
+      clearTimeout(announceTimerRef.current);
+      announceTimerRef.current = null;
+    }
+    setLiveAnnouncement('');
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const normalized = normalizeNigerianPhone(e.target.value);
+    setPhone(normalized);
+    setPhoneEdited(true);
+    setErrorMessage(null);
+    if (normalized.length === 11) {
+      clearBlurAnnouncement();
+    }
+
+    if (normalized.length >= 4) {
+      const prefix = normalized.slice(0, 4);
+      const match = NETWORKS.find((net) => net.prefixes.includes(prefix));
+      if (match && match.id !== selectedNetwork) {
+        setSelectedNetwork(match.id);
+        setSelectedPlanId('');
+      }
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    setPhoneBlurred(true);
+    if (phoneEdited && phoneValidationError) {
+      scheduleBlurAnnouncement(`Phone number error: ${phoneValidationError}`);
+    }
+  };
+
+  const handleSelectNetwork = (networkId: string) => {
+    if (networkId !== selectedNetwork) {
+      setSelectedNetwork(networkId);
+      setSelectedPlanId('');
+      setPlanSearch('');
+    }
+    setErrorMessage(null);
+  };
+
+  const selectCategoryTab = (cat: string, focusTab = false) => {
+    setSelectedCategory(cat);
+    const el = tabRefs.current[cat];
+    if (el) {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (focusTab) el.focus();
+    }
+  };
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const count = availableCategories.length;
+    if (count === 0) return;
+
+    let nextIndex: number | null = null;
+    if (e.key === 'ArrowRight') nextIndex = (index + 1) % count;
+    else if (e.key === 'ArrowLeft') nextIndex = (index - 1 + count) % count;
+    else if (e.key === 'Home') nextIndex = 0;
+    else if (e.key === 'End') nextIndex = count - 1;
+
+    if (nextIndex !== null) {
+      e.preventDefault();
+      selectCategoryTab(availableCategories[nextIndex], true);
+    }
+  };
+
+  const handleOpenConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (!isVerified) {
+      setIsKycModalOpen(true);
+      return;
+    }
+
+    setSubmitAttempted(true);
+
+    if (phoneValidationError) {
+      clearBlurAnnouncement();
+      phoneInputRef.current?.focus();
+      return;
+    }
+
     if (!activePlan) {
-      setErrorMessage('Please select a data bundle.');
+      clearBlurAnnouncement();
+      setLiveAnnouncement('Select a data plan to continue.');
+      firstPlanInputRef.current?.focus();
       return;
     }
-    if (phone.length !== 11) {
-      setErrorMessage('Please enter a valid 11-digit mobile phone number.');
+
+    if (exceedsBalance) {
+      setErrorMessage(
+        `Insufficient wallet balance. You need ₦${(estimatedDebitNaira - walletBalance).toLocaleString('en-NG', { minimumFractionDigits: 2 })} more.`,
+      );
       return;
     }
-    if (walletBalance < activePlan.priceNaira) {
-      setErrorMessage('Insufficient balance in your Main Wallet to complete this purchase.');
-      return;
-    }
+
+    setIsConfirmModalOpen(true);
+  };
+
+  const handlePurchase = async () => {
+    if (!activePlan) return;
 
     try {
       setIsSubmitting(true);
       setErrorMessage(null);
       const token = getStoredAuthToken();
+      if (!token) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
 
       const res = await fetch('/api/services/data/purchase', {
         method: 'POST',
@@ -320,6 +540,7 @@ export default function DataVendingPage() {
           phone,
           planId: activePlan.id,
           network: selectedNetwork,
+          clientReference: `BXT-DAT-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
         }),
       });
 
@@ -330,25 +551,40 @@ export default function DataVendingPage() {
       }
 
       if (!res.ok || !data?.success) {
-        setErrorMessage(data?.message || 'Data bundle vending failed. Please try again.');
-        setIsSubmitting(false);
+        const msg =
+          data?.error?.message ||
+          data?.message ||
+          'Data purchase failed. Please try again.';
+        setErrorMessage(msg);
         setIsConfirmModalOpen(false);
         return;
       }
 
-      setIsConfirmModalOpen(false);
+      const payload = data.data;
+      const faceVal = payload?.faceAmountNaira ?? activePlan.priceNaira;
+      const discountVal =
+        payload?.discountNaira !== undefined
+          ? payload.discountNaira
+          : estimatedDiscountNaira;
+      const debitedVal =
+        payload?.amountDebitedNaira ?? Math.max(0, faceVal - discountVal);
+
       const receiptItem: TransactionReceiptData = {
-        transactionId: data.data?.transactionId || data.data?.id || `DAT-${Date.now()}`,
-        reference: data.data?.reference || `DAT-${Date.now()}`,
-        clientReference: data.data?.clientReference,
+        transactionId: payload?.transactionId || payload?.id || `DAT-${Date.now()}`,
+        reference: payload?.reference || `DAT-${Date.now()}`,
+        clientReference: payload?.clientReference,
         serviceType: 'DATA',
-        status: data.data?.status || 'SUCCESSFUL',
+        status: payload?.status || 'SUCCESSFUL',
         recipient: phone,
         network: selectedNetwork,
         networkName: activeNetworkConfig.name,
         networkLogo: activeNetworkConfig.logo,
-        faceAmountNaira: activePlan.priceNaira,
-        amountDebitedNaira: activePlan.priceNaira,
+        planName: payload?.planName || activePlan.name,
+        dataAllowance: payload?.dataAllowance || activePlan.dataAllowance,
+        validity: payload?.validity || activePlan.validity,
+        faceAmountNaira: faceVal,
+        discountNaira: discountVal,
+        amountDebitedNaira: debitedVal,
         date: new Date().toLocaleDateString('en-GB', {
           day: '2-digit',
           month: 'short',
@@ -359,14 +595,24 @@ export default function DataVendingPage() {
         }),
         businessName,
       };
+
+      setIsConfirmModalOpen(false);
       setReceiptData(receiptItem);
       setIsReceiptModalOpen(true);
-      loadWallets();
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Network communication error. Please try again.');
+      void loadWallets();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error. Please try again.';
+      setErrorMessage(msg);
+      setIsConfirmModalOpen(false);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadWallets();
+    setTimeout(() => setIsRefreshing(false), 350);
   };
 
   if (isInitialLoading) {
@@ -374,8 +620,15 @@ export default function DataVendingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-white dark:bg-[#070D18] text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-150">
       {isSubmitting && <BaxatoLoader variant="overlay" />}
+
+      {/* Polite screen-reader announcer */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
+
+      {/* Sidebar */}
       <Sidebar
         businessName={businessName}
         merchantName={merchantName}
@@ -386,7 +639,8 @@ export default function DataVendingPage() {
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="lg:pl-72 flex flex-col min-h-screen">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           onOpenKycModal={() => setIsKycModalOpen(true)}
@@ -395,373 +649,600 @@ export default function DataVendingPage() {
           kycStatus={kycStatus}
           userRole={userRole}
           isRefreshing={isRefreshing}
-          onRefresh={() => {
-            setIsRefreshing(true);
-            loadWallets();
-          }}
+          onRefresh={handleRefresh}
+          sticky={false}
         />
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-7 max-w-7xl mx-auto w-full space-y-5">
+        <main className="flex-1 px-4 py-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6">
           {!canExecuteServices ? (
-            <AccessRestricted description="Mobile data bundle vending and utility top-ups are restricted to Workspace Owners, Administrators, Developers, and Support operations." />
+            <AccessRestricted description="Mobile data purchases are restricted to Workspace Owners, Administrators, Developers, and Support staff." />
           ) : (
             <>
-              <KycBanner kycStatus={kycStatus} onOpenKycModal={() => setIsKycModalOpen(true)} />
+              <KycBanner
+                kycStatus={kycStatus}
+                userRole={userRole}
+                onOpenKycModal={() => setIsKycModalOpen(true)}
+              />
 
-              {/* Breadcrumb Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                    <Wifi className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              {/* Navigation Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  <span>Back to Dashboard</span>
+                </Link>
+
+                <Link
+                  href="/dashboard/ledger?service=DATA"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Data History</span>
+                </Link>
+              </div>
+
+              {/* Page Heading & Compact Wallet Balance */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Image
+                    src="/logos/categories/data.svg"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 shrink-0 rounded-xl"
+                  />
+                  <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight text-balance">
                       Data Bundles
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                        Instant Delivery
-                      </span>
                     </h1>
-                    <p className="text-xs sm:text-sm text-slate-400">
-                      SME, Direct, and Corporate broadband data recharge across Nigerian telcos
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 text-pretty">
+                      Instant mobile data plans across Nigerian networks.
                     </p>
                   </div>
                 </div>
 
-                {/* Main Wallet Indicator */}
-                <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 self-start sm:self-auto">
-                  <Wallet className="w-4 h-4 text-emerald-400" />
-                  <span>Wallet Balance:</span>
-                  <span className="font-semibold text-white">
-                    {isLoadingBalance ? (
-                      <span className="text-slate-500">Loading...</span>
-                    ) : (
-                      `₦${walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
-                    )}
-                  </span>
+                {/* Compact Wallet Balance Indicator */}
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-xs font-medium text-slate-600 dark:text-slate-300 w-fit shrink-0">
+                  <Wallet className="w-3.5 h-3.5 text-[#126BEB] dark:text-[#38BDF8]" aria-hidden="true" />
+                  <span>Balance:</span>
+                  {isLoadingBalance ? (
+                    <span className="inline-block w-16 h-3.5 bg-slate-300 dark:bg-slate-700 rounded animate-pulse" />
+                  ) : (
+                    <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                      ₦{walletBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
                 </div>
               </div>
 
+              {/* API / Server Error Alert */}
               {errorMessage && (
-                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-300 text-sm">
-                  <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-red-200">Transaction Notice</p>
-                    <p className="text-xs text-red-300/90 mt-0.5">{errorMessage}</p>
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/35 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start justify-between gap-3"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" aria-hidden="true" />
+                    <span className="leading-relaxed">{errorMessage}</span>
                   </div>
-                  <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:text-red-300">
-                    <X className="w-4 h-4" />
+                  <button
+                    type="button"
+                    onClick={() => setErrorMessage(null)}
+                    aria-label="Dismiss error"
+                    className="relative shrink-0 p-1 text-red-500 hover:text-red-700 dark:hover:text-red-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* LEFT COLUMN: Controls & Plans */}
-                <div className="lg:col-span-8 space-y-5">
-                  {/* Step 1: Telco Selector */}
-                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      1. Select Network Provider
+              {/* Unified Data Bundle Purchase Form */}
+              <form
+                onSubmit={handleOpenConfirm}
+                noValidate
+                aria-label="Data bundle purchase form"
+                className="max-w-3xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6"
+              >
+                {/* 1. Recipient Phone Number */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label
+                      htmlFor={phoneId}
+                      className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                      Phone Number <span aria-hidden="true" className="text-red-500">*</span>
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      {NETWORKS.map((net) => {
-                        const isSelected = selectedNetwork === net.id;
-                        return (
-                          <button
-                            key={net.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedNetwork(net.id);
-                              setSelectedPlanId('');
-                            }}
-                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
-                              isSelected
-                                ? `${net.borderActive} ${net.bgActive} shadow-lg shadow-black/20`
-                                : 'border-slate-800 bg-slate-950 hover:bg-slate-800/60 text-slate-300'
-                            }`}
-                          >
-                            <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
-                              <Image
-                                src={net.logo}
-                                alt={net.name}
-                                width={28}
-                                height={28}
-                                className="object-contain"
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-white truncate">{net.name}</p>
-                              <p className="text-[10px] text-slate-400">Mobile Data</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {detectedNetwork && (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        <span
+                          className={`w-4 h-4 rounded-full overflow-hidden inline-flex items-center justify-center shrink-0 ${
+                            detectedNetwork.fullBleed
+                              ? ''
+                              : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
+                          }`}
+                        >
+                          <Image
+                            src={detectedNetwork.logo}
+                            alt=""
+                            width={16}
+                            height={16}
+                            className={`w-full h-full ${
+                              detectedNetwork.fullBleed ? 'object-cover' : 'object-contain'
+                            } ${detectedNetwork.logoScaleClass || ''}`}
+                          />
+                        </span>
+                        <span>{detectedNetwork.name} prefix</span>
+                      </span>
+                    )}
                   </div>
 
-                  {/* Step 2: Recipient Input */}
-                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      2. Recipient Phone Number
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        placeholder="e.g. 0801 234 5678"
-                        maxLength={11}
-                        className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono text-base tracking-wide"
+                  <div className="relative">
+                    <input
+                      ref={phoneInputRef}
+                      id={phoneId}
+                      name="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      enterKeyHint="next"
+                      maxLength={18}
+                      pattern="\d{11}"
+                      placeholder="08012345678"
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      onBlur={handlePhoneBlur}
+                      aria-invalid={showPhoneError ? 'true' : 'false'}
+                      aria-describedby={showPhoneError ? phoneErrorId : undefined}
+                      required
+                      className={`w-full h-11 pl-3.5 pr-10 rounded-lg bg-white dark:bg-[#070D18] border text-slate-900 dark:text-white text-sm sm:text-base font-medium tabular-nums placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 transition-colors ${
+                        showPhoneError
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                          : 'border-slate-200 dark:border-slate-700 focus:border-[#126BEB] focus:ring-[#126BEB]/20'
+                      }`}
+                    />
+
+                    {phone.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhone('');
+                          setPhoneEdited(true);
+                          setErrorMessage(null);
+                          phoneInputRef.current?.focus();
+                        }}
+                        aria-label="Clear phone number"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+
+                  {showPhoneError && (
+                    <p
+                      id={phoneErrorId}
+                      className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                      <span>{phoneValidationError}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* 2. Network Selection */}
+                <fieldset className="space-y-2.5">
+                  <legend className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Network <span aria-hidden="true" className="text-red-500">*</span>
+                  </legend>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {NETWORKS.map((network) => {
+                      const isSelected = selectedNetwork === network.id;
+                      return (
+                        <label
+                          key={network.id}
+                          className={`relative min-h-[72px] p-3 rounded-xl border transition-colors flex flex-col items-center justify-center gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                            isSelected
+                              ? network.activeClasses
+                              : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="network"
+                            value={network.id}
+                            checked={isSelected}
+                            onChange={() => handleSelectNetwork(network.id)}
+                            className="sr-only"
+                          />
+                          {isSelected && (
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#126BEB] text-white flex items-center justify-center"
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </span>
+                          )}
+                          <span
+                            className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
+                              network.fullBleed
+                                ? ''
+                                : 'bg-white border border-slate-200/80 dark:border-slate-700 p-1.5'
+                            }`}
+                          >
+                            <Image
+                              src={network.logo}
+                              alt=""
+                              width={36}
+                              height={36}
+                              className={`w-full h-full ${
+                                network.fullBleed ? 'object-cover' : 'object-contain'
+                              } ${network.logoScaleClass || ''}`}
+                            />
+                          </span>
+                          <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                            {network.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {detectedNetwork && selectedNetwork !== detectedNetwork.id && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Number prefix matches {detectedNetwork.name}. Data plans must match the recipient&apos;s network.
+                    </p>
+                  )}
+                </fieldset>
+
+                {/* 3. Data Bundle Catalog */}
+                <fieldset className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <legend className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Select Plan <span aria-hidden="true" className="text-red-500">*</span>
+                    </legend>
+
+                    {/* Quick Filter Input */}
+                    <div className="relative sm:w-60">
+                      <label htmlFor={searchInputId} className="sr-only">
+                        Filter data plans
+                      </label>
+                      <Search
+                        className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        aria-hidden="true"
                       />
-                      {phone.length === 11 && (
-                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Valid</span>
-                        </div>
+                      <input
+                        id={searchInputId}
+                        type="search"
+                        value={planSearch}
+                        onChange={(e) => setPlanSearch(e.target.value)}
+                        placeholder="Filter (e.g. 2GB, 30 days)"
+                        className="w-full h-10 sm:h-9 pl-8 pr-8 rounded-lg bg-white dark:bg-[#070D18] border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-2 focus:ring-[#126BEB]/20 transition-colors [&::-webkit-search-cancel-button]:hidden"
+                      />
+                      {planSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setPlanSearch('')}
+                          aria-label="Clear filter"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 after:content-[''] after:absolute after:-inset-2 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Step 3: Plan Category Filter & Grid */}
-                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        3. Choose Bundle Plan
-                      </label>
-                      {/* Category Pills (dynamically driven by active provider catalog) */}
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                        {availableCategories.map((cat) => (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 ${
-                              selectedCategory === cat
-                                ? 'bg-emerald-500 text-white shadow-sm'
-                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {CATEGORY_LABELS[cat] || cat}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Single-Row Scrollable WAI-ARIA Category Tabs */}
+                  <div
+                    role="tablist"
+                    aria-label="Data plan categories"
+                    className="flex items-center flex-nowrap overflow-x-auto gap-1 border-b border-slate-200 dark:border-slate-800 scrollbar-none"
+                  >
+                    {availableCategories.map((cat, idx) => {
+                      const isActive = selectedCategory === cat;
+                      const tabId = `${tabsPrefixId}-tab-${cat}`;
+                      return (
+                        <button
+                          key={cat}
+                          ref={(el) => {
+                            tabRefs.current[cat] = el;
+                          }}
+                          id={tabId}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          tabIndex={isActive ? 0 : -1}
+                          onClick={() => selectCategoryTab(cat)}
+                          onKeyDown={(e) => handleTabKeyDown(e, idx)}
+                          className={`relative shrink-0 min-h-[40px] px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#126BEB] ${
+                            isActive
+                              ? 'text-[#126BEB] dark:text-[#38BDF8] after:content-[""] after:absolute after:inset-x-0 after:bottom-0 after:border-b-2 after:border-[#126BEB] dark:after:border-[#38BDF8]'
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          {CATEGORY_LABELS[cat] || cat}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    {/* Plans Grid */}
+                  {/* Plan Selection Grid */}
+                  <div
+                    role="tabpanel"
+                    aria-labelledby={`${tabsPrefixId}-tab-${selectedCategory}`}
+                  >
                     {isLoadingPlans ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <div
                             key={idx}
                             aria-hidden="true"
-                            className="p-3.5 rounded-xl border border-slate-800 bg-slate-950 flex flex-col justify-between animate-pulse"
+                            className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#070D18] space-y-2.5 animate-pulse"
                           >
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="h-3.5 w-14 bg-slate-800 rounded" />
-                                <div className="h-4 w-12 bg-slate-900 border border-slate-800 rounded" />
-                              </div>
-                              <div className="h-3 w-3/4 bg-slate-800/70 rounded" />
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="h-4 w-14 bg-slate-200 dark:bg-slate-800 rounded" />
+                              <div className="h-4 w-12 bg-slate-200 dark:bg-slate-800 rounded" />
                             </div>
-                            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                              <div className="h-3.5 w-16 bg-slate-800 rounded" />
+                            <div className="h-3 w-3/4 bg-slate-200/70 dark:bg-slate-800/70 rounded" />
+                            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                              <div className="h-4 w-16 bg-slate-200 dark:bg-slate-800 rounded" />
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : filteredPlans.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400 text-sm">
-                        No bundles found for the selected category.
+                      <div className="py-10 px-4 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                          No data plans match your current filter.
+                        </p>
+                        {(planSearch || selectedCategory !== 'ALL') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlanSearch('');
+                              setSelectedCategory('ALL');
+                            }}
+                            className="text-xs font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline cursor-pointer"
+                          >
+                            Show all {activeNetworkConfig.name} plans
+                          </button>
+                        )}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {filteredPlans.map((p) => {
-                          const isSelected = selectedPlanId === p.id;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => setSelectedPlanId(p.id)}
-                              className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
-                                isSelected
-                                  ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/20'
-                                  : 'border-slate-800 bg-slate-950 hover:border-slate-700 text-slate-300'
-                              }`}
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="text-xs font-bold text-white tracking-wide">
-                                    {p.dataAllowance}
-                                  </span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    {(p.dataType === 'SME' || p.category === 'SME') && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-semibold">
-                                        SME
-                                      </span>
-                                    )}
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-medium">
-                                      {p.validity}
+                      <div className="max-h-[340px] sm:max-h-[380px] overflow-y-auto p-1 -m-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {filteredPlans.map((plan, index) => {
+                            const isSelected = selectedPlanId === plan.id;
+                            return (
+                              <label
+                                key={plan.id}
+                                className={`relative min-h-[96px] p-3.5 rounded-xl border text-left transition-colors flex flex-col justify-between gap-2 cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[#126BEB] ${
+                                  isSelected
+                                    ? 'border-[#126BEB] ring-2 ring-[#126BEB]/25 bg-blue-50/40 dark:bg-blue-950/25'
+                                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070D18]/70 hover:border-slate-300 dark:hover:border-slate-700'
+                                }`}
+                              >
+                                <input
+                                  ref={index === 0 ? firstPlanInputRef : undefined}
+                                  type="radio"
+                                  name="dataPlan"
+                                  value={plan.id}
+                                  checked={isSelected}
+                                  aria-describedby={showPlanError ? planErrorId : undefined}
+                                  onChange={() => {
+                                    setSelectedPlanId(plan.id);
+                                    setErrorMessage(null);
+                                    clearBlurAnnouncement();
+                                  }}
+                                  className="sr-only"
+                                />
+
+                                <div className="space-y-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
+                                      {plan.dataAllowance}
                                     </span>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {(plan.dataType === 'SME' || plan.category === 'SME') && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-[#126BEB] dark:text-[#38BDF8] font-semibold">
+                                          SME
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                                        {plan.validity}
+                                      </span>
+                                    </div>
                                   </div>
+
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {plan.name}
+                                  </p>
                                 </div>
-                                <p className="text-[11px] text-slate-400 truncate">{p.name}</p>
-                              </div>
-                              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-emerald-400 font-mono">
-                                  ₦{p.priceNaira.toLocaleString()}
-                                </span>
-                                {isSelected && (
-                                  <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3" /> Selected
+
+                                <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white tabular-nums">
+                                    ₦{plan.priceNaira.toLocaleString()}
                                   </span>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* RIGHT COLUMN: Order Summary & Execution */}
-                <div className="lg:col-span-4 space-y-4">
-                  <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 sticky top-20">
-                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 pb-2 border-b border-slate-800">
-                      Order Summary
-                    </h3>
-
-                    <div className="space-y-3 text-xs">
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Network</span>
-                        <span className="font-semibold text-white">{selectedNetwork}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Recipient Phone</span>
-                        <span className="font-mono font-medium text-white">{phone || '—'}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Data Allowance</span>
-                        <span className="font-semibold text-emerald-400">
-                          {activePlan?.dataAllowance || '—'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">Validity</span>
-                        <span className="font-medium text-slate-200">{activePlan?.validity || '—'}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-slate-800/60 text-sm">
-                        <span className="text-slate-300 font-medium">Total Charge</span>
-                        <span className="font-mono font-bold text-white">
-                          ₦{activePlan ? activePlan.priceNaira.toLocaleString() : '0.00'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Insufficient Balance Notice */}
-                    {activePlan && walletBalance < activePlan.priceNaira && (
-                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <span>Insufficient balance. You need ₦{(activePlan.priceNaira - walletBalance).toLocaleString()} more.</span>
+                                  <span
+                                    aria-hidden="true"
+                                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-opacity ${
+                                      isSelected
+                                        ? 'bg-[#126BEB] text-white opacity-100'
+                                        : 'opacity-0'
+                                    }`}
+                                  >
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
-
-                    {/* Submit Button */}
-                    <button
-                      type="button"
-                      disabled={!activePlan || phone.length !== 11 || isSubmitting}
-                      onClick={() => setIsConfirmModalOpen(true)}
-                      className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Processing Vending...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Purchase Data Bundle</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
-
-                    <p className="text-[11px] text-center text-slate-500">
-                      Automated high-throughput delivery with instant confirmation receipt.
-                    </p>
                   </div>
+
+                  {showPlanError && (
+                    <p
+                      id={planErrorId}
+                      className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                      <span>{planValidationError}</span>
+                    </p>
+                  )}
+                </fieldset>
+
+                {exceedsBalance && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-lg px-3 py-2">
+                    Selected bundle exceeds your current wallet balance.
+                  </p>
+                )}
+
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Buy Data
+                  </button>
                 </div>
-              </div>
+              </form>
             </>
           )}
         </main>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Native Confirmation Modal */}
       <ModalDialog
         isOpen={Boolean(isConfirmModalOpen && activePlan && !isSubmitting)}
         onClose={() => setIsConfirmModalOpen(false)}
         dismissible={!isSubmitting}
-        ariaLabel="Confirm Data Recharge"
-        maxWidthClass="max-w-md"
-        className="bg-slate-900 dark:bg-slate-900 border-slate-800"
+        ariaLabelledBy={confirmTitleId}
+        maxWidthClass="max-w-sm"
+        className="dark:bg-[#0B1528] text-slate-900 dark:text-white"
       >
         {activePlan && (
-          <div className="p-6 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <Wifi className="w-4 h-4 text-emerald-400" />
-                Confirm Data Recharge
-              </h3>
-              <button
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Telco:</span>
-                <span className="font-bold text-white">{selectedNetwork}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Recipient:</span>
-                <span className="font-mono font-medium text-white">{phone}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Plan:</span>
-                <span className="font-medium text-white">{activePlan.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Allowance:</span>
-                <span className="font-bold text-emerald-400">{activePlan.dataAllowance}</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-slate-800 text-sm">
-                <span className="text-slate-300 font-medium">Debit Amount:</span>
-                <span className="font-mono font-bold text-white">
-                  ₦{activePlan.priceNaira.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+              <h2 id={confirmTitleId} className="text-sm font-semibold text-slate-900 dark:text-white">
+                Confirm Data Purchase
+              </h2>
               <button
                 type="button"
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 text-sm font-semibold transition"
+                disabled={isSubmitting}
+                aria-label="Close confirmation"
+                className="relative text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 after:content-[''] after:absolute after:-inset-2 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <dl className="space-y-3 py-1 text-xs">
+              <div className="flex justify-between items-center gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">Network</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span
+                    className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
+                      activeNetworkConfig.fullBleed
+                        ? ''
+                        : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
+                    }`}
+                  >
+                    <Image
+                      src={activeNetworkConfig.logo}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className={`w-full h-full ${
+                        activeNetworkConfig.fullBleed ? 'object-cover' : 'object-contain'
+                      } ${activeNetworkConfig.logoScaleClass || ''}`}
+                    />
+                  </span>
+                  <span>{activeNetworkConfig.name}</span>
+                </dd>
+              </div>
+
+              <div className="flex justify-between items-center gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">Phone Number</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white text-sm tabular-nums">
+                  {phone}
+                </dd>
+              </div>
+
+              <div className="flex justify-between items-center gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">Plan</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white text-right">
+                  {activePlan.name}
+                </dd>
+              </div>
+
+              <div className="flex justify-between items-center gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">Validity</dt>
+                <dd className="font-medium text-slate-800 dark:text-slate-200">
+                  {activePlan.validity}
+                </dd>
+              </div>
+
+              <div className="flex justify-between items-center gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">Bundle Price</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white text-sm tabular-nums">
+                  ₦{activePlan.priceNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </dd>
+              </div>
+
+              {planDiscountBps > 0 && estimatedDiscountNaira > 0 && (
+                <div className="flex justify-between items-center gap-4 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <dt>Discount ({(planDiscountBps / 100).toFixed(1)}%)</dt>
+                  <dd className="tabular-nums">
+                    -₦{estimatedDiscountNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </dd>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                <dt className="font-semibold text-slate-900 dark:text-white">
+                  Total Debit
+                  <span className="block text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                    Main Wallet
+                  </span>
+                </dt>
+                <dd className="font-bold text-[#126BEB] dark:text-[#38BDF8] text-base tabular-nums">
+                  ₦{estimatedDebitNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setIsConfirmModalOpen(false)}
+                disabled={isSubmitting}
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={isSubmitting}
                 onClick={handlePurchase}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                disabled={isSubmitting}
+                className="flex-1 min-h-[44px] px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm & Vend'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Processing</span>
+                  </>
+                ) : (
+                  <span>Confirm</span>
+                )}
               </button>
             </div>
           </div>
@@ -769,19 +1250,44 @@ export default function DataVendingPage() {
       </ModalDialog>
 
       {/* Transaction Receipt Modal */}
-      {isReceiptModalOpen && receiptData && (
-        <TransactionReceiptModal
-          isOpen={isReceiptModalOpen}
-          onClose={() => setIsReceiptModalOpen(false)}
-          receipt={receiptData}
-        />
-      )}
+      <TransactionReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        receipt={receiptData}
+        onRechargeAnother={() => {
+          setIsReceiptModalOpen(false);
+          setPhone('');
+          setPhoneEdited(false);
+          setPhoneBlurred(false);
+          setSelectedPlanId('');
+          setSubmitAttempted(false);
+          clearBlurAnnouncement();
+          void loadWallets();
+        }}
+        onStatusUpdated={(updated) => {
+          setReceiptData(updated);
+          void loadWallets();
+        }}
+      />
 
-      {/* KYC Modal */}
+      {/* KYC Verification Modal */}
       <KycModal
         isOpen={isKycModalOpen}
         onClose={() => setIsKycModalOpen(false)}
-        onSuccess={() => setKycStatus('VERIFIED')}
+        onSuccess={() => {
+          setKycStatus('VERIFIED');
+          try {
+            const raw = localStorage.getItem('bx_user');
+            if (raw) {
+              localStorage.setItem(
+                'bx_user',
+                JSON.stringify({ ...JSON.parse(raw), kycStatus: 'VERIFIED' }),
+              );
+            }
+          } catch {}
+        }}
+        userFirstName={userFirstName}
+        userLastName={userLastName}
       />
     </div>
   );

@@ -683,15 +683,13 @@ export default function AirtimePage() {
                 </div>
               )}
 
-              {/* Purchase Form & Live Order Summary */}
+              {/* Airtime Purchase Form */}
               <form
                 onSubmit={handleOpenConfirm}
                 noValidate
                 aria-label="Airtime purchase form"
-                className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
+                className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
               >
-                {/* Left Column: Inputs */}
-                <div className="lg:col-span-7 bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6">
                   {/* 1. Recipient Phone Number */}
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -925,67 +923,6 @@ export default function AirtimePage() {
                       </p>
                     )}
                   </div>
-                </div>
-
-                {/* Right Column: Live Summary & Primary CTA */}
-                <aside className="lg:col-span-5 bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5 lg:sticky lg:top-6">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                    <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      Summary
-                    </h2>
-                    <div className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
-                      <span
-                        className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center shrink-0 ${
-                          activeNetworkConfig.fullBleed
-                            ? ''
-                            : 'bg-white border border-slate-200 dark:border-slate-700 p-0.5'
-                        }`}
-                      >
-                        <Image
-                          src={activeNetworkConfig.logo}
-                          alt=""
-                          width={20}
-                          height={20}
-                          className={`w-full h-full ${
-                            activeNetworkConfig.fullBleed ? 'object-cover' : 'object-contain'
-                          } ${activeNetworkConfig.logoScaleClass || ''}`}
-                        />
-                      </span>
-                      <span>{activeNetworkConfig.name}</span>
-                    </div>
-                  </div>
-
-                  <dl className="space-y-3 text-xs sm:text-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <dt className="text-slate-500 dark:text-slate-400">Recipient</dt>
-                      <dd className="font-medium text-slate-900 dark:text-white tabular-nums">
-                        {phone || '—'}
-                      </dd>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4">
-                      <dt className="text-slate-500 dark:text-slate-400">Airtime Value</dt>
-                      <dd className="font-medium text-slate-900 dark:text-white tabular-nums">
-                        ₦{numericAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                      </dd>
-                    </div>
-
-                    {discountBps > 0 && estimatedDiscountNaira > 0 && (
-                      <div className="flex items-center justify-between gap-4 text-emerald-600 dark:text-emerald-400">
-                        <dt>Discount ({(discountBps / 100).toFixed(1)}%)</dt>
-                        <dd className="font-medium tabular-nums">
-                          -₦{estimatedDiscountNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                        </dd>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                      <dt className="font-semibold text-slate-900 dark:text-white">Total Debit</dt>
-                      <dd className="text-base font-bold text-[#126BEB] dark:text-[#38BDF8] tabular-nums">
-                        ₦{estimatedDebitNaira.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                      </dd>
-                    </div>
-                  </dl>
 
                   {exceedsBalance && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-lg px-3 py-2">
@@ -993,14 +930,15 @@ export default function AirtimePage() {
                     </p>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Buy Airtime
-                  </button>
-                </aside>
+                  <div className="pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full h-11 px-4 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-sm transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Buy Airtime
+                    </button>
+                  </div>
               </form>
             </>
           )}

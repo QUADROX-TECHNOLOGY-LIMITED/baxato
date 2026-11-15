@@ -264,6 +264,9 @@ export function printTransactionReceipt(receipt: {
   recipient: string;
   network?: string;
   networkName?: string;
+  planName?: string;
+  dataAllowance?: string;
+  validity?: string;
   faceAmountNaira: number;
   discountNaira?: number;
   amountDebitedNaira: number;
@@ -273,6 +276,13 @@ export function printTransactionReceipt(receipt: {
   const isSuccess = receipt.status === 'SUCCESSFUL';
   const isFailed = receipt.status === 'FAILED' || receipt.status === 'REVERSED';
   const statusClass = isSuccess ? 'status-success' : isFailed ? 'status-failed' : 'status-processing';
+  const serviceLabel =
+    receipt.serviceType === 'DATA'
+      ? 'Data Bundle'
+      : receipt.serviceType === 'AIRTIME'
+        ? 'Airtime'
+        : receipt.serviceType;
+  const valueLabel = receipt.serviceType === 'DATA' ? 'Bundle Price' : 'Airtime Value';
 
   const html = `<!DOCTYPE html>
 <html>
@@ -287,7 +297,7 @@ export function printTransactionReceipt(receipt: {
       <div class="brand-title">
         BAX<span class="accent">ATO</span>
       </div>
-      <div class="brand-subtitle">Official Transaction Receipt</div>
+      <div class="brand-subtitle">Transaction Receipt</div>
     </div>
 
     <div class="status-badge-container">
@@ -302,52 +312,68 @@ export function printTransactionReceipt(receipt: {
     <table class="data-table">
       <tr>
         <td class="label">Service</td>
-        <td class="value">${escapeHtml(receipt.serviceType)} Top-Up</td>
+        <td class="value">${escapeHtml(serviceLabel)}</td>
       </tr>
       <tr>
-        <td class="label">Provider / Network</td>
+        <td class="label">Network</td>
         <td class="value">${escapeHtml(receipt.networkName || receipt.network || 'Telecom')}</td>
       </tr>
       <tr>
-        <td class="label">Recipient Number</td>
+        <td class="label">Recipient</td>
         <td class="value value-mono">${escapeHtml(receipt.recipient)}</td>
       </tr>
+      ${
+        receipt.planName || receipt.dataAllowance
+          ? `<tr>
+        <td class="label">Plan</td>
+        <td class="value">${escapeHtml(receipt.planName || receipt.dataAllowance)}</td>
+      </tr>`
+          : ''
+      }
+      ${
+        receipt.validity
+          ? `<tr>
+        <td class="label">Validity</td>
+        <td class="value">${escapeHtml(receipt.validity)}</td>
+      </tr>`
+          : ''
+      }
       <tr>
-        <td class="label">Face Value Purchased</td>
+        <td class="label">${escapeHtml(valueLabel)}</td>
         <td class="value value-mono">${formatNaira(receipt.faceAmountNaira)}</td>
       </tr>
       ${
         receipt.discountNaira && receipt.discountNaira > 0
           ? `<tr>
-        <td class="label">Merchant Cashback / Discount</td>
+        <td class="label">Discount</td>
         <td class="value" style="color: #059669;">-${formatNaira(receipt.discountNaira)}</td>
       </tr>`
           : ''
       }
       <tr class="total-row">
-        <td class="label">Net Amount Debited</td>
+        <td class="label">Total Debited</td>
         <td class="value value-mono">${formatNaira(receipt.amountDebitedNaira)}</td>
       </tr>
       <tr>
         <td class="label">Payment Source</td>
-        <td class="value">BAXATO Main Balance</td>
+        <td class="value">Main Wallet</td>
       </tr>
       ${
         receipt.businessName
           ? `<tr>
-        <td class="label">Business Terminal</td>
+        <td class="label">Business</td>
         <td class="value">${escapeHtml(receipt.businessName)}</td>
       </tr>`
           : ''
       }
       <tr>
-        <td class="label">Transaction Reference</td>
+        <td class="label">Reference</td>
         <td class="value value-mono" style="font-size: 11px;">${escapeHtml(receipt.reference)}</td>
       </tr>
       ${
         receipt.clientReference
           ? `<tr>
-        <td class="label">Order / Client Ref</td>
+        <td class="label">Client Ref</td>
         <td class="value value-mono" style="font-size: 11px;">${escapeHtml(receipt.clientReference)}</td>
       </tr>`
           : ''
@@ -359,8 +385,7 @@ export function printTransactionReceipt(receipt: {
     </table>
 
     <div class="receipt-footer">
-      <div class="bold">Thank you for using BAXATO</div>
-      <div>Quadrox Technologies Limited &bull; Verified Digital Settlement</div>
+      <div class="bold">BAXATO</div>
       <div>Support: support@baxato.com &bull; https://baxato.com</div>
       <div style="margin-top: 6px; font-size: 9px;">Generated: ${new Date().toLocaleString('en-NG')}</div>
     </div>
