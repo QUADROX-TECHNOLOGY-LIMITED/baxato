@@ -70,9 +70,9 @@ const QUICK_SERVICES: QuickServiceItem[] = [
     logo: '/logos/categories/airtime.svg',
     providers: [
       { name: 'MTN', logo: '/logos/telecom/mtn.svg', fullBleed: true },
-      { name: 'Airtel', logo: '/logos/telecom/airtel.svg', fullBleed: true },
+      { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
       { name: 'Glo', logo: '/logos/telecom/glo.svg', fullBleed: true },
-      { name: '9mobile', logo: '/logos/telecom/9mobile.svg', fullBleed: true },
+      { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
     ],
   },
   {
@@ -83,9 +83,9 @@ const QUICK_SERVICES: QuickServiceItem[] = [
     logo: '/logos/categories/data.svg',
     providers: [
       { name: 'MTN', logo: '/logos/telecom/mtn.svg', fullBleed: true },
-      { name: 'Airtel', logo: '/logos/telecom/airtel.svg', fullBleed: true },
+      { name: 'Airtel', logo: '/logos/telecom/airtel.svg' },
       { name: 'Glo', logo: '/logos/telecom/glo.svg', fullBleed: true },
-      { name: '9mobile', logo: '/logos/telecom/9mobile.svg', fullBleed: true },
+      { name: '9mobile', logo: '/logos/telecom/9mobile.svg' },
     ],
   },
   {
@@ -595,7 +595,7 @@ export default function DashboardOverviewPage() {
                 <span className="text-slate-500 dark:text-slate-400">Daily summary</span>
                 <Link
                   href="/dashboard/analytics"
-                  className="font-medium text-[#126BEB] dark:text-[#38BDF8] hover:underline whitespace-nowrap shrink-0"
+                  className="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors"
                 >
                   View analytics
                 </Link>
@@ -692,7 +692,7 @@ export default function DashboardOverviewPage() {
 
               <Link
                 href="/dashboard/ledger"
-                className="text-xs font-semibold text-[#126BEB] dark:text-[#38BDF8] hover:underline whitespace-nowrap shrink-0"
+                className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0 transition-colors"
               >
                 Full history
               </Link>

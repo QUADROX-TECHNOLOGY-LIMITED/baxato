@@ -507,13 +507,13 @@ export default function AirtimeVendingPage() {
                               : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#070E1C]/50 hover:border-slate-300 dark:hover:border-slate-700'
                           }`}
                         >
-                          <div className="h-8 w-full flex items-center justify-center relative">
+                          <div className="h-8 w-12 rounded-lg bg-white border border-slate-100 dark:border-slate-700/80 p-1 flex items-center justify-center relative">
                             <Image
                               src={network.logo}
                               alt={network.name}
-                              width={44}
-                              height={28}
-                              className="object-contain max-h-7 max-w-full"
+                              width={40}
+                              height={24}
+                              className="object-contain max-h-6 max-w-full"
                             />
                           </div>
                           <span className="text-xs font-bold text-slate-900 dark:text-white">

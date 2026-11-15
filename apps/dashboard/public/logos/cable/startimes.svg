@@ -1,39 +1,73 @@
-<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="stGrad" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FF7A00"/>
-      <stop offset="100%" stop-color="#E8590C"/>
+    <!-- Top-Left & Bottom-Right StarTimes Blue Ribbons (local ribbon coords) -->
+    <linearGradient id="st-blue" x1="6" y1="36" x2="29" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2BB6EE"/>
+      <stop offset="55%" stop-color="#006BB6"/>
+      <stop offset="100%" stop-color="#003E7E"/>
     </linearGradient>
-    <linearGradient id="starShine" x1="60" y1="40" x2="140" y2="120" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="60%" stop-color="#FFF3D4"/>
-      <stop offset="100%" stop-color="#FFD166"/>
+    <!-- Top-Right & Bottom-Left StarTimes Gold-Orange Ribbons (local rotated coords) -->
+    <linearGradient id="st-orange" x1="6" y1="36" x2="29" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFD100"/>
+      <stop offset="48%" stop-color="#F77F00"/>
+      <stop offset="100%" stop-color="#D9450C"/>
     </linearGradient>
-    <filter id="shadow" x="0" y="4" width="200" height="196" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#C2410C" flood-opacity="0.35"/>
-    </filter>
+    <!-- Inner fold shading behind overlapping curl -->
+    <linearGradient id="st-fold-dark" x1="25" y1="6" x2="31" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#002F63" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#004D99" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="st-orange-curl" x1="23" y1="12" x2="29" y2="7" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F36F21" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#B8320A" stop-opacity="0.72"/>
+    </linearGradient>
   </defs>
 
-  <!-- Rounded Brand Tile -->
-  <rect x="10" y="10" width="180" height="180" rx="36" fill="url(#stGrad)" filter="url(#shadow)"/>
-
-  <!-- StarTimes Dynamic Four-Pointed Star Icon -->
-  <g transform="translate(100, 80)">
-    <!-- Central primary star with sharp aerodynamic facets -->
-    <path d="M0 -42 C1 -12 12 -1 42 0 C12 1 1 12 0 42 C-1 12 -12 1 -42 0 C-12 -1 -1 -12 0 -42 Z" fill="url(#starShine)"/>
-    
-    <!-- Secondary inner facet flare -->
-    <path d="M0 -30 C0.8 -8 8 -0.8 30 0 C8 0.8 0.8 8 0 30 C-0.8 8 -8 0.8 -30 0 C-8 -0.8 -0.8 -8 0 -30 Z" fill="#FFFFFF" fill-opacity="0.9"/>
-
-    <!-- Diagonal micro flares -->
-    <path d="M-18 -18 L-8 -8 M18 -18 L8 -8 M-18 18 L-8 8 M18 18 L8 8" stroke="#FFE8B3" stroke-width="2.5" stroke-linecap="round"/>
-    
-    <!-- Center core jewel -->
-    <circle cx="0" cy="0" r="5" fill="#FFFFFF"/>
+  <!-- 1. Top-Left Blue Ribbon -->
+  <g>
+    <path
+      d="M6 38.2V26.2C6 24.4 6.7 22.7 8 21.4L22.2 7.2C23.5 5.9 25.1 5.4 26.8 5.6L29.6 15.6C29 19.6 28 24.5 24.4 28.1C20.5 32 13.8 34.8 6 38.2Z"
+      fill="url(#st-blue)"
+    />
+    <path
+      d="M24.2 6.2L26.8 5.6L29.6 15.6C28.8 14.1 26.8 9.2 24.2 6.2Z"
+      fill="url(#st-fold-dark)"
+    />
   </g>
 
-  <!-- "StarTimes" Brand Typography -->
-  <text x="100" y="156" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="25" fill="#FFFFFF" letter-spacing="-0.5">
-    StarTimes
-  </text>
+  <!-- 2. Bottom-Right Blue Ribbon (180 deg rotation) -->
+  <g transform="rotate(180 32 32)">
+    <path
+      d="M6 38.2V26.2C6 24.4 6.7 22.7 8 21.4L22.2 7.2C23.5 5.9 25.1 5.4 26.8 5.6L29.6 15.6C29 19.6 28 24.5 24.4 28.1C20.5 32 13.8 34.8 6 38.2Z"
+      fill="url(#st-blue)"
+    />
+    <path
+      d="M24.2 6.2L26.8 5.6L29.6 15.6C28.8 14.1 26.8 9.2 24.2 6.2Z"
+      fill="url(#st-fold-dark)"
+    />
+  </g>
+
+  <!-- 3. Top-Right Gold-Orange Ribbon (90 deg CW rotation) -->
+  <g transform="rotate(90 32 32)">
+    <path
+      d="M6 38.2V25.8C6 24 6.7 22.4 8 21.1L22 7.1C23.4 5.7 25.2 5.3 27.2 5.6C28.8 10.6 29.8 14.5 29.6 16C28.9 20.2 27.6 24.6 24.1 28.1C20.2 32 13.8 34.8 6 38.2Z"
+      fill="url(#st-orange)"
+    />
+    <path
+      d="M22.8 6.5C24.5 5.5 26 5.4 27.2 5.6L29.6 15.6C27.5 11.8 25 8.8 22.8 6.5Z"
+      fill="url(#st-orange-curl)"
+    />
+  </g>
+
+  <!-- 4. Bottom-Left Orange-Gold Ribbon (270 deg CW rotation) -->
+  <g transform="rotate(270 32 32)">
+    <path
+      d="M6 38.2V25.8C6 24 6.7 22.4 8 21.1L22 7.1C23.4 5.7 25.2 5.3 27.2 5.6C28.8 10.6 29.8 14.5 29.6 16C28.9 20.2 27.6 24.6 24.1 28.1C20.2 32 13.8 34.8 6 38.2Z"
+      fill="url(#st-orange)"
+    />
+    <path
+      d="M22.8 6.5C24.5 5.5 26 5.4 27.2 5.6L29.6 15.6C27.5 11.8 25 8.8 22.8 6.5Z"
+      fill="url(#st-orange-curl)"
+    />
+  </g>
 </svg>

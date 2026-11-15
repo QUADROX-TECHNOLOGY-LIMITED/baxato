@@ -465,7 +465,7 @@ export default function DataVendingPage() {
                                 : 'border-slate-800 bg-slate-950 hover:bg-slate-800/60 text-slate-300'
                             }`}
                           >
-                            <div className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+                            <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
                               <Image
                                 src={net.logo}
                                 alt={net.name}
