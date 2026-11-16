@@ -58,15 +58,28 @@ export interface ProxyResponse<T = any> {
   data: T;
 }
 
-const FORWARDED_CLIENT_HEADERS = [
-  'user-agent',
-  'cf-connecting-ip',
-  'true-client-ip',
-  'x-client-ip',
-  'x-real-ip',
-  'x-forwarded-for',
-  'x-business-id',
-] as const;
+function buildForwardedForChain(getHeader: (name: string) => string | null): string | undefined {
+  const candidates: string[] = [];
+  const pushParts = (raw: string | null) => {
+    if (!raw) return;
+    for (const part of raw.split(',')) {
+      const clean = part.trim();
+      if (clean && !candidates.includes(clean)) {
+        candidates.push(clean);
+      }
+    }
+  };
+
+  // Read edge IP headers locally ONLY — never forward Cloudflare-reserved headers
+  // (such as cf-connecting-ip or true-client-ip) on outbound requests, because
+  // Cloudflare rejects external requests carrying those headers with HTTP 403.
+  pushParts(getHeader('cf-connecting-ip'));
+  pushParts(getHeader('true-client-ip'));
+  pushParts(getHeader('x-forwarded-for'));
+  pushParts(getHeader('x-real-ip'));
+
+  return candidates.length > 0 ? candidates.join(', ') : undefined;
+}
 
 /**
  * Proxies an HTTP request to the Fastify API with error reporting.
@@ -95,23 +108,32 @@ export async function proxyToBackendApi<T = any>(
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const targetUrl = `${baseUrl}${normalizedPath}`;
 
+  // Forward only safe standard headers (user-agent, x-forwarded-for, x-business-id)
   const clientHeaders: Record<string, string> = {};
 
   if (incomingRequest) {
-    for (const key of FORWARDED_CLIENT_HEADERS) {
-      const value = incomingRequest.headers.get(key);
-      if (value) clientHeaders[key] = value;
-    }
+    const reqUa = incomingRequest.headers.get('user-agent');
+    const reqFwd = buildForwardedForChain((name) => incomingRequest.headers.get(name));
+    const reqBiz = incomingRequest.headers.get('x-business-id');
+    if (reqUa) clientHeaders['user-agent'] = reqUa;
+    if (reqFwd) clientHeaders['x-forwarded-for'] = reqFwd;
+    if (reqBiz) clientHeaders['x-business-id'] = reqBiz;
   }
 
-  if (FORWARDED_CLIENT_HEADERS.some((key) => !clientHeaders[key])) {
+  if (!clientHeaders['user-agent'] || !clientHeaders['x-forwarded-for'] || !clientHeaders['x-business-id']) {
     try {
       const h = headers();
-      for (const key of FORWARDED_CLIENT_HEADERS) {
-        if (!clientHeaders[key]) {
-          const value = h.get(key);
-          if (value) clientHeaders[key] = value;
-        }
+      if (!clientHeaders['user-agent']) {
+        const ua = h.get('user-agent');
+        if (ua) clientHeaders['user-agent'] = ua;
+      }
+      if (!clientHeaders['x-forwarded-for']) {
+        const fwd = buildForwardedForChain((name) => h.get(name));
+        if (fwd) clientHeaders['x-forwarded-for'] = fwd;
+      }
+      if (!clientHeaders['x-business-id']) {
+        const biz = h.get('x-business-id');
+        if (biz) clientHeaders['x-business-id'] = biz;
       }
     } catch {
       // headers() not available in background or static build context
