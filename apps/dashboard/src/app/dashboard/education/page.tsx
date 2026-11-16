@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -67,210 +67,6 @@ export interface CandidateValidationState {
   responseMessage?: string;
 }
 
-// Fallback catalog in case backend connection is loading
-const INITIAL_PACKAGES: ExamPackageItem[] = [
-  {
-    packageCode: 'JAMB_UTME_NO_MOCK',
-    examBody: 'JAMB',
-    serviceType: 'UTME_NO_MOCK',
-    name: 'JAMB 2026 UTME PIN (Without Mock)',
-    description: '10-digit profile code required. Standard UTME registration PIN without Mock examination.',
-    billerId: '3573',
-    paymentCode: '04357305',
-    baseCostKobo: '720000',
-    baseCostNaira: 7200,
-    formattedBaseCost: '₦7,200.00',
-    suggestedPriceKobo: '750000',
-    suggestedPriceNaira: 7500,
-    formattedSuggestedPrice: '₦7,500.00',
-    merchantMarkupKobo: '30000',
-    merchantMarkupNaira: 300,
-    formattedMerchantMarkup: '₦300.00',
-    sellingPriceKobo: '750000',
-    sellingPriceNaira: 7500,
-    formattedSellingPrice: '₦7,500.00',
-    requiresValidation: true,
-    identifierType: 'PROFILE_CODE',
-    instructions: 'Proceed to any accredited JAMB CBT centre to complete registration & biometric capture.',
-    portalUrl: 'https://www.jamb.gov.ng',
-  },
-  {
-    packageCode: 'JAMB_DIRECT_ENTRY',
-    examBody: 'JAMB',
-    serviceType: 'DIRECT_ENTRY',
-    name: 'JAMB 2026 Direct Entry PIN',
-    description: '10-digit profile code required. Direct Entry candidate pin vending for 2026 admissions.',
-    billerId: '3588',
-    paymentCode: '04358802',
-    baseCostKobo: '570000',
-    baseCostNaira: 5700,
-    formattedBaseCost: '₦5,700.00',
-    suggestedPriceKobo: '600000',
-    suggestedPriceNaira: 6000,
-    formattedSuggestedPrice: '₦6,000.00',
-    merchantMarkupKobo: '30000',
-    merchantMarkupNaira: 300,
-    formattedMerchantMarkup: '₦300.00',
-    sellingPriceKobo: '600000',
-    sellingPriceNaira: 6000,
-    formattedSellingPrice: '₦6,000.00',
-    requiresValidation: true,
-    identifierType: 'PROFILE_CODE',
-    instructions: 'Candidate should present profile code at any accredited CBT centre for registration.',
-    portalUrl: 'https://www.jamb.gov.ng',
-  },
-  {
-    packageCode: 'JAMB_UTME_WITH_MOCK',
-    examBody: 'JAMB',
-    serviceType: 'UTME_WITH_MOCK',
-    name: 'JAMB 2026 UTME PIN (With Mock)',
-    description: '10-digit profile code required. Comprehensive UTME registration PIN with Mock exam.',
-    billerId: '3588',
-    paymentCode: '04358803',
-    baseCostKobo: '920000',
-    baseCostNaira: 9200,
-    formattedBaseCost: '₦9,200.00',
-    suggestedPriceKobo: '950000',
-    suggestedPriceNaira: 9500,
-    formattedSuggestedPrice: '₦9,500.00',
-    merchantMarkupKobo: '30000',
-    merchantMarkupNaira: 300,
-    formattedMerchantMarkup: '₦300.00',
-    sellingPriceKobo: '950000',
-    sellingPriceNaira: 9500,
-    formattedSellingPrice: '₦9,500.00',
-    requiresValidation: true,
-    identifierType: 'PROFILE_CODE',
-    instructions: 'Includes access to the official JAMB Mock examination at designated CBT centre.',
-    portalUrl: 'https://www.jamb.gov.ng',
-  },
-  {
-    packageCode: 'WAEC_RESULT_CHECKER',
-    examBody: 'WAEC',
-    serviceType: 'RESULT_CHECKER',
-    name: 'WAEC Result Checker e-PIN',
-    description: 'Valid for checking WASSCE / GCE exam results up to 5 times on the WAEC Direct portal.',
-    billerId: '4307',
-    paymentCode: '04307601',
-    baseCostKobo: '350000',
-    baseCostNaira: 3500,
-    formattedBaseCost: '₦3,500.00',
-    suggestedPriceKobo: '380000',
-    suggestedPriceNaira: 3800,
-    formattedSuggestedPrice: '₦3,800.00',
-    merchantMarkupKobo: '30000',
-    merchantMarkupNaira: 300,
-    formattedMerchantMarkup: '₦300.00',
-    sellingPriceKobo: '380000',
-    sellingPriceNaira: 3800,
-    formattedSellingPrice: '₦3,800.00',
-    requiresValidation: false,
-    identifierType: 'PHONE',
-    instructions: 'Visit www.waecdirect.org and enter your 10-digit Examination Number, Year, Serial and PIN.',
-    portalUrl: 'https://www.waecdirect.org',
-  },
-  {
-    packageCode: 'WAEC_REGISTRATION',
-    examBody: 'WAEC',
-    serviceType: 'REGISTRATION',
-    name: 'WAEC WASSCE Registration e-PIN',
-    description: 'Official registration token for WASSCE Private / External candidates.',
-    billerId: '4307',
-    paymentCode: '04307602',
-    baseCostKobo: '2700000',
-    baseCostNaira: 27000,
-    formattedBaseCost: '₦27,000.00',
-    suggestedPriceKobo: '2800000',
-    suggestedPriceNaira: 28000,
-    formattedSuggestedPrice: '₦28,000.00',
-    merchantMarkupKobo: '100000',
-    merchantMarkupNaira: 1000,
-    formattedMerchantMarkup: '₦1,000.00',
-    sellingPriceKobo: '2800000',
-    sellingPriceNaira: 28000,
-    formattedSellingPrice: '₦28,000.00',
-    requiresValidation: false,
-    identifierType: 'PHONE',
-    instructions: 'Visit registration.waecdirect.org to capture biometrics and register examination subjects.',
-    portalUrl: 'https://registration.waecdirect.org',
-  },
-  {
-    packageCode: 'NECO_RESULT_TOKEN',
-    examBody: 'NECO',
-    serviceType: 'RESULT_CHECKER',
-    name: 'NECO Result Token (5 Views)',
-    description: 'Official 12-digit token for checking SSCE, BECE and NCEE examination results.',
-    billerId: '4312',
-    paymentCode: '04312001',
-    baseCostKobo: '120000',
-    baseCostNaira: 1200,
-    formattedBaseCost: '₦1,200.00',
-    suggestedPriceKobo: '140000',
-    suggestedPriceNaira: 1400,
-    formattedSuggestedPrice: '₦1,400.00',
-    merchantMarkupKobo: '20000',
-    merchantMarkupNaira: 200,
-    formattedMerchantMarkup: '₦200.00',
-    sellingPriceKobo: '140000',
-    sellingPriceNaira: 1400,
-    formattedSellingPrice: '₦1,400.00',
-    requiresValidation: false,
-    identifierType: 'PHONE',
-    instructions: 'Visit result.neco.gov.ng, select exam year and type, enter registration number and Token.',
-    portalUrl: 'https://result.neco.gov.ng',
-  },
-  {
-    packageCode: 'NECO_REGISTRATION',
-    examBody: 'NECO',
-    serviceType: 'REGISTRATION',
-    name: 'NECO SSCE (External) Registration',
-    description: 'Official token for NECO Senior Secondary Certificate Examination registration.',
-    billerId: '4312',
-    paymentCode: '04312002',
-    baseCostKobo: '1950000',
-    baseCostNaira: 19500,
-    formattedBaseCost: '₦19,500.00',
-    suggestedPriceKobo: '2050000',
-    suggestedPriceNaira: 20500,
-    formattedSuggestedPrice: '₦20,500.00',
-    merchantMarkupKobo: '100000',
-    merchantMarkupNaira: 1000,
-    formattedMerchantMarkup: '₦1,000.00',
-    sellingPriceKobo: '2050000',
-    sellingPriceNaira: 20500,
-    formattedSellingPrice: '₦20,500.00',
-    requiresValidation: false,
-    identifierType: 'PHONE',
-    instructions: 'Visit neco.gov.ng/ssce-external to complete registration.',
-    portalUrl: 'https://neco.gov.ng',
-  },
-  {
-    packageCode: 'NABTEB_RESULT_CHECKER',
-    examBody: 'NABTEB',
-    serviceType: 'RESULT_CHECKER',
-    name: 'NABTEB Result Checker e-PIN',
-    description: 'Scratch card e-PIN for checking NBC / NTC and modular examination results.',
-    billerId: '4313',
-    paymentCode: '04313001',
-    baseCostKobo: '150000',
-    baseCostNaira: 1500,
-    formattedBaseCost: '₦1,500.00',
-    suggestedPriceKobo: '170000',
-    suggestedPriceNaira: 1700,
-    formattedSuggestedPrice: '₦1,700.00',
-    merchantMarkupKobo: '20000',
-    merchantMarkupNaira: 200,
-    formattedMerchantMarkup: '₦200.00',
-    sellingPriceKobo: '170000',
-    sellingPriceNaira: 1700,
-    formattedSellingPrice: '₦1,700.00',
-    requiresValidation: false,
-    identifierType: 'PHONE',
-    instructions: 'Visit eworld.nabteb.gov.ng and enter Candidate ID, Exam Type, Year, Serial and PIN.',
-    portalUrl: 'https://eworld.nabteb.gov.ng',
-  },
-];
-
 export default function EducationPage() {
   // Navigation & User State
   const [merchantName, setMerchantName] = useState<string>(() => {
@@ -291,12 +87,15 @@ export default function EducationPage() {
   const [userRole, setUserRole] = useState<string>('BUSINESS_OWNER');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
+  const { walletBalance, isLoadingBalance, hasLoadedBalance, refreshWallets: loadWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Exam Packages Catalog & View Selection
-  const [packagesList, setPackagesList] = useState<ExamPackageItem[]>(INITIAL_PACKAGES);
+  // Exam Packages Catalog & View Selection (populated from backend so stale prices never flash)
+  const [packagesList, setPackagesList] = useState<ExamPackageItem[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isRetryingCatalog, setIsRetryingCatalog] = useState(false);
+  const packagesListRef = useRef<ExamPackageItem[]>([]);
   const [selectedBodyFilter, setSelectedBodyFilter] = useState<'ALL' | 'JAMB' | 'WAEC' | 'NECO' | 'NABTEB'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPackageCode, setSelectedPackageCode] = useState<string | null>(null);
@@ -326,8 +125,9 @@ export default function EducationPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   // Load Exam Packages from Backend
-  const loadPackages = async (requestedPackage?: string | null) => {
+  const loadPackages = useCallback(async (requestedPackage?: string | null) => {
     try {
+      setCatalogError(null);
       const authToken = getStoredAuthToken();
       const res = await fetch('/api/services/education/packages', {
         headers: {
@@ -336,21 +136,28 @@ export default function EducationPage() {
         cache: 'no-store',
       });
       const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && Array.isArray(data.data) && data.data.length > 0) {
-        const nextPackages: ExamPackageItem[] = data.data.map((pkg: ExamPackageItem) => ({
-          ...pkg,
-          enabled: pkg.enabled !== false,
-        }));
-        setPackagesList(nextPackages);
+      if (!res.ok || !data?.success || !Array.isArray(data.data)) {
+        setCatalogError(data?.error?.message || 'Unable to load exam PINs right now.');
+        return;
+      }
 
-        const activeParam =
-          typeof window !== 'undefined'
-            ? new URLSearchParams(window.location.search).get('package') || requestedPackage || ''
-            : requestedPackage || '';
+      const nextPackages: ExamPackageItem[] = data.data.map((pkg: ExamPackageItem) => ({
+        ...pkg,
+        enabled: pkg.enabled !== false,
+      }));
+      packagesListRef.current = nextPackages;
+      setPackagesList(nextPackages);
 
-        if (activeParam) {
-          const matched = nextPackages.find((p) => p.packageCode === activeParam);
-          if (matched && matched.enabled === false) {
+      const activeParam =
+        requestedPackage ||
+        (typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('package') || ''
+          : '');
+
+      if (activeParam) {
+        const matched = nextPackages.find((p) => p.packageCode === activeParam);
+        if (matched) {
+          if (matched.enabled === false) {
             setSelectedPackageCode(null);
             if (typeof window !== 'undefined') {
               const url = new URL(window.location.href);
@@ -361,16 +168,24 @@ export default function EducationPage() {
               type: 'error',
               message: `${matched.name} is currently unavailable.`,
             });
+          } else {
+            setSelectedPackageCode(matched.packageCode);
           }
         }
       }
     } catch {
-      // Keep fallback local catalog
+      setCatalogError('Unable to load exam PINs right now.');
     }
-  };
+  }, []);
 
   // Initialize
   useEffect(() => {
+    const authToken = getStoredAuthToken();
+    if (!authToken) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
     const user = getStoredUser();
     const biz = getStoredBusiness();
     if (biz?.role) setUserRole(biz.role);
@@ -379,20 +194,46 @@ export default function EducationPage() {
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     else setKycStatus('UNVERIFIED');
     if (biz?.name) setBusinessName(biz.name);
-    setIsInitialLoading(false);
 
     let initialPackage: string | null = null;
     try {
       if (typeof window !== 'undefined') {
-        const pkgParam = new URLSearchParams(window.location.search).get('package');
-        if (pkgParam && INITIAL_PACKAGES.some((p) => p.packageCode === pkgParam)) {
-          initialPackage = pkgParam;
-          setSelectedPackageCode(pkgParam);
-        }
+        initialPackage = new URLSearchParams(window.location.search).get('package');
       }
     } catch {}
 
-    void loadPackages(initialPackage);
+    const syncUserProfile = async () => {
+      try {
+        const currentToken = getStoredAuthToken();
+        if (!currentToken) return;
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (handleAuthResponse(res, data)) return;
+        if (res.ok && data?.success && data.data) {
+          const userData = data.data.user || data.data;
+          if (userData.kycStatus) setKycStatus(userData.kycStatus);
+          if (userData.firstName) setMerchantName(userData.firstName);
+        }
+      } catch {}
+    };
+
+    let isMounted = true;
+    const initializePage = async () => {
+      try {
+        await Promise.all([
+          loadPackages(initialPackage),
+          syncUserProfile(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    void initializePage();
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
@@ -402,8 +243,9 @@ export default function EducationPage() {
 
     const handlePopState = () => {
       const nextParam = new URLSearchParams(window.location.search).get('package');
-      if (nextParam && INITIAL_PACKAGES.some((p) => p.packageCode === nextParam)) {
-        setSelectedPackageCode(nextParam);
+      const matched = packagesListRef.current.find((p) => p.packageCode === nextParam);
+      if (matched && matched.enabled !== false) {
+        setSelectedPackageCode(matched.packageCode);
       } else {
         setSelectedPackageCode(null);
       }
@@ -412,6 +254,7 @@ export default function EducationPage() {
     window.addEventListener('bx_business_switched', handleBizSwitched);
     window.addEventListener('popstate', handlePopState);
     return () => {
+      isMounted = false;
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       window.removeEventListener('popstate', handlePopState);
       if (autoVerifyTimeoutRef.current) {
@@ -421,7 +264,7 @@ export default function EducationPage() {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [loadPackages]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -583,7 +426,7 @@ export default function EducationPage() {
         return;
       }
 
-      if (res.ok && data?.success) {
+      if (res.ok && data?.success && data.data?.isValid) {
         setValidationResult({
           isValid: true,
           candidateName: data.data.candidateName || 'Verified Candidate',
@@ -594,7 +437,10 @@ export default function EducationPage() {
         }
         lastVerifiedKeyRef.current = verificationKey;
       } else {
-        const errorMsg = data?.error?.message || 'Candidate verification failed. Check the profile code.';
+        const errorMsg =
+          data?.error?.message ||
+          data?.data?.responseMessage ||
+          'Candidate verification failed. Check the profile code.';
         setValidationError(errorMsg);
         showToast({ type: 'error', title: 'Candidate verification failed', message: errorMsg });
         lastVerifiedKeyRef.current = '';
@@ -839,7 +685,16 @@ export default function EducationPage() {
   const formatNaira = (val: number) =>
     `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  if (isInitialLoading) {
+  const handleRetryCatalog = async () => {
+    setIsRetryingCatalog(true);
+    try {
+      await loadPackages();
+    } finally {
+      setIsRetryingCatalog(false);
+    }
+  };
+
+  if (isInitialLoading || !hasLoadedBalance) {
     return <BaxatoLoader variant="fullscreen" />;
   }
 
@@ -974,71 +829,91 @@ export default function EducationPage() {
                   </div>
 
                   {/* PACKAGES GRID */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                    {filteredPackages.map((pkg) => {
-                      const isUnavailable = pkg.enabled === false;
-                      const councilLogo = getCouncilLogo(pkg.examBody);
-                      return (
-                        <button
-                          key={pkg.packageCode}
-                          type="button"
-                          aria-disabled={isUnavailable || undefined}
-                          onClick={() => handleSelectPackage(pkg)}
-                          className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
-                            isUnavailable
-                              ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
-                              : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
-                                <Image
-                                  src={councilLogo}
-                                  alt={pkg.examBody}
-                                  width={32}
-                                  height={32}
-                                  className="object-contain max-h-8"
-                                />
+                  {catalogError && packagesList.length === 0 ? (
+                    <div className="py-12 px-4 text-center bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                      <AlertCircle className="w-6 h-6 text-red-500 mx-auto" aria-hidden="true" />
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {catalogError}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRetryCatalog}
+                        disabled={isRetryingCatalog}
+                        className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {isRetryingCatalog && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                        <span>Retry</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                        {filteredPackages.map((pkg) => {
+                          const isUnavailable = pkg.enabled === false;
+                          const councilLogo = getCouncilLogo(pkg.examBody);
+                          return (
+                            <button
+                              key={pkg.packageCode}
+                              type="button"
+                              aria-disabled={isUnavailable || undefined}
+                              onClick={() => handleSelectPackage(pkg)}
+                              className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                                isUnavailable
+                                  ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                                  : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
+                                    <Image
+                                      src={councilLogo}
+                                      alt={pkg.examBody}
+                                      width={32}
+                                      height={32}
+                                      className="object-contain max-h-8"
+                                    />
+                                  </div>
+
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 shrink-0">
+                                    {pkg.examBody}
+                                  </span>
+                                </div>
+
+                                <h2 className={`font-bold text-sm text-slate-900 dark:text-white leading-snug ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
+                                  {pkg.name}
+                                </h2>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                                  {pkg.description}
+                                </p>
                               </div>
 
-                              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 shrink-0">
-                                {pkg.examBody}
-                              </span>
-                            </div>
+                              <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
+                                <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                                  {formatNaira(pkg.baseCostNaira)}
+                                </span>
 
-                            <h2 className={`font-bold text-sm text-slate-900 dark:text-white leading-snug ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
-                              {pkg.name}
-                            </h2>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                              {pkg.description}
-                            </p>
-                          </div>
+                                {isUnavailable ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                                    Unavailable
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                                    Buy PIN
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                          <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-900 dark:text-white tabular-nums">
-                              {formatNaira(pkg.baseCostNaira)}
-                            </span>
-
-                            {isUnavailable ? (
-                              <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                                Unavailable
-                              </span>
-                            ) : (
-                              <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
-                                Buy PIN
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {filteredPackages.length === 0 && (
-                    <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
-                      No exam package matches &quot;{searchQuery}&quot;.
-                    </div>
+                      {filteredPackages.length === 0 && (
+                        <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
+                          No exam package matches &quot;{searchQuery}&quot;.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (

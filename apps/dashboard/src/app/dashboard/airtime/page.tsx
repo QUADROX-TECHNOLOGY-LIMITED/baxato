@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -175,11 +175,12 @@ export default function AirtimePage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { walletBalance, isLoadingBalance, refreshWallets } = useWalletBalance();
+  const { walletBalance, isLoadingBalance, hasLoadedBalance, refreshWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const {
     beneficiaries,
+    hasLoadedBeneficiaries,
     saveBeneficiary,
     deleteBeneficiary,
   } = useSavedBeneficiaries();
@@ -188,7 +189,9 @@ export default function AirtimePage() {
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
   const [amount, setAmount] = useState<string>('100');
-  const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
+  const [networksList, setNetworksList] = useState<NetworkOption[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isRetryingCatalog, setIsRetryingCatalog] = useState<boolean>(false);
   const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState<boolean>(false);
 
   // After-interaction validation tracking
@@ -205,13 +208,42 @@ export default function AirtimePage() {
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
+  const loadNetworksCatalog = useCallback(async () => {
+    try {
+      setCatalogError(null);
+      const res = await fetch('/api/services/airtime/networks', { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success || !Array.isArray(data.data)) {
+        setCatalogError(data?.error?.message || 'Unable to load airtime networks right now.');
+        return;
+      }
+
+      const merged = NETWORKS.map((net) => {
+        const matched = data.data.find((n: any) => n.network === net.id);
+        if (!matched) return net;
+        return {
+          ...net,
+          discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : net.discountBps,
+          enabled: matched.enabled !== false,
+        };
+      });
+      setNetworksList(merged);
+      setSelectedNetwork((prev) => {
+        const current = merged.find((n) => n.id === prev);
+        if (current && current.enabled !== false) return prev;
+        return merged.find((n) => n.enabled !== false)?.id || prev;
+      });
+    } catch {
+      setCatalogError('Unable to load airtime networks right now.');
+    }
+  }, []);
+
   useEffect(() => {
     const token = getStoredAuthToken();
     if (!token) {
       clearSessionAndRedirect('expired');
       return;
     }
-    setIsInitialLoading(false);
 
     try {
       const storedUser = getStoredUser();
@@ -276,27 +308,6 @@ export default function AirtimePage() {
       } catch {}
     };
 
-    const loadNetworksCatalog = async () => {
-      try {
-        const res = await fetch('/api/services/airtime/networks', { cache: 'no-store' });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.success && Array.isArray(data.data)) {
-          setNetworksList((prev) =>
-            prev.map((net) => {
-              const matched = data.data.find((n: any) => n.network === net.id);
-              if (!matched) return net;
-              return {
-                ...net,
-                discountBps:
-                  typeof matched.discountBps === 'number' ? matched.discountBps : net.discountBps,
-                enabled: matched.enabled !== false,
-              };
-            }),
-          );
-        }
-      } catch {}
-    };
-
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
       if (b?.name) setBusinessName(b.name);
@@ -305,14 +316,28 @@ export default function AirtimePage() {
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
 
-    void syncUserProfile();
-    void loadNetworksCatalog();
+    let isMounted = true;
+    const initializePage = async () => {
+      try {
+        await Promise.all([
+          loadNetworksCatalog(),
+          syncUserProfile(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    void initializePage();
 
     return () => {
+      isMounted = false;
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
     };
-  }, []);
+  }, [loadNetworksCatalog]);
 
   useEffect(() => {
     const current = networksList.find((n) => n.id === selectedNetwork);
@@ -625,7 +650,16 @@ export default function AirtimePage() {
     setTimeout(() => setIsRefreshing(false), 350);
   };
 
-  if (isInitialLoading) {
+  const handleRetryCatalog = async () => {
+    setIsRetryingCatalog(true);
+    try {
+      await loadNetworksCatalog();
+    } finally {
+      setIsRetryingCatalog(false);
+    }
+  };
+
+  if (isInitialLoading || !hasLoadedBeneficiaries || !hasLoadedBalance) {
     return <BaxatoLoader variant="fullscreen" />;
   }
 
@@ -728,12 +762,29 @@ export default function AirtimePage() {
               </div>
 
               {/* Airtime Purchase Form */}
-              <form
-                onSubmit={handleOpenConfirm}
-                noValidate
-                aria-label="Airtime purchase form"
-                className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
-              >
+              {catalogError && networksList.length === 0 ? (
+                <div className="max-w-xl mx-auto w-full py-12 px-4 text-center bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <AlertCircle className="w-6 h-6 text-red-500 mx-auto" aria-hidden="true" />
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {catalogError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryCatalog}
+                    disabled={isRetryingCatalog}
+                    className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isRetryingCatalog && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleOpenConfirm}
+                  noValidate
+                  aria-label="Airtime purchase form"
+                  className="max-w-xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5"
+                >
                   {/* 1. Recipient Phone Number & Saved Beneficiaries */}
                   <PhoneFieldWithBeneficiaries
                     id={phoneId}
@@ -959,7 +1010,8 @@ export default function AirtimePage() {
                       Buy Airtime
                     </button>
                   </div>
-              </form>
+                </form>
+              )}
             </>
           )}
         </main>

@@ -87,6 +87,7 @@ export type SaveBeneficiaryParams =
 export function useSavedBeneficiaries(serviceType: 'CABLE_TV'): {
   beneficiaries: SavedCableBeneficiary[];
   isLoadingBeneficiaries: boolean;
+  hasLoadedBeneficiaries: boolean;
   fetchBeneficiaries: () => Promise<void>;
   saveBeneficiary: (params: SaveBeneficiaryParams) => Promise<void>;
   deleteBeneficiary: (id: string) => Promise<void>;
@@ -94,6 +95,7 @@ export function useSavedBeneficiaries(serviceType: 'CABLE_TV'): {
 export function useSavedBeneficiaries(serviceType: 'ELECTRICITY'): {
   beneficiaries: SavedElectricityBeneficiary[];
   isLoadingBeneficiaries: boolean;
+  hasLoadedBeneficiaries: boolean;
   fetchBeneficiaries: () => Promise<void>;
   saveBeneficiary: (params: SaveBeneficiaryParams) => Promise<void>;
   deleteBeneficiary: (id: string) => Promise<void>;
@@ -101,6 +103,7 @@ export function useSavedBeneficiaries(serviceType: 'ELECTRICITY'): {
 export function useSavedBeneficiaries(serviceType?: 'AIRTIME' | 'DATA'): {
   beneficiaries: SavedPhoneBeneficiary[];
   isLoadingBeneficiaries: boolean;
+  hasLoadedBeneficiaries: boolean;
   fetchBeneficiaries: () => Promise<void>;
   saveBeneficiary: (params: SaveBeneficiaryParams) => Promise<void>;
   deleteBeneficiary: (id: string) => Promise<void>;
@@ -113,7 +116,8 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
   const [beneficiaries, setBeneficiaries] = useState<
     Array<SavedPhoneBeneficiary | SavedElectricityBeneficiary | SavedCableBeneficiary>
   >([]);
-  const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(false);
+  const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(true);
+  const [hasLoadedBeneficiaries, setHasLoadedBeneficiaries] = useState(false);
 
   const getHeaders = useCallback(() => {
     const token = getStoredAuthToken();
@@ -127,7 +131,11 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
 
   const fetchBeneficiaries = useCallback(async () => {
     const headers = getHeaders();
-    if (!headers) return;
+    if (!headers) {
+      setIsLoadingBeneficiaries(false);
+      setHasLoadedBeneficiaries(true);
+      return;
+    }
 
     const url =
       serviceType === 'ELECTRICITY' || serviceType === 'CABLE_TV'
@@ -146,6 +154,7 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
       // Non-blocking
     } finally {
       setIsLoadingBeneficiaries(false);
+      setHasLoadedBeneficiaries(true);
     }
   }, [getHeaders, serviceType]);
 
@@ -241,6 +250,7 @@ export function useSavedBeneficiaries(serviceType?: BeneficiaryServiceType) {
   return {
     beneficiaries,
     isLoadingBeneficiaries,
+    hasLoadedBeneficiaries,
     fetchBeneficiaries,
     saveBeneficiary,
     deleteBeneficiary,

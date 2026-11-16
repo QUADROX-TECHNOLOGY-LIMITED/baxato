@@ -29,6 +29,7 @@ interface UseWalletBalanceResult {
   commissionBalance: number;
   wallets: WalletRecord[];
   isLoadingBalance: boolean;
+  hasLoadedBalance: boolean;
   refreshWallets: () => Promise<void>;
 }
 
@@ -67,6 +68,7 @@ export function useWalletBalance(
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [commissionBalance, setCommissionBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
+  const [hasLoadedBalance, setHasLoadedBalance] = useState<boolean>(false);
 
   const mountedRef = useRef<boolean>(true);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,6 +130,7 @@ export function useWalletBalance(
     } finally {
       if (mountedRef.current) {
         setIsLoadingBalance(false);
+        setHasLoadedBalance(true);
       }
     }
   }, [applyWallets, buildHeaders]);
@@ -200,7 +203,10 @@ export function useWalletBalance(
                 const payload = JSON.parse(parsed.data);
                 if (parsed.event === 'wallet_snapshot' && Array.isArray(payload?.wallets)) {
                   applyWallets(payload.wallets);
-                  if (mountedRef.current) setIsLoadingBalance(false);
+                  if (mountedRef.current) {
+                    setIsLoadingBalance(false);
+                    setHasLoadedBalance(true);
+                  }
                 } else if (parsed.event === 'wallet_updated' && payload?.wallet) {
                   applySingleWalletUpdate(payload.wallet);
                 }
@@ -258,6 +264,7 @@ export function useWalletBalance(
     commissionBalance,
     wallets,
     isLoadingBalance,
+    hasLoadedBalance,
     refreshWallets,
   };
 }

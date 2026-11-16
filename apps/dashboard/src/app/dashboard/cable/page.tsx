@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -116,167 +116,6 @@ const CABLE_OPERATORS: CableOperatorOption[] = [
   },
 ];
 
-const DEFAULT_BOUQUETS: CableBouquetOption[] = [
-  // --- DSTV ---
-  {
-    id: 'dstv-padi',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Padi',
-    code: 'DStv Padi Bouquet E36',
-    validity: '30 Days',
-    priceNaira: 4400,
-  },
-  {
-    id: 'dstv-yanga',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Yanga',
-    code: 'DStv Yanga Bouquet E36',
-    validity: '30 Days',
-    priceNaira: 6000,
-  },
-  {
-    id: 'dstv-confam',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Confam',
-    code: 'DStv Confam Bouquet E36',
-    validity: '30 Days',
-    priceNaira: 11000,
-  },
-  {
-    id: 'dstv-compact',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Compact',
-    code: 'Compact',
-    validity: '30 Days',
-    priceNaira: 19000,
-  },
-  {
-    id: 'dstv-compact-plus',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Compact Plus',
-    code: 'Compact Plus',
-    validity: '30 Days',
-    priceNaira: 30000,
-  },
-  {
-    id: 'dstv-premium',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv Premium',
-    code: 'Premium',
-    validity: '30 Days',
-    priceNaira: 44500,
-  },
-  {
-    id: 'dstv-extraview',
-    operator: 'DSTV',
-    operatorName: 'DStv',
-    name: 'DStv ExtraView Add-on',
-    code: 'HDPVR Access/Extraview',
-    validity: '30 Days',
-    priceNaira: 6000,
-  },
-
-  // --- GOTV ---
-  {
-    id: 'gotv-smallie',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Smallie',
-    code: 'GOtv Smallie',
-    validity: '30 Days',
-    priceNaira: 1900,
-  },
-  {
-    id: 'gotv-jinja',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Jinja',
-    code: 'GOtv Jinja Bouquet',
-    validity: '30 Days',
-    priceNaira: 3900,
-  },
-  {
-    id: 'gotv-jolli',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Jolli',
-    code: 'GOtv Jolli Bouquet',
-    validity: '30 Days',
-    priceNaira: 5800,
-  },
-  {
-    id: 'gotv-max',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Max',
-    code: 'GOtv Max',
-    validity: '30 Days',
-    priceNaira: 8500,
-  },
-  {
-    id: 'gotv-supa',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Supa',
-    code: 'SUPA',
-    validity: '30 Days',
-    priceNaira: 11400,
-  },
-  {
-    id: 'gotv-supa-plus',
-    operator: 'GOTV',
-    operatorName: 'GOtv',
-    name: 'GOtv Supa Plus',
-    code: 'GOTV Supa Plus',
-    validity: '30 Days',
-    priceNaira: 16800,
-  },
-
-  // --- STARTIMES ---
-  {
-    id: 'startimes-nova',
-    operator: 'STARTIMES',
-    operatorName: 'StarTimes',
-    name: 'StarTimes Nova',
-    code: 'DTT_Nova Monthly',
-    validity: '30 Days',
-    priceNaira: 2100,
-  },
-  {
-    id: 'startimes-basic',
-    operator: 'STARTIMES',
-    operatorName: 'StarTimes',
-    name: 'StarTimes Basic',
-    code: 'DTT_Basic Monthly',
-    validity: '30 Days',
-    priceNaira: 4000,
-  },
-  {
-    id: 'startimes-classic',
-    operator: 'STARTIMES',
-    operatorName: 'StarTimes',
-    name: 'StarTimes Classic',
-    code: 'DTT_Classic Monthly',
-    validity: '30 Days',
-    priceNaira: 6000,
-  },
-  {
-    id: 'startimes-super',
-    operator: 'STARTIMES',
-    operatorName: 'StarTimes',
-    name: 'StarTimes Super',
-    code: 'DTT_Super Monthly',
-    validity: '30 Days',
-    priceNaira: 9500,
-  },
-];
-
 export default function CableVendingPage() {
   // Session & User State
   const [merchantName, setMerchantName] = useState<string>(() => {
@@ -299,12 +138,15 @@ export default function CableVendingPage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
 
   // Settlement Balance
-  const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
+  const { walletBalance, isLoadingBalance, hasLoadedBalance, refreshWallets: loadWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Operator Catalog & View State
-  const [operatorsList, setOperatorsList] = useState<CableOperatorOption[]>(CABLE_OPERATORS);
+  // Operator Catalog & View State (populated from backend so stale discounts/states never flash)
+  const [operatorsList, setOperatorsList] = useState<CableOperatorOption[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isRetryingCatalog, setIsRetryingCatalog] = useState(false);
+  const operatorsListRef = useRef<CableOperatorOption[]>([]);
   const [selectedOperatorCode, setSelectedOperatorCode] = useState<CableOperatorCode | null>(null);
   const [filterType, setFilterType] = useState<'ALL' | 'DSTV' | 'GOTV' | 'STARTIMES'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -331,6 +173,7 @@ export default function CableVendingPage() {
   // Saved Cable Beneficiaries State
   const {
     beneficiaries: savedSmartcards,
+    hasLoadedBeneficiaries,
     fetchBeneficiaries: refreshSavedSmartcards,
     saveBeneficiary: saveCableBeneficiary,
     deleteBeneficiary: deleteCableBeneficiary,
@@ -338,7 +181,7 @@ export default function CableVendingPage() {
   const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState(false);
 
   // Dynamic Bouquets List
-  const [bouquetsList, setBouquetsList] = useState<CableBouquetOption[]>(DEFAULT_BOUQUETS);
+  const [bouquetsList, setBouquetsList] = useState<CableBouquetOption[]>([]);
 
   // Checkout & Submission State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -388,11 +231,12 @@ export default function CableVendingPage() {
   }, [isBouquetDropdownOpen]);
 
   // Load Cable Operators & Bouquets from Backend
-  const loadCatalogData = async (requestedProvider?: string | null) => {
+  const loadCatalogData = useCallback(async (requestedProvider?: string | null) => {
     const authToken = getStoredAuthToken();
     const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
     try {
+      setCatalogError(null);
       const [opsRes, bouquetsRes] = await Promise.all([
         fetch('/api/services/cable/operators', { headers, cache: 'no-store' }),
         fetch('/api/services/cable/bouquets', { headers, cache: 'no-store' }),
@@ -403,54 +247,77 @@ export default function CableVendingPage() {
         bouquetsRes.json().catch(() => null),
       ]);
 
-      let mergedOperators = CABLE_OPERATORS;
-      if (opsRes.ok && opsData?.success && Array.isArray(opsData.data)) {
-        mergedOperators = CABLE_OPERATORS.map((baseOp) => {
-          const matched = opsData.data.find((d: any) => d.code === baseOp.code);
-          if (!matched) return baseOp;
-          return {
-            ...baseOp,
-            name: matched.name || baseOp.name,
-            shortName: matched.shortName || baseOp.shortName,
-            customerField: matched.customerField || baseOp.customerField,
-            enabled: matched.enabled !== false,
-            discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : baseOp.discountBps,
-          };
-        });
-        setOperatorsList(mergedOperators);
+      if (!opsRes.ok || !opsData?.success || !Array.isArray(opsData.data)) {
+        setCatalogError(opsData?.error?.message || 'Unable to load Cable TV providers right now.');
+        return;
       }
 
-      if (bouquetsRes.ok && bouquetsData?.success && Array.isArray(bouquetsData.data) && bouquetsData.data.length > 0) {
+      const mergedOperators = CABLE_OPERATORS.map((baseOp) => {
+        const matched = opsData.data.find((d: any) => d.code === baseOp.code);
+        if (!matched) return baseOp;
+        const discountBps =
+          typeof matched.discountBps === 'number'
+            ? matched.discountBps
+            : typeof matched.defaultDiscountBps === 'number'
+              ? matched.defaultDiscountBps
+              : baseOp.discountBps;
+        return {
+          ...baseOp,
+          name: matched.name || baseOp.name,
+          shortName: matched.shortName || baseOp.shortName,
+          customerField: matched.customerField || baseOp.customerField,
+          enabled: matched.enabled !== false,
+          discountBps,
+        };
+      });
+      operatorsListRef.current = mergedOperators;
+      setOperatorsList(mergedOperators);
+
+      if (bouquetsRes.ok && bouquetsData?.success && Array.isArray(bouquetsData.data)) {
         setBouquetsList(bouquetsData.data);
+      } else {
+        setCatalogError(bouquetsData?.error?.message || 'Unable to load Cable TV bouquets right now.');
+        return;
       }
 
       const activeProviderParam =
-        typeof window !== 'undefined'
-          ? (new URLSearchParams(window.location.search).get('provider') || requestedProvider || '').toUpperCase()
-          : (requestedProvider || '').toUpperCase();
+        requestedProvider?.toUpperCase() ||
+        (typeof window !== 'undefined'
+          ? (new URLSearchParams(window.location.search).get('provider') || '').toUpperCase()
+          : '');
 
       if (activeProviderParam) {
         const matchedSelected = mergedOperators.find((op) => op.code === activeProviderParam);
-        if (matchedSelected && matchedSelected.enabled === false) {
-          setSelectedOperatorCode(null);
-          if (typeof window !== 'undefined') {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('provider');
-            window.history.replaceState({}, '', url.toString());
+        if (matchedSelected) {
+          if (matchedSelected.enabled === false) {
+            setSelectedOperatorCode(null);
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('provider');
+              window.history.replaceState({}, '', url.toString());
+            }
+            showToast({
+              type: 'error',
+              message: `${matchedSelected.shortName} Cable TV is currently unavailable.`,
+            });
+          } else {
+            setSelectedOperatorCode(matchedSelected.code);
           }
-          showToast({
-            type: 'error',
-            message: `${matchedSelected.shortName} Cable TV is currently unavailable.`,
-          });
         }
       }
     } catch {
-      // Fallback to default local catalog
+      setCatalogError('Unable to load Cable TV providers right now.');
     }
-  };
+  }, []);
 
   // Initialize
   useEffect(() => {
+    const authToken = getStoredAuthToken();
+    if (!authToken) {
+      clearSessionAndRedirect('expired');
+      return;
+    }
+
     const user = getStoredUser();
     const biz = getStoredBusiness();
     if (biz?.role) setUserRole(biz.role);
@@ -459,7 +326,6 @@ export default function CableVendingPage() {
     if (user?.kycStatus) setKycStatus(user.kycStatus);
     else setKycStatus('UNVERIFIED');
     if (biz?.name) setBusinessName(biz.name);
-    setIsInitialLoading(false);
 
     let initialProvider: string | null = null;
     try {
@@ -468,12 +334,42 @@ export default function CableVendingPage() {
         const rawParam = params.get('provider')?.toUpperCase();
         if (rawParam && CABLE_OPERATORS.some((op) => op.code === rawParam)) {
           initialProvider = rawParam;
-          setSelectedOperatorCode(rawParam as CableOperatorCode);
         }
       }
     } catch {}
 
-    void loadCatalogData(initialProvider);
+    const syncUserProfile = async () => {
+      try {
+        const currentToken = getStoredAuthToken();
+        if (!currentToken) return;
+        const res = await fetch('/api/users/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (handleAuthResponse(res, data)) return;
+        if (res.ok && data?.success && data.data) {
+          const userData = data.data.user || data.data;
+          if (userData.kycStatus) setKycStatus(userData.kycStatus);
+          if (userData.firstName) setMerchantName(userData.firstName);
+        }
+      } catch {}
+    };
+
+    let isMounted = true;
+    const initializePage = async () => {
+      try {
+        await Promise.all([
+          loadCatalogData(initialProvider),
+          syncUserProfile(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    void initializePage();
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
@@ -484,8 +380,9 @@ export default function CableVendingPage() {
 
     const handlePopState = () => {
       const nextParam = new URLSearchParams(window.location.search).get('provider')?.toUpperCase();
-      if (nextParam && CABLE_OPERATORS.some((op) => op.code === nextParam)) {
-        setSelectedOperatorCode(nextParam as CableOperatorCode);
+      const candidate = operatorsListRef.current.find((op) => op.code === nextParam);
+      if (candidate && candidate.enabled !== false) {
+        setSelectedOperatorCode(candidate.code);
       } else {
         setSelectedOperatorCode(null);
       }
@@ -494,6 +391,7 @@ export default function CableVendingPage() {
     window.addEventListener('bx_business_switched', handleBizSwitched);
     window.addEventListener('popstate', handlePopState);
     return () => {
+      isMounted = false;
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       window.removeEventListener('popstate', handlePopState);
       if (autoVerifyTimeoutRef.current) {
@@ -503,7 +401,7 @@ export default function CableVendingPage() {
         abortControllerRef.current.abort();
       }
     };
-  }, [refreshSavedSmartcards]);
+  }, [loadCatalogData, refreshSavedSmartcards]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -938,7 +836,16 @@ export default function CableVendingPage() {
   const formatNaira = (val: number) =>
     `₦${val.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  if (isInitialLoading) {
+  const handleRetryCatalog = async () => {
+    setIsRetryingCatalog(true);
+    try {
+      await loadCatalogData();
+    } finally {
+      setIsRetryingCatalog(false);
+    }
+  };
+
+  if (isInitialLoading || !hasLoadedBeneficiaries || !hasLoadedBalance) {
     return <BaxatoLoader variant="fullscreen" />;
   }
 
@@ -1081,74 +988,94 @@ export default function CableVendingPage() {
               </div>
 
               {/* OPERATORS GRID */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-                {filteredOperators.map((op) => {
-                  const isUnavailable = op.enabled === false;
-                  return (
-                    <button
-                      key={op.code}
-                      type="button"
-                      aria-disabled={isUnavailable || undefined}
-                      onClick={() => handleSelectOperator(op)}
-                      className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
-                        isUnavailable
-                          ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
-                          : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <div className="w-11 h-11 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
-                            <Image
-                              src={op.logo}
-                              alt={op.shortName}
-                              width={36}
-                              height={36}
-                              className="object-contain"
-                            />
+              {catalogError && operatorsList.length === 0 ? (
+                <div className="py-12 px-4 text-center bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <AlertCircle className="w-6 h-6 text-red-500 mx-auto" aria-hidden="true" />
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {catalogError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryCatalog}
+                    disabled={isRetryingCatalog}
+                    className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isRetryingCatalog && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                    {filteredOperators.map((op) => {
+                      const isUnavailable = op.enabled === false;
+                      return (
+                        <button
+                          key={op.code}
+                          type="button"
+                          aria-disabled={isUnavailable || undefined}
+                          onClick={() => handleSelectOperator(op)}
+                          className={`group relative p-4 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                            isUnavailable
+                              ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                              : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="w-11 h-11 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 shrink-0">
+                                <Image
+                                  src={op.logo}
+                                  alt={op.shortName}
+                                  width={36}
+                                  height={36}
+                                  className="object-contain"
+                                />
+                              </div>
+
+                              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
+                                {op.shortName}
+                              </span>
+                            </div>
+
+                            <h2 className={`font-bold text-sm text-slate-900 dark:text-white ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
+                              {op.name}
+                            </h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                              {op.description}
+                            </p>
                           </div>
 
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
-                            {op.shortName}
-                          </span>
-                        </div>
+                          <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
+                            {isUnavailable ? (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                                Unavailable
+                              </span>
+                            ) : op.discountBps && op.discountBps > 0 ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                {(op.discountBps / 100).toFixed(1)}% off
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500">{op.customerField}</span>
+                            )}
 
-                        <h2 className={`font-bold text-sm text-slate-900 dark:text-white ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
-                          {op.name}
-                        </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                          {op.description}
-                        </p>
-                      </div>
+                            {!isUnavailable && (
+                              <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                                Subscribe
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                      <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-xs">
-                        {isUnavailable ? (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                            Unavailable
-                          </span>
-                        ) : op.discountBps && op.discountBps > 0 ? (
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                            {(op.discountBps / 100).toFixed(1)}% off
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500">{op.customerField}</span>
-                        )}
-
-                        {!isUnavailable && (
-                          <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
-                            Subscribe
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {filteredOperators.length === 0 && (
-                <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
-                  No provider matches &quot;{searchQuery}&quot;.
-                </div>
+                  {filteredOperators.length === 0 && (
+                    <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
+                      No provider matches &quot;{searchQuery}&quot;.
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (

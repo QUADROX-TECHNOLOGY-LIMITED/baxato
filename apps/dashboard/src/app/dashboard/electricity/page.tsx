@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -395,12 +395,14 @@ export default function ElectricityPage() {
   const [userLastName, setUserLastName] = useState<string>('');
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { walletBalance, isLoadingBalance, refreshWallets: loadWallets } = useWalletBalance();
+  const { walletBalance, isLoadingBalance, hasLoadedBalance, refreshWallets: loadWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Dynamic DISCO catalog with admin-configured discount margins
-  const [discosList, setDiscosList] = useState<DiscoOption[]>(ALL_DISCOS);
+  // Dynamic DISCO catalog populated from backend (empty until loaded so stale discounts/states never flash)
+  const [discosList, setDiscosList] = useState<DiscoOption[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isRetryingCatalog, setIsRetryingCatalog] = useState(false);
 
   // Filters & Selection
   const [filterType, setFilterType] = useState<'ALL' | 'PREPAID' | 'POSTPAID'>('ALL');
@@ -426,6 +428,7 @@ export default function ElectricityPage() {
   // Saved Electricity Beneficiaries State
   const {
     beneficiaries: savedMeters,
+    hasLoadedBeneficiaries,
     saveBeneficiary: saveMeterBeneficiary,
     deleteBeneficiary: deleteMeterBeneficiary,
   } = useSavedBeneficiaries('ELECTRICITY');
@@ -438,6 +441,61 @@ export default function ElectricityPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   const isVerified = kycStatus === 'VERIFIED';
+
+  const loadDiscosCatalog = useCallback(async (requestedProviderParam?: string | null) => {
+    try {
+      setCatalogError(null);
+      const res = await fetch('/api/services/electricity/discos', { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success || !Array.isArray(data.data)) {
+        setCatalogError(data?.error?.message || 'Unable to load electricity providers right now.');
+        return;
+      }
+
+      const nextList = ALL_DISCOS.map((disco) => {
+        const matched = data.data.find((d: any) => d.code === disco.code);
+        if (!matched) return disco;
+        const isOptionEnabled =
+          disco.meterType === 'PREPAID'
+            ? matched.prepaidEnabled !== false
+            : matched.postpaidEnabled !== false;
+        return {
+          ...disco,
+          enabled: isOptionEnabled,
+          discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : disco.discountBps,
+          minAmountNaira: typeof matched.minimumAmountNaira === 'number' ? matched.minimumAmountNaira : disco.minAmountNaira,
+        };
+      });
+      setDiscosList(nextList);
+
+      const activeParam =
+        requestedProviderParam ??
+        (typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('provider')
+          : null);
+      if (activeParam) {
+        const matchedSelected = nextList.find((d) => d.id === activeParam);
+        if (matchedSelected) {
+          if (matchedSelected.enabled === false) {
+            setSelectedOptionId(null);
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('provider');
+              window.history.replaceState({}, '', url.toString());
+            }
+            showToast({
+              type: 'error',
+              message: `${matchedSelected.shortName} ${matchedSelected.meterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'} electricity is currently unavailable.`,
+            });
+          } else {
+            setSelectedOptionId(matchedSelected.id);
+          }
+        }
+      }
+    } catch {
+      setCatalogError('Unable to load electricity providers right now.');
+    }
+  }, []);
 
   useEffect(() => {
     const token = getStoredAuthToken();
@@ -469,7 +527,6 @@ export default function ElectricityPage() {
 
       if (storedBiz?.name) setBusinessName(storedBiz.name);
     } catch {}
-    setIsInitialLoading(false);
 
     const handleBizSwitched = () => {
       const b = getStoredBusiness();
@@ -498,6 +555,9 @@ export default function ElectricityPage() {
           if (userData.lastName) {
             setUserLastName(userData.lastName);
           }
+          if (userData.phone) {
+            setCustomerPhone((prev) => prev || userData.phone);
+          }
           try {
             const raw = localStorage.getItem('bx_user');
             if (raw) {
@@ -517,70 +577,34 @@ export default function ElectricityPage() {
       } catch {}
     };
 
-    void syncUserProfile();
-
-    // Read initial URL ?provider= parameter
     let initialProviderParam: string | null = null;
     try {
       if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const candidate = params.get('provider');
+        const candidate = new URLSearchParams(window.location.search).get('provider');
         if (candidate && ALL_DISCOS.some((d) => d.id === candidate)) {
           initialProviderParam = candidate;
-          setSelectedOptionId(candidate);
         }
       }
     } catch {}
 
-    // Fetch dynamic DISCO directory with availability flags, discount rates, and minimum amounts
-    const loadDiscosCatalog = async () => {
+    let isMounted = true;
+    const initializePage = async () => {
       try {
-        const res = await fetch('/api/services/electricity/discos', { cache: 'no-store' });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.success && Array.isArray(data.data)) {
-          const nextList = ALL_DISCOS.map((disco) => {
-            const matched = data.data.find((d: any) => d.code === disco.code);
-            if (matched) {
-              const isOptionEnabled =
-                disco.meterType === 'PREPAID'
-                  ? matched.prepaidEnabled !== false
-                  : matched.postpaidEnabled !== false;
-              return {
-                ...disco,
-                enabled: isOptionEnabled,
-                discountBps: typeof matched.discountBps === 'number' ? matched.discountBps : disco.discountBps,
-                minAmountNaira: typeof matched.minimumAmountNaira === 'number' ? matched.minimumAmountNaira : disco.minAmountNaira,
-              };
-            }
-            return disco;
-          });
-          setDiscosList(nextList);
-
-          const activeParam =
-            typeof window !== 'undefined'
-              ? new URLSearchParams(window.location.search).get('provider')
-              : initialProviderParam;
-          if (activeParam) {
-            const matchedSelected = nextList.find((d) => d.id === activeParam);
-            if (matchedSelected && matchedSelected.enabled === false) {
-              setSelectedOptionId(null);
-              if (typeof window !== 'undefined') {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('provider');
-                window.history.replaceState({}, '', url.toString());
-              }
-              showToast({
-                type: 'error',
-                message: `${matchedSelected.shortName} ${matchedSelected.meterType === 'PREPAID' ? 'Prepaid' : 'Postpaid'} electricity is currently unavailable.`,
-              });
-            }
-          }
+        await Promise.all([
+          loadDiscosCatalog(initialProviderParam),
+          syncUserProfile(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
         }
-      } catch {}
+      }
     };
-    loadDiscosCatalog();
+
+    void initializePage();
 
     return () => {
+      isMounted = false;
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       if (autoVerifyTimeoutRef.current) {
         clearTimeout(autoVerifyTimeoutRef.current);
@@ -589,7 +613,7 @@ export default function ElectricityPage() {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [loadDiscosCatalog]);
 
   const canExecuteServices =
     userRole === 'BUSINESS_OWNER' ||
@@ -1134,7 +1158,16 @@ export default function ElectricityPage() {
     }
   };
 
-  if (isInitialLoading) {
+  const handleRetryCatalog = async () => {
+    setIsRetryingCatalog(true);
+    try {
+      await loadDiscosCatalog();
+    } finally {
+      setIsRetryingCatalog(false);
+    }
+  };
+
+  if (isInitialLoading || !hasLoadedBeneficiaries || !hasLoadedBalance) {
     return <BaxatoLoader variant="fullscreen" />;
   }
 
@@ -1279,87 +1312,107 @@ export default function ElectricityPage() {
               </div>
 
               {/* BILLERS GRID */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {filteredDiscos.map((opt) => {
-                  const isPrepaid = opt.meterType === 'PREPAID';
-                  const isUnavailable = opt.enabled === false;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      aria-disabled={isUnavailable || undefined}
-                      onClick={() => handleSelectBiller(opt)}
-                      className={`group relative p-3 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
-                        isUnavailable
-                          ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
-                          : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
-                      }`}
-                    >
-                      <div>
-                        {/* Top: Crisp White-Backed Logo & Meter Tag */}
-                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
-                            <Image
-                              src={opt.logo}
-                              alt={opt.shortName}
-                              width={28}
-                              height={28}
-                              className="object-contain"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
+              {catalogError && discosList.length === 0 ? (
+                <div className="py-12 px-4 text-center bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <AlertCircle className="w-6 h-6 text-red-500 mx-auto" aria-hidden="true" />
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {catalogError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryCatalog}
+                    disabled={isRetryingCatalog}
+                    className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isRetryingCatalog && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {filteredDiscos.map((opt) => {
+                      const isPrepaid = opt.meterType === 'PREPAID';
+                      const isUnavailable = opt.enabled === false;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          aria-disabled={isUnavailable || undefined}
+                          onClick={() => handleSelectBiller(opt)}
+                          className={`group relative p-3 rounded-xl border text-left transition-colors duration-150 flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#126BEB] ${
+                            isUnavailable
+                              ? 'opacity-55 grayscale cursor-not-allowed border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-[#091222]'
+                              : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1528] hover:border-[#126BEB] dark:hover:border-[#126BEB] cursor-pointer'
+                          }`}
+                        >
+                          <div>
+                            {/* Top: Crisp White-Backed Logo & Meter Tag */}
+                            <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                              <div className="w-9 h-9 rounded-lg overflow-hidden bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0">
+                                <Image
+                                  src={opt.logo}
+                                  alt={opt.shortName}
+                                  width={28}
+                                  height={28}
+                                  className="object-contain"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                  isPrepaid
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                    : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                                }`}
+                              >
+                                {opt.meterType}
+                              </span>
+                            </div>
+
+                            {/* Title & Coverage */}
+                            <h3 className={`font-bold text-xs text-slate-900 dark:text-white truncate ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
+                              {opt.shortName}
+                            </h3>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                              {opt.coverage}
+                            </p>
                           </div>
 
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                              isPrepaid
-                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                                : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                            }`}
-                          >
-                            {opt.meterType}
-                          </span>
-                        </div>
+                          {/* Footer: Discount (if set) & Action */}
+                          <div className="pt-2 mt-2.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[11px]">
+                            {isUnavailable ? (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                                Unavailable
+                              </span>
+                            ) : opt.discountBps > 0 ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                {(opt.discountBps / 100).toFixed(1)}% off
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500">Meter</span>
+                            )}
 
-                        {/* Title & Coverage */}
-                        <h3 className={`font-bold text-xs text-slate-900 dark:text-white truncate ${isUnavailable ? '' : 'group-hover:text-[#126BEB] transition-colors'}`}>
-                          {opt.shortName}
-                        </h3>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                          {opt.coverage}
-                        </p>
-                      </div>
+                            {!isUnavailable && (
+                              <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
+                                Pay
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                      {/* Footer: Discount (if set) & Action */}
-                      <div className="pt-2 mt-2.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[11px]">
-                        {isUnavailable ? (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                            Unavailable
-                          </span>
-                        ) : opt.discountBps > 0 ? (
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                            {(opt.discountBps / 100).toFixed(1)}% off
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500">Meter</span>
-                        )}
-
-                        {!isUnavailable && (
-                          <span className="font-semibold text-[#126BEB] dark:text-[#38BDF8]">
-                            Pay
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {filteredDiscos.length === 0 && (
-                <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
-                  No electricity provider matches &quot;{searchQuery}&quot;.
-                </div>
+                  {filteredDiscos.length === 0 && (
+                    <div className="py-12 text-center text-slate-400 text-xs bg-white dark:bg-[#0B1528] rounded-xl border border-slate-200 dark:border-slate-800">
+                      No electricity provider matches &quot;{searchQuery}&quot;.
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (

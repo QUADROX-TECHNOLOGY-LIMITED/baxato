@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -125,14 +125,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   SME: 'SME',
 };
 
-const FALLBACK_PLANS: DataPlan[] = [
-  { id: 'mtn_daily_110mb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 110MB Daily Plan', dataAllowance: '110MB', category: 'DAILY', dataType: 'DIRECT', validity: '1 Day', priceNaira: 100 },
-  { id: 'mtn_weekly_1_5gb', network: 'MTN', networkName: 'MTN Nigeria', name: 'MTN 1.5GB Weekly Plan', dataAllowance: '1.5GB', category: 'WEEKLY', dataType: 'DIRECT', validity: '7 Days', priceNaira: 1000 },
-  { id: 'airtel_daily_110mb', network: 'AIRTEL', networkName: 'Airtel Nigeria', name: 'Airtel 110MB Daily Plan', dataAllowance: '110MB', category: 'DAILY', dataType: 'DIRECT', validity: '1 Day', priceNaira: 100 },
-  { id: 'glo_monthly_4gb', network: 'GLO', networkName: 'Globacom (Glo)', name: 'Glo 4GB + 2GB Night Plan', dataAllowance: '4GB + 2GB Night', category: 'MONTHLY', dataType: 'DIRECT', validity: '30 Days', priceNaira: 1500 },
-  { id: '9mobile_monthly_4_5gb', network: '9MOBILE', networkName: '9mobile', name: '9mobile 4.5GB Monthly Plan', dataAllowance: '4.5GB', category: 'MONTHLY', dataType: 'DIRECT', validity: '30 Days', priceNaira: 2000 },
-];
-
 /**
  * Normalizes Nigerian phone numbers including pasted +234 / 234 prefixes to 11-digit local format.
  */
@@ -190,11 +182,12 @@ export default function DataBundlesPage() {
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { walletBalance, isLoadingBalance, refreshWallets } = useWalletBalance();
+  const { walletBalance, isLoadingBalance, hasLoadedBalance, refreshWallets } = useWalletBalance();
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const {
     beneficiaries,
+    hasLoadedBeneficiaries,
     saveBeneficiary,
     deleteBeneficiary,
   } = useSavedBeneficiaries();
@@ -202,13 +195,15 @@ export default function DataBundlesPage() {
   // Form & Catalog State
   const [phone, setPhone] = useState<string>('');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('MTN');
-  const [networksList, setNetworksList] = useState<NetworkOption[]>(NETWORKS);
+  const [networksList, setNetworksList] = useState<NetworkOption[]>([]);
   const [saveBeneficiaryChecked, setSaveBeneficiaryChecked] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [planSearch, setPlanSearch] = useState<string>('');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
-  const [plans, setPlans] = useState<DataPlan[]>(FALLBACK_PLANS);
+  const [plans, setPlans] = useState<DataPlan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isRetryingCatalog, setIsRetryingCatalog] = useState<boolean>(false);
 
   // Validation & Announcements
   const [phoneEdited, setPhoneEdited] = useState<boolean>(false);
@@ -222,8 +217,9 @@ export default function DataBundlesPage() {
   const [receiptData, setReceiptData] = useState<TransactionReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
 
-  const fetchCatalog = async () => {
+  const fetchCatalog = useCallback(async () => {
     try {
+      setCatalogError(null);
       setIsLoadingPlans(true);
       const [plansRes, netsRes] = await Promise.all([
         fetch('/api/services/data/plans', { cache: 'no-store' }),
@@ -235,28 +231,44 @@ export default function DataBundlesPage() {
         netsRes.json().catch(() => null),
       ]);
 
-      if (plansRes.ok && plansJson?.success && Array.isArray(plansJson.data)) {
-        setPlans(plansJson.data);
+      if (
+        !plansRes.ok ||
+        !plansJson?.success ||
+        !Array.isArray(plansJson.data) ||
+        !netsRes.ok ||
+        !netsJson?.success ||
+        !Array.isArray(netsJson.data)
+      ) {
+        setCatalogError(
+          plansJson?.error?.message ||
+            netsJson?.error?.message ||
+            'Unable to load data plans right now.',
+        );
+        return;
       }
 
-      if (netsRes.ok && netsJson?.success && Array.isArray(netsJson.data)) {
-        setNetworksList((prev) =>
-          prev.map((net) => {
-            const matched = netsJson.data.find((n: any) => n.network === net.id);
-            if (!matched) return net;
-            return {
-              ...net,
-              enabled: matched.enabled !== false,
-            };
-          }),
-        );
-      }
+      setPlans(plansJson.data);
+
+      const mergedNets = NETWORKS.map((net) => {
+        const matched = netsJson.data.find((n: any) => n.network === net.id);
+        if (!matched) return net;
+        return {
+          ...net,
+          enabled: matched.enabled !== false,
+        };
+      });
+      setNetworksList(mergedNets);
+      setSelectedNetwork((prev) => {
+        const current = mergedNets.find((n) => n.id === prev);
+        if (current && current.enabled !== false) return prev;
+        return mergedNets.find((n) => n.enabled !== false)?.id || prev;
+      });
     } catch {
-      // Fallback plans remain available
+      setCatalogError('Unable to load data plans right now.');
     } finally {
       setIsLoadingPlans(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const token = getStoredAuthToken();
@@ -264,7 +276,6 @@ export default function DataBundlesPage() {
       clearSessionAndRedirect('expired');
       return;
     }
-    setIsInitialLoading(false);
 
     try {
       const storedUser = getStoredUser();
@@ -337,14 +348,28 @@ export default function DataBundlesPage() {
 
     window.addEventListener('bx_business_switched', handleBizSwitched);
 
-    void syncUserProfile();
-    void fetchCatalog();
+    let isMounted = true;
+    const initializePage = async () => {
+      try {
+        await Promise.all([
+          fetchCatalog(),
+          syncUserProfile(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    void initializePage();
 
     return () => {
+      isMounted = false;
       window.removeEventListener('bx_business_switched', handleBizSwitched);
       if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
     };
-  }, []);
+  }, [fetchCatalog]);
 
   useEffect(() => {
     const current = networksList.find((n) => n.id === selectedNetwork);
@@ -706,7 +731,16 @@ export default function DataBundlesPage() {
     setTimeout(() => setIsRefreshing(false), 350);
   };
 
-  if (isInitialLoading) {
+  const handleRetryCatalog = async () => {
+    setIsRetryingCatalog(true);
+    try {
+      await fetchCatalog();
+    } finally {
+      setIsRetryingCatalog(false);
+    }
+  };
+
+  if (isInitialLoading || !hasLoadedBeneficiaries || !hasLoadedBalance) {
     return <BaxatoLoader variant="fullscreen" />;
   }
 
@@ -809,12 +843,29 @@ export default function DataBundlesPage() {
               </div>
 
               {/* Unified Data Bundle Purchase Form */}
-              <form
-                onSubmit={handleOpenConfirm}
-                noValidate
-                aria-label="Data bundle purchase form"
-                className="max-w-3xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6"
-              >
+              {catalogError && networksList.length === 0 ? (
+                <div className="max-w-3xl mx-auto w-full py-12 px-4 text-center bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <AlertCircle className="w-6 h-6 text-red-500 mx-auto" aria-hidden="true" />
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {catalogError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryCatalog}
+                    disabled={isRetryingCatalog}
+                    className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isRetryingCatalog && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleOpenConfirm}
+                  noValidate
+                  aria-label="Data bundle purchase form"
+                  className="max-w-3xl mx-auto w-full bg-white dark:bg-[#0B1528] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-6"
+                >
                 {/* 1. Recipient Phone Number & Saved Beneficiaries */}
                 <PhoneFieldWithBeneficiaries
                   id={phoneId}
@@ -1019,7 +1070,7 @@ export default function DataBundlesPage() {
                     role="tabpanel"
                     aria-labelledby={`${tabsPrefixId}-tab-${selectedCategory}`}
                   >
-                    {isLoadingPlans ? (
+                    {isLoadingPlans && plans.length === 0 ? (
                       <div className="grid grid-cols-2 gap-2">
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <div
@@ -1158,6 +1209,7 @@ export default function DataBundlesPage() {
                   </button>
                 </div>
               </form>
+              )}
             </>
           )}
         </main>
