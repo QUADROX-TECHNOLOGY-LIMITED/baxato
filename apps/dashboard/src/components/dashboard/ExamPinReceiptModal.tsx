@@ -159,17 +159,17 @@ export default function ExamPinReceiptModal({
     <ModalDialog
       isOpen={isOpen}
       onClose={onClose}
-      ariaLabel="Exam PIN Vending Receipt"
+      ariaLabel="Exam PIN Receipt"
       maxWidthClass="max-w-lg"
-      className="dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 print:shadow-none print:border-none print:m-0"
+      className="dark:bg-[#0B1528] text-slate-800 dark:text-slate-100 print:shadow-none print:border-none print:m-0"
     >
       <div className="relative overflow-hidden">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 print:hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-[#081020] print:hidden">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-              Exam PIN Vending Receipt
+              Exam PIN Receipt
             </span>
           </div>
           <button
@@ -462,7 +462,7 @@ export default function ExamPinReceiptModal({
                 }}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-xs text-white shadow-sm transition"
               >
-                <span>Vend Another</span>
+                <span>Buy Another</span>
               </button>
             )}
           </div>

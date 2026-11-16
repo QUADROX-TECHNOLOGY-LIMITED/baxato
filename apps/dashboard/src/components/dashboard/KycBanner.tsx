@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ShieldAlert, AlertCircle } from 'lucide-react';
+import { getStoredBusiness, getStoredUser } from '@/lib/auth-session';
 
 interface KycBannerProps {
   kycStatus: string;
@@ -10,20 +11,26 @@ interface KycBannerProps {
 }
 
 export default function KycBanner({ kycStatus, userRole, onOpenKycModal }: KycBannerProps) {
-  const [activeRole, setActiveRole] = React.useState<string>(userRole || 'BUSINESS_OWNER');
+  const [activeRole, setActiveRole] = React.useState<string>(() => {
+    if (userRole) return userRole;
+    if (typeof window !== 'undefined') {
+      return getStoredBusiness()?.role || getStoredUser()?.role || 'BUSINESS_OWNER';
+    }
+    return 'BUSINESS_OWNER';
+  });
 
   React.useEffect(() => {
-    if (userRole) {
-      setActiveRole(userRole);
-    } else {
-      try {
-        const raw = localStorage.getItem('bx_user');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?.role) setActiveRole(parsed.role);
-        }
-      } catch {}
-    }
+    const syncRole = () => {
+      if (userRole) {
+        setActiveRole(userRole);
+        return;
+      }
+      setActiveRole(getStoredBusiness()?.role || getStoredUser()?.role || 'BUSINESS_OWNER');
+    };
+
+    syncRole();
+    window.addEventListener('bx_business_switched', syncRole);
+    return () => window.removeEventListener('bx_business_switched', syncRole);
   }, [userRole]);
 
   const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';

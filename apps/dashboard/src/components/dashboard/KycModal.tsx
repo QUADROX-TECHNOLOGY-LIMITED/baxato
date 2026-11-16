@@ -1,14 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, AlertCircle, AlertTriangle, Loader2, UserCheck, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 import ModalDialog from '@/components/ModalDialog';
+import {
+  getStoredAuthToken,
+  getStoredUser,
+  handleAuthResponse,
+} from '@/lib/auth-session';
+import { showToast } from '@/lib/toast';
 
 interface KycModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (updatedUser: any) => void;
+  onSuccess: (updatedUser: Record<string, unknown>) => void;
   userFirstName?: string;
   userLastName?: string;
 }
@@ -20,117 +31,145 @@ export default function KycModal({
   userFirstName: initialFirstName,
   userLastName: initialLastName,
 }: KycModalProps) {
+  const titleId = useId();
+  const firstNameId = useId();
+  const lastNameId = useId();
+  const ninId = useId();
+  const ninHintId = useId();
+  const dobId = useId();
+  const errFirstId = useId();
+  const errLastId = useId();
+  const errNinId = useId();
+  const errDobId = useId();
+
+  const firstNameRef = useRef<HTMLInputElement>(null);
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  const ninRef = useRef<HTMLInputElement>(null);
+  const dobRef = useRef<HTMLInputElement>(null);
+
   const [nin, setNin] = useState('');
   const [dob, setDob] = useState('');
   const [firstName, setFirstName] = useState(initialFirstName || '');
   const [lastName, setLastName] = useState(initialLastName || '');
+  const [touched, setTouched] = useState({
+    firstName: false,
+    lastName: false,
+    nin: false,
+    dob: false,
+  });
   const [isVerifying, setIsVerifying] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isVerifiedSuccess, setIsVerifiedSuccess] = useState(false);
 
-  // Sync names from props or localStorage
-  useEffect(() => {
-    if (initialFirstName) setFirstName(initialFirstName);
-    if (initialLastName) setLastName(initialLastName);
-
-    if (!initialFirstName || !initialLastName) {
-      try {
-        const stored = localStorage.getItem('bx_user');
-        if (stored) {
-          const u = JSON.parse(stored);
-          if (u.firstName && !initialFirstName) setFirstName(u.firstName);
-          if (u.lastName && !initialLastName) setLastName(u.lastName);
-        }
-      } catch {}
-    }
-  }, [initialFirstName, initialLastName, isOpen]);
+  const maxAdultDob = new Date(
+    Date.now() - 18 * 365.25 * 24 * 60 * 60 * 1000,
+  )
+    .toISOString()
+    .split('T')[0];
 
   useEffect(() => {
     if (!isOpen) {
       setIsVerifiedSuccess(false);
-      setErrorMessage(null);
+      setSubmitError(null);
       setNin('');
       setDob('');
+      setTouched({ firstName: false, lastName: false, nin: false, dob: false });
+      return;
     }
-  }, [isOpen]);
 
-  const handleNinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
-    setNin(raw);
-    if (errorMessage) setErrorMessage(null);
-  };
+    const stored = getStoredUser();
+    setFirstName(initialFirstName || stored?.firstName || '');
+    setLastName(initialLastName || stored?.lastName || '');
+  }, [initialFirstName, initialLastName, isOpen]);
 
-  const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDob(e.target.value);
-    if (errorMessage) setErrorMessage(null);
-  };
+  const firstNameError =
+    touched.firstName && !firstName.trim() ? 'Enter your first name.' : '';
+  const lastNameError =
+    touched.lastName && !lastName.trim() ? 'Enter your last name.' : '';
+  const ninError =
+    touched.nin && nin.length !== 11
+      ? 'Enter your 11-digit National Identification Number.'
+      : '';
+  const dobError =
+    touched.dob && !dob ? 'Select your date of birth.' : '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setTouched({ firstName: true, lastName: true, nin: true, dob: true });
+
+    if (!firstName.trim()) {
+      firstNameRef.current?.focus();
+      return;
+    }
+    if (!lastName.trim()) {
+      lastNameRef.current?.focus();
+      return;
+    }
     if (nin.length !== 11) {
-      setErrorMessage('Please enter a valid 11-digit NIN.');
+      ninRef.current?.focus();
       return;
     }
     if (!dob) {
-      setErrorMessage('Please enter your date of birth.');
+      dobRef.current?.focus();
       return;
     }
 
     setIsVerifying(true);
-    setErrorMessage(null);
-
     try {
-      const authToken = localStorage.getItem('bx_auth_token') || '';
-
+      const authToken = getStoredAuthToken() || '';
       const response = await fetch('/api/kyc/verify-nin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({ nin, dob, firstName, lastName }),
+        body: JSON.stringify({
+          nin,
+          dob,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
+      if (handleAuthResponse(response, result)) return;
 
-      if (!response.ok) {
-        const errorMsg =
-          result.error?.message ||
-          result.message ||
-          'Verification failed. Please check your NIN and date of birth.';
-        
-        // If name does not match, reset NIN input so merchant can re-enter their own valid NIN
-        if (
-          errorMsg.toLowerCase().includes('match') ||
-          errorMsg.toLowerCase().includes('name') ||
-          result.error?.code === 'NAME_MISMATCH'
-        ) {
-          setNin('');
-        }
-        throw new Error(errorMsg);
+      if (!response.ok || !result?.success) {
+        const msg =
+          result?.error?.message ||
+          result?.message ||
+          'Verification failed. Check your details and try again.';
+        setSubmitError(msg);
+        return;
       }
 
-      // Update cached user in localStorage
       try {
-        const stored = localStorage.getItem('bx_user');
-        if (stored) {
-          const userObj = JSON.parse(stored);
+        const raw = localStorage.getItem('bx_user');
+        if (raw) {
+          const userObj = JSON.parse(raw);
           userObj.kycStatus = 'VERIFIED';
           if (result.data?.user) {
             Object.assign(userObj, result.data.user);
           }
           localStorage.setItem('bx_user', JSON.stringify(userObj));
+          window.dispatchEvent(new CustomEvent('bx_user_updated'));
         }
-      } catch {}
+      } catch {
+        // Ignore storage error
+      }
 
       setIsVerifiedSuccess(true);
-      onSuccess(result.data?.user || { kycStatus: 'VERIFIED', firstName, lastName });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
-      setErrorMessage(msg);
-      if (msg.toLowerCase().includes('match') || msg.toLowerCase().includes('nin')) {
-        setNin('');
-      }
+      showToast({ type: 'success', message: 'Identity verified.' });
+      onSuccess(
+        result.data?.user || {
+          kycStatus: 'VERIFIED',
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        },
+      );
+    } catch {
+      setSubmitError('Network error while verifying identity. Please try again.');
     } finally {
       setIsVerifying(false);
     }
@@ -139,175 +178,273 @@ export default function KycModal({
   return (
     <ModalDialog
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => !isVerifying && onClose()}
       dismissible={!isVerifying}
-      ariaLabel="Identity Verification"
-      maxWidthClass="max-w-sm sm:max-w-md"
-      className="dark:bg-[#0A1220]"
+      ariaLabelledBy={titleId}
+      maxWidthClass="max-w-md"
+      className="bg-white dark:bg-[#0B1528]"
     >
-      <div className="relative overflow-hidden">
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={isVerifying}
-          className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      {isVerifiedSuccess ? (
+        <div className="p-6 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-6 h-6" aria-hidden="true" />
+          </div>
 
-        <div className="p-5 sm:p-6">
-          <AnimatePresence mode="wait">
-            {isVerifiedSuccess ? (
-              <motion.div
-                key="kyc-success"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="text-center py-2 space-y-4"
-              >
-                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-7 h-7" />
-                </div>
+          <div className="space-y-1">
+            <h2
+              id={titleId}
+              className="text-base font-semibold text-slate-900 dark:text-white"
+            >
+              Identity verified
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Your NIMC identity details match. Wallet funding and live access are active.
+            </p>
+          </div>
 
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    Identity Verified
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Your NIMC records matched. Live transactions and wallet funding are now active.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors"
-                >
-                  Continue
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="kyc-form"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-4"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                      Identity Verification
-                    </h2>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Verify your NIMC national identity details
-                    </p>
-                  </div>
-                </div>
-
-                {errorMessage && (
-                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                      <span>Verification Note</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed pl-5.5">{errorMessage}</p>
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
-                  {/* Editable Name Inputs */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="First Name"
-                        value={firstName}
-                        onChange={(e) => {
-                          setFirstName(e.target.value);
-                          if (errorMessage) setErrorMessage(null);
-                        }}
-                        className="w-full h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Last Name"
-                        value={lastName}
-                        onChange={(e) => {
-                          setLastName(e.target.value);
-                          if (errorMessage) setErrorMessage(null);
-                        }}
-                        className="w-full h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      NIN (11 digits)
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={11}
-                      placeholder="e.g. 12345678901"
-                      value={nin}
-                      onChange={handleNinChange}
-                      className="w-full h-10 px-3 text-sm font-mono rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Date of Birth
-                    </label>
-                    <input
-                      type="date"
-                      value={dob}
-                      max={
-                        new Date(Date.now() - 18 * 365.25 * 24 * 60 * 60 * 1000)
-                          .toISOString()
-                          .split('T')[0]
-                      }
-                      onChange={handleDobChange}
-                      className="w-full h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-[#070D18] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-[#126BEB] focus:ring-1 focus:ring-[#126BEB] transition-colors"
-                    />
-                  </div>
-
-                  <div className="pt-1">
-                    <button
-                      type="submit"
-                      disabled={isVerifying || nin.length !== 11 || !dob}
-                      className="w-full h-10 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] active:bg-[#094bb5] text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-blue-500/20"
-                    >
-                      {isVerifying ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Verifying</span>
-                        </>
-                      ) : (
-                        <span>Verify Identity</span>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <button
+            type="button"
+            autoFocus
+            onClick={onClose}
+            className="w-full h-11 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-sm transition-colors cursor-pointer"
+          >
+            Done
+          </button>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#126BEB] dark:text-[#38BDF8] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <h2
+                  id={titleId}
+                  className="text-base font-semibold text-slate-900 dark:text-white truncate"
+                >
+                  Identity Verification
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Verify with your NIMC National Identification Number
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => !isVerifying && onClose()}
+              disabled={isVerifying}
+              aria-label="Close verification dialog"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} noValidate className="p-6 space-y-4">
+            {submitError && (
+              <div
+                role="alert"
+                className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs font-medium flex items-start gap-2"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{submitError}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor={firstNameId}
+                  className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+                >
+                  First name
+                </label>
+                <input
+                  ref={firstNameRef}
+                  id={firstNameId}
+                  name="firstName"
+                  type="text"
+                  required
+                  autoComplete="given-name"
+                  value={firstName}
+                  aria-invalid={Boolean(firstNameError)}
+                  aria-describedby={firstNameError ? errFirstId : undefined}
+                  onChange={(e) => {
+                    setFirstName(e.target.value);
+                    if (submitError) setSubmitError(null);
+                  }}
+                  onBlur={() => {
+                    if (firstName || touched.firstName) {
+                      setTouched((prev) => ({ ...prev, firstName: true }));
+                    }
+                  }}
+                  placeholder="First name"
+                  className={`w-full h-11 px-3.5 text-base sm:text-sm rounded-lg border bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                    firstNameError
+                      ? 'border-red-500 focus:ring-red-500/40'
+                      : 'border-slate-300 dark:border-slate-700 focus:ring-[#126BEB]'
+                  }`}
+                />
+                {firstNameError && (
+                  <p id={errFirstId} className="text-xs text-red-600 dark:text-red-400">
+                    {firstNameError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor={lastNameId}
+                  className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+                >
+                  Last name
+                </label>
+                <input
+                  ref={lastNameRef}
+                  id={lastNameId}
+                  name="lastName"
+                  type="text"
+                  required
+                  autoComplete="family-name"
+                  value={lastName}
+                  aria-invalid={Boolean(lastNameError)}
+                  aria-describedby={lastNameError ? errLastId : undefined}
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    if (submitError) setSubmitError(null);
+                  }}
+                  onBlur={() => {
+                    if (lastName || touched.lastName) {
+                      setTouched((prev) => ({ ...prev, lastName: true }));
+                    }
+                  }}
+                  placeholder="Last name"
+                  className={`w-full h-11 px-3.5 text-base sm:text-sm rounded-lg border bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                    lastNameError
+                      ? 'border-red-500 focus:ring-red-500/40'
+                      : 'border-slate-300 dark:border-slate-700 focus:ring-[#126BEB]'
+                  }`}
+                />
+                {lastNameError && (
+                  <p id={errLastId} className="text-xs text-red-600 dark:text-red-400">
+                    {lastNameError}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor={ninId}
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                National Identification Number (NIN)
+              </label>
+              <span id={ninHintId} className="block text-[11px] text-slate-500 dark:text-slate-400">
+                11 digits matching your legal name
+              </span>
+              <input
+                ref={ninRef}
+                id={ninId}
+                name="nin"
+                type="text"
+                inputMode="numeric"
+                required
+                autoFocus
+                maxLength={11}
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="12345678901"
+                value={nin}
+                aria-invalid={Boolean(ninError)}
+                aria-describedby={ninError ? `${ninHintId} ${errNinId}` : ninHintId}
+                onChange={(e) => {
+                  setNin(e.target.value.replace(/\D/g, '').slice(0, 11));
+                  if (submitError) setSubmitError(null);
+                }}
+                onBlur={() => {
+                  if (nin || touched.nin) {
+                    setTouched((prev) => ({ ...prev, nin: true }));
+                  }
+                }}
+                className={`w-full h-11 px-3.5 text-base sm:text-sm font-mono rounded-lg border bg-white dark:bg-[#070D18] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                  ninError
+                    ? 'border-red-500 focus:ring-red-500/40'
+                    : 'border-slate-300 dark:border-slate-700 focus:ring-[#126BEB]'
+                }`}
+              />
+              {ninError && (
+                <p id={errNinId} className="text-xs text-red-600 dark:text-red-400">
+                  {ninError}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor={dobId}
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                Date of birth
+              </label>
+              <input
+                ref={dobRef}
+                id={dobId}
+                name="dob"
+                type="date"
+                required
+                max={maxAdultDob}
+                value={dob}
+                aria-invalid={Boolean(dobError)}
+                aria-describedby={dobError ? errDobId : undefined}
+                onChange={(e) => {
+                  setDob(e.target.value);
+                  if (submitError) setSubmitError(null);
+                }}
+                onBlur={() => {
+                  if (dob || touched.dob) {
+                    setTouched((prev) => ({ ...prev, dob: true }));
+                  }
+                }}
+                className={`w-full h-11 px-3.5 text-base sm:text-sm rounded-lg border bg-white dark:bg-[#070D18] text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${
+                  dobError
+                    ? 'border-red-500 focus:ring-red-500/40'
+                    : 'border-slate-300 dark:border-slate-700 focus:ring-[#126BEB]'
+                }`}
+              />
+              {dobError && (
+                <p id={errDobId} className="text-xs text-red-600 dark:text-red-400">
+                  {dobError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isVerifying}
+                onClick={onClose}
+                className="h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isVerifying}
+                className="h-11 px-5 rounded-lg bg-[#126BEB] hover:bg-[#0B5CC7] text-white font-medium text-sm transition-colors inline-flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isVerifying && (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                )}
+                <span>Verify</span>
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </ModalDialog>
   );
 }

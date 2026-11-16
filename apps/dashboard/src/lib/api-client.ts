@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+import net from 'node:net';
 import { headers } from 'next/headers';
 
 /**
@@ -58,27 +60,134 @@ export interface ProxyResponse<T = any> {
   data: T;
 }
 
-function buildForwardedForChain(getHeader: (name: string) => string | null): string | undefined {
+const CLOUDFLARE_IPV4_CIDRS: ReadonlyArray<readonly [number, number]> = [
+  [0xadf53000, 20], // 173.245.48.0/20
+  [0x6715f400, 22], // 103.21.244.0/22
+  [0x6716c800, 22], // 103.22.200.0/22
+  [0x671f0400, 22], // 103.31.4.0/22
+  [0x8d654000, 18], // 141.101.64.0/18
+  [0x6ca2c000, 18], // 108.162.192.0/18
+  [0xbe5df000, 20], // 190.93.240.0/20
+  [0xbc726000, 20], // 188.114.96.0/20
+  [0xc5eaf000, 22], // 197.234.240.0/22
+  [0xc6298000, 17], // 198.41.128.0/17
+  [0xa29e0000, 15], // 162.158.0.0/15
+  [0x68100000, 13], // 104.16.0.0/13
+  [0x68180000, 14], // 104.24.0.0/14
+  [0xac400000, 13], // 172.64.0.0/13
+  [0x83004800, 22], // 131.0.72.0/22
+];
+
+function ipv4ToUint32(ip: string): number | null {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return null;
+  const [a, b, c, d] = parts as [number, number, number, number];
+  return (((a << 24) >>> 0) + (b << 16) + (c << 8) + d) >>> 0;
+}
+
+function isCloudflareOrPrivateIp(ip: string): boolean {
+  const version = net.isIP(ip);
+  if (version === 4) {
+    const parts = ip.split('.').map(Number);
+    const a = parts[0] ?? 0;
+    const b = parts[1] ?? 0;
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 100 && b >= 64 && b <= 127)
+    ) {
+      return true;
+    }
+    const intVal = ipv4ToUint32(ip);
+    if (intVal !== null) {
+      return CLOUDFLARE_IPV4_CIDRS.some(([network, prefix]) => {
+        const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+        return (intVal & mask) === (network & mask);
+      });
+    }
+    return false;
+  }
+  if (version === 6) {
+    const lower = ip.toLowerCase();
+    return lower === '::' || lower === '::1' || /^(fc|fd)/i.test(lower) || /^fe[89ab]/i.test(lower);
+  }
+  return true;
+}
+
+function normalizeClientIpToken(raw?: string | null): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  let candidate = raw.trim().replace(/^["']|["']$/g, '');
+  if (!candidate) return null;
+  if (candidate.startsWith('[')) {
+    const end = candidate.indexOf(']');
+    if (end !== -1) candidate = candidate.slice(1, end);
+  } else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(candidate)) {
+    candidate = candidate.replace(/:\d+$/, '');
+  }
+  if (/^::ffff:/i.test(candidate)) {
+    candidate = candidate.slice(7);
+  }
+  if (candidate === '::1') return '127.0.0.1';
+  return net.isIP(candidate) > 0 ? candidate : null;
+}
+
+function resolveEdgeClientContext(getHeader: (name: string) => string | null): {
+  forwardedFor?: string;
+  signedHeaders: Record<string, string>;
+} {
   const candidates: string[] = [];
   const pushParts = (raw: string | null) => {
     if (!raw) return;
     for (const part of raw.split(',')) {
-      const clean = part.trim();
+      const clean = normalizeClientIpToken(part);
       if (clean && !candidates.includes(clean)) {
         candidates.push(clean);
       }
     }
   };
 
-  // Read edge IP headers locally ONLY — never forward Cloudflare-reserved headers
-  // (such as cf-connecting-ip or true-client-ip) on outbound requests, because
-  // Cloudflare rejects external requests carrying those headers with HTTP 403.
-  pushParts(getHeader('cf-connecting-ip'));
-  pushParts(getHeader('true-client-ip'));
+  // Read Cloudflare/proxy headers locally ONLY — never send Cloudflare-reserved
+  // headers (cf-connecting-ip, true-client-ip) on outbound requests to API_URL.
+  const cfConnectingIp = normalizeClientIpToken(getHeader('cf-connecting-ip'));
+  const trueClientIp = normalizeClientIpToken(getHeader('true-client-ip'));
+  if (cfConnectingIp) candidates.push(cfConnectingIp);
+  if (trueClientIp && !candidates.includes(trueClientIp)) candidates.push(trueClientIp);
+  pushParts(getHeader('x-client-ip'));
   pushParts(getHeader('x-forwarded-for'));
   pushParts(getHeader('x-real-ip'));
 
-  return candidates.length > 0 ? candidates.join(', ') : undefined;
+  const realClientIp =
+    cfConnectingIp ||
+    trueClientIp ||
+    candidates.find((ip) => !isCloudflareOrPrivateIp(ip)) ||
+    candidates.find((ip) => ip !== '127.0.0.1') ||
+    candidates[0];
+
+  const signedHeaders: Record<string, string> = {};
+  const secret =
+    process.env.PROXY_IP_SECRET ||
+    process.env.CLERK_SECRET_KEY ||
+    process.env.JWT_SECRET;
+
+  if (realClientIp && secret) {
+    const ts = String(Date.now());
+    const sig = crypto
+      .createHmac('sha256', secret)
+      .update(`${realClientIp}:${ts}`)
+      .digest('hex');
+    signedHeaders['x-baxato-client-ip'] = realClientIp;
+    signedHeaders['x-baxato-client-ts'] = ts;
+    signedHeaders['x-baxato-client-sig'] = sig;
+  }
+
+  return {
+    forwardedFor: candidates.length > 0 ? candidates.join(', ') : undefined,
+    signedHeaders,
+  };
 }
 
 /**
@@ -108,28 +217,39 @@ export async function proxyToBackendApi<T = any>(
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const targetUrl = `${baseUrl}${normalizedPath}`;
 
-  // Forward only safe standard headers (user-agent, x-forwarded-for, x-business-id)
+  // Forward safe client telemetry (never send Cloudflare-reserved cf-connecting-ip / true-client-ip)
   const clientHeaders: Record<string, string> = {};
 
   if (incomingRequest) {
     const reqUa = incomingRequest.headers.get('user-agent');
-    const reqFwd = buildForwardedForChain((name) => incomingRequest.headers.get(name));
     const reqBiz = incomingRequest.headers.get('x-business-id');
+    const edgeCtx = resolveEdgeClientContext((name) => incomingRequest.headers.get(name));
     if (reqUa) clientHeaders['user-agent'] = reqUa;
-    if (reqFwd) clientHeaders['x-forwarded-for'] = reqFwd;
+    if (edgeCtx.forwardedFor) clientHeaders['x-forwarded-for'] = edgeCtx.forwardedFor;
+    Object.assign(clientHeaders, edgeCtx.signedHeaders);
     if (reqBiz) clientHeaders['x-business-id'] = reqBiz;
   }
 
-  if (!clientHeaders['user-agent'] || !clientHeaders['x-forwarded-for'] || !clientHeaders['x-business-id']) {
+  if (
+    !clientHeaders['user-agent'] ||
+    !clientHeaders['x-forwarded-for'] ||
+    !clientHeaders['x-baxato-client-ip'] ||
+    !clientHeaders['x-business-id']
+  ) {
     try {
       const h = headers();
       if (!clientHeaders['user-agent']) {
         const ua = h.get('user-agent');
         if (ua) clientHeaders['user-agent'] = ua;
       }
-      if (!clientHeaders['x-forwarded-for']) {
-        const fwd = buildForwardedForChain((name) => h.get(name));
-        if (fwd) clientHeaders['x-forwarded-for'] = fwd;
+      if (!clientHeaders['x-forwarded-for'] || !clientHeaders['x-baxato-client-ip']) {
+        const edgeCtx = resolveEdgeClientContext((name) => h.get(name));
+        if (!clientHeaders['x-forwarded-for'] && edgeCtx.forwardedFor) {
+          clientHeaders['x-forwarded-for'] = edgeCtx.forwardedFor;
+        }
+        if (!clientHeaders['x-baxato-client-ip']) {
+          Object.assign(clientHeaders, edgeCtx.signedHeaders);
+        }
       }
       if (!clientHeaders['x-business-id']) {
         const biz = h.get('x-business-id');

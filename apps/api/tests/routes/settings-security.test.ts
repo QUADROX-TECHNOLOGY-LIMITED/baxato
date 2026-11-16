@@ -559,4 +559,48 @@ describe('Settings & Security Endpoints (/users/me/security & /auth/change-passw
     expect(loginLog.category).toBe('auth');
     expect(loginLog.deviceName).toContain('Microsoft Edge');
   });
+
+  it('prefers HMAC-signed proxy visitor IP over Cloudflare server IP while rejecting tampered signatures', async () => {
+    const crypto = await import('node:crypto');
+    const { env } = await import('@baxato/config');
+    const secret = env.CLERK_SECRET_KEY || env.JWT_SECRET;
+    const realVisitorIp = '102.88.55.14';
+    const ts = String(Date.now());
+    const validSig = crypto
+      .createHmac('sha256', secret)
+      .update(`${realVisitorIp}:${ts}`)
+      .digest('hex');
+
+    // 1. Valid signed proxy header recovers real visitor IP even when CF-Connecting-IP and XFF hold Cloudflare/server IPs
+    const validRes = await app.inject({
+      method: 'GET',
+      url: '/users/me/security',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+        'cf-connecting-ip': '172.68.10.22',
+        'x-forwarded-for': '104.24.10.1, 18.175.51.199',
+        'x-baxato-client-ip': realVisitorIp,
+        'x-baxato-client-ts': ts,
+        'x-baxato-client-sig': validSig,
+      },
+    });
+    expect(validRes.statusCode).toBe(200);
+    expect(validRes.json().data.currentSession.ipAddress).toBe(realVisitorIp);
+
+    // 2. Tampered signature is rejected; Cloudflare authoritative visitor IP (non-CF edge) is used over spoofed XFF
+    const spoofedRes = await app.inject({
+      method: 'GET',
+      url: '/users/me/security',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+        'cf-connecting-ip': '197.210.70.42',
+        'x-forwarded-for': '8.8.8.8',
+        'x-baxato-client-ip': '8.8.4.4',
+        'x-baxato-client-ts': ts,
+        'x-baxato-client-sig': 'deadbeefdeadbeef',
+      },
+    });
+    expect(spoofedRes.statusCode).toBe(200);
+    expect(spoofedRes.json().data.currentSession.ipAddress).toBe('197.210.70.42');
+  });
 });

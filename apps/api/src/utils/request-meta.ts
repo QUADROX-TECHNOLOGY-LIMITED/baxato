@@ -1,5 +1,7 @@
+import crypto from 'node:crypto';
 import net from 'node:net';
 import type { FastifyRequest } from 'fastify';
+import { env } from '@baxato/config';
 
 export type DeviceCategory = 'mobile' | 'desktop' | 'api' | 'browser';
 
@@ -128,32 +130,137 @@ export function isPrivateOrLoopbackIp(ip: string): boolean {
   return true;
 }
 
+const CLOUDFLARE_IPV4_CIDRS: ReadonlyArray<readonly [number, number]> = [
+  [0xadf53000, 20], // 173.245.48.0/20
+  [0x6715f400, 22], // 103.21.244.0/22
+  [0x6716c800, 22], // 103.22.200.0/22
+  [0x671f0400, 22], // 103.31.4.0/22
+  [0x8d654000, 18], // 141.101.64.0/18
+  [0x6ca2c000, 18], // 108.162.192.0/18
+  [0xbe5df000, 20], // 190.93.240.0/20
+  [0xbc726000, 20], // 188.114.96.0/20
+  [0xc5eaf000, 22], // 197.234.240.0/22
+  [0xc6298000, 17], // 198.41.128.0/17
+  [0xa29e0000, 15], // 162.158.0.0/15
+  [0x68100000, 13], // 104.16.0.0/13
+  [0x68180000, 14], // 104.24.0.0/14
+  [0xac400000, 13], // 172.64.0.0/13
+  [0x83004800, 22], // 131.0.72.0/22
+];
+
+function ipv4ToUint32(ip: string): number | null {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return null;
+  const [a, b, c, d] = parts as [number, number, number, number];
+  return (((a << 24) >>> 0) + (b << 16) + (c << 8) + d) >>> 0;
+}
+
+export function isCloudflareProxyIp(ip: string): boolean {
+  if (net.isIP(ip) !== 4) return false;
+  const intVal = ipv4ToUint32(ip);
+  if (intVal === null) return false;
+  return CLOUDFLARE_IPV4_CIDRS.some(([network, prefix]) => {
+    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+    return (intVal & mask) === (network & mask);
+  });
+}
+
+function getProxySigningSecrets(): string[] {
+  const raw = [
+    process.env.PROXY_IP_SECRET,
+    env.CLERK_SECRET_KEY,
+    env.JWT_SECRET,
+  ];
+  const unique: string[] = [];
+  for (const s of raw) {
+    if (s && typeof s === 'string' && !unique.includes(s)) {
+      unique.push(s);
+    }
+  }
+  return unique;
+}
+
 /**
- * Extracts the real client IP from Cloudflare, Traefik, Nginx, or Fastify headers.
- * Prefers the first valid publicly routable IP so Docker/overlay bridge hops
- * (`10.x.x.x`, `172.17.x.x`, `127.0.0.1`) do not mask the visitor's real address.
+ * Verifies the HMAC-SHA256 signed client IP header forwarded by the trusted
+ * BAXATO Next.js proxy so Cloudflare/Traefik hops between dashboard and API
+ * preserve the authentic visitor IP without permitting arbitrary header spoofing.
  */
-export function extractClientIp(request: Pick<FastifyRequest, 'headers' | 'ip'>): string {
-  const rawCandidates: string[] = [];
+function verifySignedProxyClientIp(
+  request: Pick<FastifyRequest, 'headers'>,
+): string | null {
+  const rawIp = readHeaderValue(request.headers['x-baxato-client-ip']);
+  const rawTs = readHeaderValue(request.headers['x-baxato-client-ts']);
+  const rawSig = readHeaderValue(request.headers['x-baxato-client-sig']);
+  if (!rawIp || !rawTs || !rawSig) return null;
 
-  const cfIp = readHeaderValue(request.headers['cf-connecting-ip']);
-  if (cfIp) rawCandidates.push(cfIp);
+  const cleanIp = normalizeIpAddress(rawIp);
+  if (!cleanIp) return null;
 
-  const trueClientIp = readHeaderValue(request.headers['true-client-ip']);
-  if (trueClientIp) rawCandidates.push(trueClientIp);
+  const tsNum = Number(rawTs);
+  if (!Number.isFinite(tsNum) || Math.abs(Date.now() - tsNum) > 120_000) {
+    return null;
+  }
 
-  const xClientIp = readHeaderValue(request.headers['x-client-ip']);
-  if (xClientIp) rawCandidates.push(xClientIp);
+  const providedBuf = Buffer.from(rawSig.trim(), 'hex');
+  if (providedBuf.length === 0) return null;
 
-  const xForwardedFor = readHeaderValue(request.headers['x-forwarded-for']);
-  if (xForwardedFor) {
-    for (const part of xForwardedFor.split(',')) {
-      rawCandidates.push(part);
+  for (const secret of getProxySigningSecrets()) {
+    const expectedHex = crypto
+      .createHmac('sha256', secret)
+      .update(`${cleanIp}:${rawTs.trim()}`)
+      .digest('hex');
+    const expectedBuf = Buffer.from(expectedHex, 'hex');
+    if (
+      expectedBuf.length === providedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, providedBuf)
+    ) {
+      return cleanIp;
     }
   }
 
+  return null;
+}
+
+/**
+ * Extracts the real client IP from signed dashboard proxy headers, Cloudflare,
+ * Traefik, Nginx, or Fastify headers. Ignores private Docker/bridge hops and
+ * avoids masking visitor IPs behind Cloudflare Anycast proxy addresses.
+ */
+export function extractClientIp(request: Pick<FastifyRequest, 'headers' | 'ip'>): string {
+  const signedProxyIp = verifySignedProxyClientIp(request);
+  if (signedProxyIp) {
+    return signedProxyIp;
+  }
+
+  const rawCandidates: string[] = [];
+  const cfIp = readHeaderValue(request.headers['cf-connecting-ip']);
+  const trueClientIp = readHeaderValue(request.headers['true-client-ip']);
+  const xClientIp = readHeaderValue(request.headers['x-client-ip']);
+  const xForwardedFor = readHeaderValue(request.headers['x-forwarded-for']);
   const xRealIp = readHeaderValue(request.headers['x-real-ip']);
-  if (xRealIp) rawCandidates.push(xRealIp);
+
+  if (cfIp) {
+    // Request arrived directly through Cloudflare without a signed dashboard proxy hop:
+    // prioritize Cloudflare's authoritative headers before untrusted X-Forwarded-For.
+    rawCandidates.push(cfIp);
+    if (trueClientIp) rawCandidates.push(trueClientIp);
+    if (xRealIp) rawCandidates.push(xRealIp);
+    if (xForwardedFor) {
+      for (const part of xForwardedFor.split(',')) {
+        rawCandidates.push(part);
+      }
+    }
+  } else {
+    // Request arrived directly or via internal proxy / Nginx / Traefik without CF-Connecting-IP.
+    if (trueClientIp) rawCandidates.push(trueClientIp);
+    if (xClientIp) rawCandidates.push(xClientIp);
+    if (xForwardedFor) {
+      for (const part of xForwardedFor.split(',')) {
+        rawCandidates.push(part);
+      }
+    }
+    if (xRealIp) rawCandidates.push(xRealIp);
+  }
 
   if (request.ip) {
     rawCandidates.push(request.ip);
@@ -166,6 +273,11 @@ export function extractClientIp(request: Pick<FastifyRequest, 'headers' | 'ip'>)
       normalized.push(clean);
     }
   }
+
+  const visitorPublicIp = normalized.find(
+    (ip) => !isPrivateOrLoopbackIp(ip) && !isCloudflareProxyIp(ip),
+  );
+  if (visitorPublicIp) return visitorPublicIp;
 
   const publicIp = normalized.find((ip) => !isPrivateOrLoopbackIp(ip));
   if (publicIp) return publicIp;
