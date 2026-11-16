@@ -18,11 +18,59 @@ export function resolveIsDark(mode?: string | null): boolean {
   return effective === 'dark' || ((!effective || effective === 'system') && prefersDark);
 }
 
+export interface ApplyThemeOptions {
+  forceMetaRefresh?: boolean;
+  silent?: boolean;
+}
+
+function replaceThemeColorMetas(isDark: boolean, mode: ThemeMode): void {
+  if (typeof document === 'undefined' || !document.head) return;
+
+  const oldMetas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
+  for (const el of oldMetas) {
+    el.remove();
+  }
+
+  if (mode === 'system') {
+    const lightMeta = document.createElement('meta');
+    lightMeta.name = 'theme-color';
+    lightMeta.media = '(prefers-color-scheme: light)';
+    lightMeta.content = THEME_LIGHT_BG;
+    lightMeta.dataset.baxatoThemeColor = 'system-light';
+
+    const darkMeta = document.createElement('meta');
+    darkMeta.name = 'theme-color';
+    darkMeta.media = '(prefers-color-scheme: dark)';
+    darkMeta.content = THEME_DARK_BG;
+    darkMeta.dataset.baxatoThemeColor = 'system-dark';
+
+    // Append the currently active scheme meta first so WebKit/Blink immediately resolve it on insertion
+    if (isDark) {
+      document.head.appendChild(darkMeta);
+      document.head.appendChild(lightMeta);
+    } else {
+      document.head.appendChild(lightMeta);
+      document.head.appendChild(darkMeta);
+    }
+    return;
+  }
+
+  const singleMeta = document.createElement('meta');
+  singleMeta.name = 'theme-color';
+  singleMeta.id = 'meta-theme-color';
+  singleMeta.content = isDark ? THEME_DARK_BG : THEME_LIGHT_BG;
+  document.head.appendChild(singleMeta);
+}
+
 /**
  * Synchronizes root document chrome (`dark` class, `<meta name="color-scheme">`,
  * root canvas background, and `<meta name="theme-color">`) strictly with the active theme.
  */
-export function applyThemeChrome(isDark: boolean, explicitMode?: ThemeMode): void {
+export function applyThemeChrome(
+  isDark: boolean,
+  explicitMode?: ThemeMode,
+  options: ApplyThemeOptions = {},
+): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   const baseBg = isDark ? THEME_DARK_BG : THEME_LIGHT_BG;
@@ -30,7 +78,11 @@ export function applyThemeChrome(isDark: boolean, explicitMode?: ThemeMode): voi
     explicitMode ??
     resolveThemeMode(typeof localStorage !== 'undefined' ? localStorage.getItem('baxato_theme') : null);
   const schemeValue = stored === 'system' ? 'light dark' : stored;
+  const signature = `${stored}:${isDark ? 'dark' : 'light'}`;
+  const prevSignature = root.dataset.baxatoThemeSig;
+  const signatureChanged = prevSignature !== signature;
 
+  root.dataset.baxatoThemeSig = signature;
   root.classList.toggle('dark', isDark);
 
   let metaScheme =
@@ -58,29 +110,25 @@ export function applyThemeChrome(isDark: boolean, explicitMode?: ThemeMode): voi
     document.body.style.backgroundColor = baseBg;
   }
 
-  let existing =
-    (document.getElementById('meta-theme-color') as HTMLMetaElement | null) ||
-    (document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null);
-
-  if (!existing) {
-    existing = document.createElement('meta');
-    existing.name = 'theme-color';
-    existing.id = 'meta-theme-color';
-    document.head.appendChild(existing);
+  if (signatureChanged || options.forceMetaRefresh) {
+    replaceThemeColorMetas(isDark, stored);
   }
 
-  if (existing.getAttribute('content')?.toLowerCase() !== baseBg.toLowerCase()) {
-    existing.setAttribute('content', baseBg);
+  if (typeof window !== 'undefined' && !options.silent && signatureChanged) {
+    window.dispatchEvent(
+      new CustomEvent('baxato:theme-changed', {
+        detail: { isDark, mode: stored },
+      }),
+    );
   }
 }
 
 /**
- * Legacy helper kept as a synchronized no-op while remaining call sites finish migrating
- * to native top-layer `<dialog>` modals whose `::backdrop` derives directly from theme tokens.
+ * Synchronizes mobile status/navigation chrome theme-color when overlays open or close.
  */
 export function registerModalOverlay(): () => void {
-  applyThemeChrome(resolveIsDark());
+  applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true });
   return () => {
-    applyThemeChrome(resolveIsDark());
+    applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true });
   };
 }

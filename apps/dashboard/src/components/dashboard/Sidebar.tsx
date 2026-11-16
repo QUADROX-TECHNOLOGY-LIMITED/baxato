@@ -31,6 +31,7 @@ import {
   clearSessionAndRedirect,
   type StoredUser,
 } from '@/lib/auth-session';
+import { applyThemeChrome, resolveIsDark } from '@/lib/theme-sync';
 
 interface SidebarProps {
   businessName: string;
@@ -67,7 +68,9 @@ export default function Sidebar({
 
   const [activeRole, setActiveRole] = useState<string>(userRole || 'BUSINESS_OWNER');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [backdropEpoch, setBackdropEpoch] = useState(0);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
 
   const [storedUser, setStoredUser] = useState<StoredUser | null>(() => {
     if (typeof window !== 'undefined') return getStoredUser();
@@ -115,6 +118,52 @@ export default function Sidebar({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Re-sync mobile browser top/bottom bar chrome & fixed-layer edge tinting if theme changes while drawer is open
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+
+    let raf1 = 0;
+    let raf2 = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const refreshMobileDrawerLayer = () => {
+      if (window.innerWidth >= 1024) return;
+      setBackdropEpoch((prev) => prev + 1);
+      applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true, silent: true });
+
+      const asideEl = asideRef.current;
+      if (asideEl) {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+        raf1 = requestAnimationFrame(() => {
+          asideEl.style.transform = 'translate3d(0.01px, 0, 0)';
+          void asideEl.offsetHeight;
+          raf2 = requestAnimationFrame(() => {
+            asideEl.style.transform = '';
+          });
+        });
+      }
+    };
+
+    const handleSystemOrThemeChange = () => {
+      refreshMobileDrawerLayer();
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(refreshMobileDrawerLayer, 200);
+    };
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', handleSystemOrThemeChange);
+    window.addEventListener('baxato:theme-changed', handleSystemOrThemeChange);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      if (settleTimer) clearTimeout(settleTimer);
+      mediaQuery.removeEventListener('change', handleSystemOrThemeChange);
+      window.removeEventListener('baxato:theme-changed', handleSystemOrThemeChange);
+    };
+  }, [isOpen]);
 
   const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
 
@@ -241,14 +290,16 @@ export default function Sidebar({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
+          key={`sidebar-backdrop-${backdropEpoch}`}
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-white/75 dark:bg-[#070D18]/80 backdrop-blur-sm lg:hidden"
         />
       )}
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-white dark:bg-[#060D18] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        ref={asideRef}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-white dark:bg-[#070D18] border-r border-slate-200/80 dark:border-slate-800/80 shadow-2xl shadow-slate-900/10 dark:shadow-black/50 lg:shadow-none flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -343,7 +394,7 @@ export default function Sidebar({
         </div>
 
         {/* Bottom Profile Pill Container (Directly emulating the reference layout) */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#060D18]">
+        <div className="p-3 border-t border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#070D18]">
           <div className="relative" ref={profileMenuRef}>
             {/* Popover Menu Floating Upward */}
             {isProfileMenuOpen && (

@@ -32,7 +32,7 @@ export default function ThemeToggle() {
       localStorage.setItem('baxato_theme', mode);
     }
     setIsOpen(false);
-    applyThemeChrome(resolveIsDark(mode), mode);
+    applyThemeChrome(resolveIsDark(mode), mode, { forceMetaRefresh: true });
   };
 
   const ActiveIcon = themeMode === 'light' ? Sun : themeMode === 'dark' ? Moon : Laptop;
