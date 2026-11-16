@@ -81,14 +81,6 @@ describe('Wallet Engine & Concurrency Locking Endpoints (/wallets/*)', () => {
         lockedBalance: 0n,
         version: 1,
       },
-      {
-        id: 'wal_comm_test',
-        businessId: testBizId,
-        type: WalletType.COMMISSION,
-        balance: 250000n, // ₦2,500.00
-        lockedBalance: 0n,
-        version: 1,
-      },
     );
 
     // 4. Seed Developer Membership
@@ -126,7 +118,7 @@ describe('Wallet Engine & Concurrency Locking Endpoints (/wallets/*)', () => {
     await app.close();
   });
 
-  it('GET /wallets returns both MAIN and COMMISSION wallets for active business', async () => {
+  it('GET /wallets returns only MAIN wallet for active business', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/wallets',
@@ -139,7 +131,8 @@ describe('Wallet Engine & Concurrency Locking Endpoints (/wallets/*)', () => {
     expect(res.statusCode).toBe(200);
     const body: ApiResponse<{ wallets: WalletBalanceDto[] }> = res.json();
     expect(body.success).toBe(true);
-    expect(body.data?.wallets).toHaveLength(2);
+    expect(body.data?.wallets).toHaveLength(1);
+    expect(body.data?.wallets[0]?.type).toBe(WalletType.MAIN);
   });
 
   it('GET /wallets/main returns MAIN wallet details', async () => {
@@ -157,86 +150,6 @@ describe('Wallet Engine & Concurrency Locking Endpoints (/wallets/*)', () => {
     expect(body.success).toBe(true);
     expect(body.data?.wallet.type).toBe('MAIN');
     expect(body.data?.wallet.balanceNaira).toBe(10000);
-  });
-
-  it('GET /wallets/commission returns COMMISSION wallet details', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/wallets/commission',
-      headers: {
-        authorization: `Bearer ${ownerToken}`,
-        'x-business-id': testBizId,
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body: ApiResponse<{ wallet: WalletBalanceDto }> = res.json();
-    expect(body.success).toBe(true);
-    expect(body.data?.wallet.type).toBe('COMMISSION');
-    expect(body.data?.wallet.balanceNaira).toBe(2500);
-  });
-
-  it('POST /wallets/transfer allows owner to sweep commission earnings to main wallet', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/wallets/transfer',
-      headers: {
-        authorization: `Bearer ${ownerToken}`,
-        'x-business-id': testBizId,
-      },
-      payload: {
-        amountNaira: 1000,
-        narration: 'Sweeping daily commissions',
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body: ApiResponse<{
-      transfer: {
-        amountNaira: number;
-        commissionWallet: WalletBalanceDto;
-        mainWallet: WalletBalanceDto;
-      };
-    }> = res.json();
-
-    expect(body.success).toBe(true);
-    expect(body.data?.transfer.commissionWallet.balanceNaira).toBe(1500); // ₦2500 - ₦1000 = ₦1500
-    expect(body.data?.transfer.mainWallet.balanceNaira).toBe(11000); // ₦10000 + ₦1000 = ₦11000
-  });
-
-  it('POST /wallets/transfer blocks Developer from withdrawing/transferring wallet funds with 403', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/wallets/transfer',
-      headers: {
-        authorization: `Bearer ${devToken}`,
-        'x-business-id': testBizId,
-      },
-      payload: {
-        amountNaira: 500,
-      },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-
-  it('POST /wallets/transfer rejects transfer exceeding commission balance with 400', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/wallets/transfer',
-      headers: {
-        authorization: `Bearer ${ownerToken}`,
-        'x-business-id': testBizId,
-      },
-      payload: {
-        amountNaira: 50000, // Exceeds available ₦1500
-      },
-    });
-
-    expect(res.statusCode).toBe(402);
-    const body: ApiResponse = res.json();
-    expect(body.success).toBe(false);
-    expect(body.error?.code).toBe('INSUFFICIENT_BALANCE');
   });
 
   it('High-Concurrency Race Condition: 10 parallel debit requests prevent double-spending & negative balances', async () => {

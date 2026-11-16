@@ -8,6 +8,7 @@ import {
 import { educationService, EXAM_PACKAGES } from '../../services/education.service.js';
 import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { executeWithServiceAudit } from '../../utils/service-audit.js';
 
 export const educationRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -104,18 +105,37 @@ export const educationRoutes: FastifyPluginAsync = async (fastify) => {
 
       const idempotencyKey = request.headers['x-idempotency-key'] as string | undefined;
 
-      const receipt = await educationService.purchaseExamPin({
-        businessId: request.businessId!,
-        userId: request.user!.id,
-        packageCode: upperPkg,
-        candidateId: body.candidateId,
-        candidateName: body.candidateName,
-        candidateEmail: body.candidateEmail,
-        quantity: body.quantity ? Number(body.quantity) : 1,
-        customMarkupKobo,
-        clientReference: body.clientReference,
-        idempotencyKey,
-      });
+      const receipt = await executeWithServiceAudit(
+        request,
+        {
+          actionPrefix: 'EDUCATION_PURCHASE',
+          successChanges: (res) => ({
+            clientReference: res.clientReference || body.clientReference,
+            examBody: res.examBody,
+            packageCode: res.packageCode,
+            quantity: res.quantity,
+            amountNaira: res.amountDebitedNaira,
+          }),
+          failureChanges: {
+            clientReference: body.clientReference,
+            packageCode: upperPkg,
+            quantity: body.quantity ? Number(body.quantity) : 1,
+          },
+        },
+        () =>
+          educationService.purchaseExamPin({
+            businessId: request.businessId!,
+            userId: request.user!.id,
+            packageCode: upperPkg,
+            candidateId: body.candidateId!,
+            candidateName: body.candidateName,
+            candidateEmail: body.candidateEmail,
+            quantity: body.quantity ? Number(body.quantity) : 1,
+            customMarkupKobo,
+            clientReference: body.clientReference,
+            idempotencyKey,
+          }),
+      );
 
       return reply.status(201).send(createSuccessResponse(receipt, request.id));
     },

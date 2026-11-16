@@ -3,9 +3,10 @@ import { sql } from 'drizzle-orm';
 import { generateEntityId, WalletType, LedgerDirection } from '@baxato/common';
 import { businesses } from './core.js';
 
+// Keep legacy Postgres enum label 'COMMISSION' for schema compatibility with existing databases; runtime wallet logic supports WalletType.MAIN only.
 export const walletTypeEnum = pgEnum('wallet_type', [
   WalletType.MAIN,
-  WalletType.COMMISSION,
+  'COMMISSION',
 ]);
 
 export const ledgerEntryTypeEnum = pgEnum('ledger_entry_type', [

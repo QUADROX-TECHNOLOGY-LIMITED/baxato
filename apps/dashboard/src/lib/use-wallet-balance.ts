@@ -12,7 +12,7 @@ import {
 export interface WalletRecord {
   id: string;
   businessId: string;
-  type: 'MAIN' | 'COMMISSION' | string;
+  type: 'MAIN' | string;
   balanceKobo?: string;
   balanceNaira: number;
   formattedBalance?: string;
@@ -26,7 +26,6 @@ interface UseWalletBalanceOptions {
 
 interface UseWalletBalanceResult {
   walletBalance: number;
-  commissionBalance: number;
   wallets: WalletRecord[];
   isLoadingBalance: boolean;
   hasLoadedBalance: boolean;
@@ -66,7 +65,6 @@ export function useWalletBalance(
 
   const [wallets, setWallets] = useState<WalletRecord[]>([]);
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [commissionBalance, setCommissionBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState<boolean>(true);
   const [hasLoadedBalance, setHasLoadedBalance] = useState<boolean>(false);
 
@@ -78,9 +76,7 @@ export function useWalletBalance(
     if (!mountedRef.current) return;
     setWallets(list);
     const main = list.find((w) => w.type === 'MAIN');
-    const comm = list.find((w) => w.type === 'COMMISSION');
     if (main) setWalletBalance(extractBalanceNaira(main));
-    if (comm) setCommissionBalance(extractBalanceNaira(comm));
   }, []);
 
   const applySingleWalletUpdate = useCallback((updated: WalletRecord) => {
@@ -93,8 +89,6 @@ export function useWalletBalance(
     });
     if (updated.type === 'MAIN') {
       setWalletBalance(extractBalanceNaira(updated));
-    } else if (updated.type === 'COMMISSION') {
-      setCommissionBalance(extractBalanceNaira(updated));
     }
   }, []);
 
@@ -261,7 +255,6 @@ export function useWalletBalance(
 
   return {
     walletBalance,
-    commissionBalance,
     wallets,
     isLoadingBalance,
     hasLoadedBalance,

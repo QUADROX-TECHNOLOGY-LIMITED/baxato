@@ -9,7 +9,11 @@ import {
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 import { apiKeyService } from '../../services/api-key.service.js';
 import { auditService } from '../../services/audit.service.js';
-import { extractClientIp, extractUserAgent } from '../../utils/request-meta.js';
+import {
+  extractAuditActor,
+  extractClientIp,
+  extractUserAgent,
+} from '../../utils/request-meta.js';
 
 export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -75,6 +79,7 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         ipAddress: extractClientIp(request),
         userAgent: extractUserAgent(request),
         changes: {
+          ...extractAuditActor(request),
           name: result.apiKey.name,
           environment: result.apiKey.environment,
           keyPrefix: result.apiKey.keyPrefix,
@@ -139,6 +144,7 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         ipAddress: extractClientIp(request),
         userAgent: extractUserAgent(request),
         changes: {
+          ...extractAuditActor(request),
           name: key.name,
           environment: key.environment,
           keyPrefix: key.keyPrefix,
@@ -179,6 +185,7 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         ipAddress: extractClientIp(request),
         userAgent: extractUserAgent(request),
         changes: {
+          ...extractAuditActor(request),
           name: result.apiKey.name,
           environment: result.apiKey.environment,
           keyPrefix: result.apiKey.keyPrefix,
@@ -219,6 +226,9 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         resourceId: keyId,
         ipAddress: extractClientIp(request),
         userAgent: extractUserAgent(request),
+        changes: {
+          ...extractAuditActor(request),
+        },
       });
 
       return reply.send(createSuccessResponse({ deleted: true }, request.id));

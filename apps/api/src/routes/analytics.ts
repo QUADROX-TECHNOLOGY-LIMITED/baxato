@@ -11,7 +11,6 @@ import {
 import {
   db,
   serviceTransactions,
-  financialLedger,
   eq,
   and,
   sql,
@@ -246,7 +245,6 @@ export interface AnalyticsAggregateInput {
     failedCount: number;
     successfulVolume: string;
   }>;
-  commissionEarnedKobo: string;
 }
 
 /**
@@ -266,7 +264,6 @@ export function buildAnalyticsOverviewPayload(input: AnalyticsAggregateInput) {
   const curSuccVolumeKobo = BigInt(cur?.successfulVolume || '0');
   const curDiscountKobo = BigInt(cur?.successfulDiscount || '0');
   const curFeeKobo = BigInt(cur?.successfulFee || '0');
-  const commEarnedKobo = BigInt(input.commissionEarnedKobo || '0');
 
   const prevTotalCount = prev?.totalCount || 0;
   const prevSuccCount = prev?.successfulCount || 0;
@@ -484,9 +481,6 @@ export function buildAnalyticsOverviewPayload(input: AnalyticsAggregateInput) {
       totalFeeKobo: curFeeKobo.toString(),
       totalFeeNaira: koboToNaira(curFeeKobo),
       formattedTotalFee: formatNairaFromKobo(curFeeKobo),
-      commissionEarnedKobo: commEarnedKobo.toString(),
-      commissionEarnedNaira: koboToNaira(commEarnedKobo),
-      formattedCommissionEarned: formatNairaFromKobo(commEarnedKobo),
       volumeGrowthRate,
       countGrowthRate,
       successRateDelta,
@@ -616,7 +610,6 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         channelBreakdownRows,
         operatorBreakdownRows,
         timelineRows,
-        [commissionEarnedRow],
       ] = await Promise.all([
         db
           .select({
@@ -701,20 +694,6 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           .where(currentPeriodWhere)
           .groupBy(bucketSpec.trunc)
           .orderBy(sql`${bucketSpec.trunc} ASC`),
-
-        db
-          .select({
-            earnedVolume: sql<string>`coalesce(sum(${financialLedger.amount}), 0)::text`,
-          })
-          .from(financialLedger)
-          .where(
-            and(
-              eq(financialLedger.businessId, businessId),
-              eq(financialLedger.category, 'COMMISSION_EARNED'),
-              gte(financialLedger.createdAt, startDate),
-              lte(financialLedger.createdAt, endDate),
-            ),
-          ),
       ]);
 
       const responseData = buildAnalyticsOverviewPayload({
@@ -731,7 +710,6 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
         channelBreakdownRows,
         operatorBreakdownRows,
         timelineRows,
-        commissionEarnedKobo: commissionEarnedRow?.earnedVolume || '0',
       });
 
       return reply.status(200).send(createSuccessResponse(responseData, request.id));

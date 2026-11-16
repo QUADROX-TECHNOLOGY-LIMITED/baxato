@@ -45,9 +45,6 @@ interface MerchantRecord {
     mainBalanceKobo?: string;
     mainBalanceNaira?: number;
     formattedMain?: string;
-    commissionBalanceKobo?: string;
-    commissionBalanceNaira?: number;
-    formattedCommission?: string;
   };
   ownerBusinesses?: any[];
 }

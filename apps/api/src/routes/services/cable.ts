@@ -8,6 +8,7 @@ import {
 import { cableService } from '../../services/cable.service.js';
 import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { executeWithServiceAudit } from '../../utils/service-audit.js';
 
 export const cableRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -120,17 +121,37 @@ export const cableRoutes: FastifyPluginAsync = async (fastify) => {
       const userId = request.user!.id;
       const idempotencyKey = (request.headers['x-idempotency-key'] as string) || undefined;
 
-      const receipt = await cableService.purchaseBouquet({
-        businessId,
-        userId,
-        operator: upperOp as CableOperator,
-        smartcard: body.smartcard,
-        bouquetId: body.bouquetId,
-        customerMobile: body.customerMobile,
-        customerName: body.customerName,
-        clientReference: body.clientReference,
-        idempotencyKey,
-      });
+      const receipt = await executeWithServiceAudit(
+        request,
+        {
+          actionPrefix: 'CABLE_PURCHASE',
+          successChanges: (res) => ({
+            clientReference: res.clientReference || body.clientReference,
+            operator: res.operator,
+            bouquetName: res.bouquetName,
+            smartcard: res.smartcard,
+            amountNaira: res.faceAmountNaira,
+          }),
+          failureChanges: {
+            clientReference: body.clientReference,
+            operator: upperOp,
+            bouquetId: body.bouquetId,
+            smartcard: body.smartcard,
+          },
+        },
+        () =>
+          cableService.purchaseBouquet({
+            businessId,
+            userId,
+            operator: upperOp as CableOperator,
+            smartcard: body.smartcard!,
+            bouquetId: body.bouquetId!,
+            customerMobile: body.customerMobile,
+            customerName: body.customerName,
+            clientReference: body.clientReference,
+            idempotencyKey,
+          }),
+      );
 
       return reply.status(201).send(createSuccessResponse(receipt, request.id));
     },

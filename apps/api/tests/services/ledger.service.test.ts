@@ -11,7 +11,7 @@ vi.mock('@baxato/database', async () => {
 describe('LedgerService (Immutable Double-Entry Accounting)', () => {
   const testBizId = 'biz_ledger_100';
   const mainWalletId = 'wal_main_ledger_100';
-  const commissionWalletId = 'wal_comm_ledger_100';
+  const clearingWalletId = 'wal_clearing_ledger_100';
 
   beforeAll(() => {
     inMemoryDb.reset();
@@ -30,10 +30,10 @@ describe('LedgerService (Immutable Double-Entry Accounting)', () => {
     const [debit, credit] = await ledgerService.recordDoubleEntry({
       businessId: testBizId,
       reference: 'TX_REF_24110001',
-      type: LedgerEntryType.COMMISSION_SWEEP,
-      description: 'Commission sweep to main wallet',
+      type: LedgerEntryType.WALLET_FUNDING,
+      description: 'Wallet funding settlement',
       debit: {
-        walletId: commissionWalletId,
+        walletId: clearingWalletId,
         amountKobo: 50000n, // ₦500
         balanceBeforeKobo: 50000n,
         balanceAfterKobo: 0n,
@@ -48,7 +48,7 @@ describe('LedgerService (Immutable Double-Entry Accounting)', () => {
 
     expect(debit.direction).toBe(LedgerDirection.DEBIT);
     expect(debit.amountKobo).toBe('50000');
-    expect(debit.walletId).toBe(commissionWalletId);
+    expect(debit.walletId).toBe(clearingWalletId);
 
     expect(credit.direction).toBe(LedgerDirection.CREDIT);
     expect(credit.amountKobo).toBe('50000');

@@ -1803,11 +1803,7 @@ export default function SettingsPage() {
                       <option value="ALL">All categories</option>
                       <option value="auth">Sign-in</option>
                       <option value="security">Security</option>
-                      <option value="team">Team</option>
-                      <option value="developer">Developer</option>
                       <option value="profile">Profile</option>
-                      <option value="business">Workspace</option>
-                      <option value="transaction">Transactions</option>
                     </select>
                     <ChevronDown
                       className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -1823,7 +1819,7 @@ export default function SettingsPage() {
                     id={auditTableTitleId}
                     className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                   >
-                    Account &amp; Workspace Activity
+                    Account Security Activity
                   </h2>
                   <button
                     type="button"

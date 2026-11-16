@@ -11,33 +11,21 @@ vi.mock('@baxato/database', async () => {
 describe('WalletService (Integer Kobo & Concurrency Locking)', () => {
   const testBizId = 'biz_wallet_test_1';
   let mainWalletId: string;
-  let commissionWalletId: string;
 
   beforeAll(() => {
     inMemoryDb.reset();
 
-    // Seed test wallets
+    // Seed test wallet
     mainWalletId = 'wal_main_1';
-    commissionWalletId = 'wal_comm_1';
 
-    inMemoryDb.wallets.push(
-      {
-        id: mainWalletId,
-        businessId: testBizId,
-        type: WalletType.MAIN,
-        balance: 100000n, // ₦1,000.00 (100,000 Kobo)
-        lockedBalance: 0n,
-        version: 1,
-      },
-      {
-        id: commissionWalletId,
-        businessId: testBizId,
-        type: WalletType.COMMISSION,
-        balance: 50000n, // ₦500.00 (50,000 Kobo)
-        lockedBalance: 0n,
-        version: 1,
-      },
-    );
+    inMemoryDb.wallets.push({
+      id: mainWalletId,
+      businessId: testBizId,
+      type: WalletType.MAIN,
+      balance: 100000n, // ₦1,000.00 (100,000 Kobo)
+      lockedBalance: 0n,
+      version: 1,
+    });
   });
 
   it('creditWallet increases available balance and increments version', async () => {
@@ -82,11 +70,5 @@ describe('WalletService (Integer Kobo & Concurrency Locking)', () => {
     const updated = await walletService.unlockFunds(mainWalletId, 20000n, true);
     expect(updated.balanceKobo).toBe('80000');
     expect(updated.lockedBalanceKobo).toBe('0');
-  });
-
-  it('transferCommissionToMain atomically sweeps commission funds to main wallet', async () => {
-    const transfer = await walletService.transferCommissionToMain(testBizId, 50000n); // ₦500
-    expect(transfer.commissionWallet.balanceKobo).toBe('0');
-    expect(transfer.mainWallet.balanceKobo).toBe('130000'); // ₦800 + ₦500 = ₦1,300
   });
 });

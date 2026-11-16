@@ -8,7 +8,7 @@ import {
 import { airtimeService } from '../../services/airtime.service.js';
 import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
-import { authenticate } from '../../plugins/auth.plugin.js';
+import { executeWithServiceAudit } from '../../utils/service-audit.js';
 
 export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -71,15 +71,33 @@ export const airtimeRoutes: FastifyPluginAsync = async (fastify) => {
       const userId = request.user!.id;
       const idempotencyKey = (request.headers['x-idempotency-key'] as string) || undefined;
 
-      const receipt = await airtimeService.purchaseAirtime({
-        businessId,
-        userId,
-        phone: body.phone,
-        network: body.network,
-        amountKobo,
-        clientReference: body.clientReference,
-        idempotencyKey,
-      });
+      const receipt = await executeWithServiceAudit(
+        request,
+        {
+          actionPrefix: 'AIRTIME_PURCHASE',
+          successChanges: (res) => ({
+            clientReference: res.clientReference || body.clientReference,
+            network: res.network,
+            recipient: res.recipientPhone,
+            amountNaira: res.faceAmountNaira,
+          }),
+          failureChanges: {
+            clientReference: body.clientReference,
+            network: body.network,
+            recipient: body.phone,
+          },
+        },
+        () =>
+          airtimeService.purchaseAirtime({
+            businessId,
+            userId,
+            phone: body.phone!,
+            network: body.network,
+            amountKobo,
+            clientReference: body.clientReference,
+            idempotencyKey,
+          }),
+      );
 
       return reply.status(201).send(createSuccessResponse(receipt, request.id));
     },

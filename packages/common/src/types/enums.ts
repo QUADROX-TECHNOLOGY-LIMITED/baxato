@@ -84,7 +84,6 @@ export enum KycStatus {
 
 export enum WalletType {
   MAIN = 'MAIN',
-  COMMISSION = 'COMMISSION',
 }
 
 export enum LedgerDirection {

@@ -249,12 +249,11 @@ describe('Multi-Business Architecture & 3-Business Cap (/businesses/*)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const body: ApiResponse<{ token: string; business: { id: string; name: string }; wallets: { main: any; commission: any } }> = res.json();
+    const body: ApiResponse<{ token: string; business: { id: string; name: string }; wallets: { main: any } }> = res.json();
     expect(body.success).toBe(true);
     expect(body.data?.token).toBeDefined();
     expect(body.data?.business.id).toBe(secondBizId);
     expect(body.data?.wallets.main).toBeDefined();
-    expect(body.data?.wallets.commission).toBeDefined();
   });
 
   it('GET /wallets respects x-business-id header for authorized business', async () => {

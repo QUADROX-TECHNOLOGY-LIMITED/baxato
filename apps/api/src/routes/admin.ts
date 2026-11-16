@@ -661,7 +661,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           .orderBy(desc(businesses.createdAt));
 
         let totalMainKobo = 0n;
-        let totalCommissionKobo = 0n;
 
         const ownerBusinesses = await Promise.all(
           allUserBiz.map(async (ub) => {
@@ -675,13 +674,10 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
               .where(eq(wallets.businessId, ub.id));
 
             const ubMain = ubWallets.find((w) => w.type === 'MAIN');
-            const ubComm = ubWallets.find((w) => w.type === 'COMMISSION');
 
             const mainKobo = ubMain ? BigInt(ubMain.balance.toString()) : 0n;
-            const commKobo = ubComm ? BigInt(ubComm.balance.toString()) : 0n;
 
             totalMainKobo += mainKobo;
-            totalCommissionKobo += commKobo;
 
             return {
               id: ub.id,
@@ -696,9 +692,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
                 mainBalanceKobo: mainKobo.toString(),
                 mainBalanceNaira: koboToNaira(Number(mainKobo)),
                 formattedMain: formatNairaFromKobo(Number(mainKobo)),
-                commissionBalanceKobo: commKobo.toString(),
-                commissionBalanceNaira: koboToNaira(Number(commKobo)),
-                formattedCommission: formatNairaFromKobo(Number(commKobo)),
               },
             };
           }),
@@ -758,9 +751,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             mainBalanceKobo: totalMainKobo.toString(),
             mainBalanceNaira: koboToNaira(Number(totalMainKobo)),
             formattedMain: formatNairaFromKobo(Number(totalMainKobo)),
-            commissionBalanceKobo: totalCommissionKobo.toString(),
-            commissionBalanceNaira: koboToNaira(Number(totalCommissionKobo)),
-            formattedCommission: formatNairaFromKobo(Number(totalCommissionKobo)),
           },
         };
       }),
@@ -838,7 +828,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const primaryBiz = bizRows[0] || null;
 
     let totalMainKobo = 0n;
-    let totalCommissionKobo = 0n;
 
     const ownerBusinesses = await Promise.all(
       bizRows.map(async (b) => {
@@ -852,13 +841,10 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           .where(eq(wallets.businessId, b.id));
 
         const main = bWallets.find((w) => w.type === 'MAIN');
-        const comm = bWallets.find((w) => w.type === 'COMMISSION');
 
         const mainKobo = main ? BigInt(main.balance.toString()) : 0n;
-        const commKobo = comm ? BigInt(comm.balance.toString()) : 0n;
 
         totalMainKobo += mainKobo;
-        totalCommissionKobo += commKobo;
 
         return {
           id: b.id,
@@ -873,9 +859,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             mainBalanceKobo: mainKobo.toString(),
             mainBalanceNaira: koboToNaira(Number(mainKobo)),
             formattedMain: formatNairaFromKobo(Number(mainKobo)),
-            commissionBalanceKobo: commKobo.toString(),
-            commissionBalanceNaira: koboToNaira(Number(commKobo)),
-            formattedCommission: formatNairaFromKobo(Number(commKobo)),
           },
         };
       }),
@@ -953,9 +936,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             mainBalanceKobo: totalMainKobo.toString(),
             mainBalanceNaira: koboToNaira(Number(totalMainKobo)),
             formattedMain: formatNairaFromKobo(Number(totalMainKobo)),
-            commissionBalanceKobo: totalCommissionKobo.toString(),
-            commissionBalanceNaira: koboToNaira(Number(totalCommissionKobo)),
-            formattedCommission: formatNairaFromKobo(Number(totalCommissionKobo)),
           },
           recentTransactions: recentTx.map((tx) => ({
             ...tx,

@@ -129,17 +129,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       newBusiness = createdBusiness;
 
-      // 3. Provision Initial Main and Commission Wallets
+      // 3. Provision Initial Main Wallet
       if (newBusiness) {
         await db.insert(wallets).values([
           {
             businessId: newBusiness.id,
             type: WalletType.MAIN,
-            balance: 0n,
-          },
-          {
-            businessId: newBusiness.id,
-            type: WalletType.COMMISSION,
             balance: 0n,
           },
         ]);

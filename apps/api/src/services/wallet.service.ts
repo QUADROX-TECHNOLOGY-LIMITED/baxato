@@ -79,7 +79,7 @@ export class WalletService {
   }
 
   /**
-   * Retrieves all wallets (MAIN & COMMISSION) for a business.
+   * Retrieves active wallets (MAIN only) for a business.
    */
   public async getBusinessWallets(businessId: string): Promise<WalletBalanceDto[]> {
     const businessWallets = await db
@@ -87,7 +87,9 @@ export class WalletService {
       .from(wallets)
       .where(eq(wallets.businessId, businessId));
 
-    return businessWallets.map((w) => this.toWalletDto(w));
+    return businessWallets
+      .filter((w) => w.type === WalletType.MAIN)
+      .map((w) => this.toWalletDto(w));
   }
 
   /**
@@ -324,38 +326,6 @@ export class WalletService {
     }
 
     throw new ConflictError('Failed to unlock wallet funds after maximum retries.');
-  }
-
-  /**
-   * Atomically sweeps accumulated commission earnings into the business main wallet.
-   */
-  public async transferCommissionToMain(businessId: string, amountKobo: bigint) {
-    if (amountKobo <= 0n) {
-      throw new ValidationError('Transfer amount must be greater than zero.');
-    }
-
-    const commissionWallet = await this.getBusinessWallet(businessId, WalletType.COMMISSION);
-    const mainWallet = await this.getBusinessWallet(businessId, WalletType.MAIN);
-
-    if (BigInt(commissionWallet.balanceKobo) < amountKobo) {
-      throw new InsufficientFundsError(
-        `Insufficient commission balance. Current balance is ${commissionWallet.formattedBalance}, but tried to transfer ${formatNairaFromKobo(amountKobo)}.`,
-      );
-    }
-
-    // 1. Debit Commission Wallet
-    const updatedCommission = await this.debitWallet(commissionWallet.id, amountKobo);
-
-    // 2. Credit Main Wallet
-    const updatedMain = await this.creditWallet(mainWallet.id, amountKobo);
-
-    return {
-      commissionWallet: updatedCommission,
-      mainWallet: updatedMain,
-      amountKobo: amountKobo.toString(),
-      amountNaira: koboToNaira(amountKobo),
-      formattedAmount: formatNairaFromKobo(amountKobo),
-    };
   }
 }
 

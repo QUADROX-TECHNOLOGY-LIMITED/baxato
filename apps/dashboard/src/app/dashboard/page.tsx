@@ -180,16 +180,11 @@ export default function DashboardOverviewPage() {
 
   const {
     walletBalance: mainBalanceNaira,
-    commissionBalance: commBalanceNaira,
     isLoadingBalance,
     refreshWallets: loadWallets,
   } = useWalletBalance();
 
   const walletBalance = `₦${mainBalanceNaira.toLocaleString('en-NG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-  const commissionBalance = `₦${commBalanceNaira.toLocaleString('en-NG', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -452,6 +447,7 @@ export default function DashboardOverviewPage() {
           userRole={userRole}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
+          sticky={false}
         />
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-8">
@@ -500,19 +496,6 @@ export default function DashboardOverviewPage() {
                       walletBalance
                     )}
                   </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="text-xs text-slate-400 block">Commission</span>
-                  <span className="text-sm font-semibold tabular-nums text-slate-200 mt-1 inline-block">
-                    {!isHydrated || isLoadingBalance ? (
-                      <span className="inline-block h-4 w-16 bg-white/10 rounded animate-pulse align-middle" />
-                    ) : hideBalance ? (
-                      '••••••'
-                    ) : (
-                      commissionBalance
-                    )}
-                  </span>
                 </div>
               </div>
 

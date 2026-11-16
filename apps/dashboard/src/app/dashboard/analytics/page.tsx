@@ -104,9 +104,6 @@ interface AnalyticsData {
     totalFeeKobo: string;
     totalFeeNaira: number;
     formattedTotalFee: string;
-    commissionEarnedKobo: string;
-    commissionEarnedNaira: number;
-    formattedCommissionEarned: string;
     volumeGrowthRate: number;
     countGrowthRate: number;
     successRateDelta: number;
@@ -956,9 +953,7 @@ export default function AnalyticsPage() {
                   </div>
                 )}
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate tabular-nums">
-                  {(summary?.commissionEarnedNaira || 0) > 0
-                    ? `Commission: ${summary?.formattedCommissionEarned}`
-                    : 'On completed orders'}
+                  On completed orders
                 </p>
               </div>
             </div>

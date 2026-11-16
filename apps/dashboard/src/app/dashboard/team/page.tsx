@@ -136,6 +136,15 @@ const PERMISSION_GRID: MatrixCategory[] = [
         viewer: false,
       },
       {
+        permission: 'View workspace audit logs',
+        owner: true,
+        admin: true,
+        developer: false,
+        finance: false,
+        support: false,
+        viewer: false,
+      },
+      {
         permission: 'Transfer workspace ownership',
         owner: true,
         admin: false,

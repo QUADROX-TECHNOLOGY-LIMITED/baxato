@@ -14,7 +14,7 @@ export interface RecordDoubleEntryInput {
   businessId: string;
   reference: string;
   type: LedgerEntryType;
-  category?: 'FUNDING' | 'AIRTIME_PURCHASE' | 'DATA_PURCHASE' | 'CABLE_TV_PURCHASE' | 'ELECTRICITY_PURCHASE' | 'EXAM_PIN_PURCHASE' | 'COMMISSION_EARNED' | 'REFUND' | 'ADJUSTMENT' | 'WITHDRAWAL';
+  category?: 'FUNDING' | 'AIRTIME_PURCHASE' | 'DATA_PURCHASE' | 'CABLE_TV_PURCHASE' | 'ELECTRICITY_PURCHASE' | 'EXAM_PIN_PURCHASE' | 'REFUND' | 'ADJUSTMENT' | 'WITHDRAWAL';
   description?: string;
   transactionId?: string;
   debit: {
@@ -32,13 +32,11 @@ export interface RecordDoubleEntryInput {
 }
 
 export class LedgerService {
-  private mapTypeToCategory(type: LedgerEntryType): 'FUNDING' | 'AIRTIME_PURCHASE' | 'DATA_PURCHASE' | 'CABLE_TV_PURCHASE' | 'ELECTRICITY_PURCHASE' | 'EXAM_PIN_PURCHASE' | 'COMMISSION_EARNED' | 'REFUND' | 'ADJUSTMENT' | 'WITHDRAWAL' {
+  private mapTypeToCategory(type: LedgerEntryType): 'FUNDING' | 'AIRTIME_PURCHASE' | 'DATA_PURCHASE' | 'CABLE_TV_PURCHASE' | 'ELECTRICITY_PURCHASE' | 'EXAM_PIN_PURCHASE' | 'REFUND' | 'ADJUSTMENT' | 'WITHDRAWAL' {
     switch (type) {
       case LedgerEntryType.WALLET_FUNDING:
         return 'FUNDING';
-      case LedgerEntryType.COMMISSION_EARNED:
-        return 'COMMISSION_EARNED';
-      case LedgerEntryType.COMMISSION_SWEEP:
+      case LedgerEntryType.MANUAL_ADJUSTMENT:
         return 'ADJUSTMENT';
       case LedgerEntryType.REFUND:
         return 'REFUND';

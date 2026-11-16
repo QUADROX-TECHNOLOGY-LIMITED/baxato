@@ -171,7 +171,6 @@ export default function StaffMerchantsPage() {
               <th className="py-2.5 px-4 font-semibold">Businesses</th>
               <th className="py-2.5 px-4 font-semibold">NIN Status</th>
               <th className="py-2.5 px-4 font-semibold">Main Balance</th>
-              <th className="py-2.5 px-4 font-semibold">Commission</th>
               <th className="py-2.5 px-4 font-semibold">Registered</th>
               <th className="py-2.5 px-4 font-semibold text-right">Action</th>
             </tr>
@@ -179,7 +178,7 @@ export default function StaffMerchantsPage() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {merchants.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-500">
+                <td colSpan={7} className="py-8 text-center text-slate-500">
                   {isLoadingMerchants ? (
                     'Loading merchants...'
                   ) : loadError ? (
@@ -248,9 +247,6 @@ export default function StaffMerchantsPage() {
 
                     <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white font-mono">
                       {m.wallets?.formattedMain || '₦0.00'}
-                    </td>
-                    <td className="py-2.5 px-4 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-                      {m.wallets?.formattedCommission || '₦0.00'}
                     </td>
 
                     <td className="py-2.5 px-4 text-slate-500 text-[11px] whitespace-nowrap">
@@ -507,9 +503,6 @@ export default function StaffMerchantsPage() {
                     <div className="text-right">
                       <div className="font-mono font-semibold text-slate-900 dark:text-white">
                         {biz.wallets?.formattedMain || '₦0.00'}
-                      </div>
-                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-                        {biz.wallets?.formattedCommission || '₦0.00'} (Comm)
                       </div>
                     </div>
                   </div>

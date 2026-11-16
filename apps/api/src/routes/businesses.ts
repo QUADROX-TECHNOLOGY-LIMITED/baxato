@@ -9,7 +9,11 @@ import {
 import { businessService } from '../services/business.service.js';
 import { authenticate } from '../plugins/auth.plugin.js';
 import { auditService } from '../services/audit.service.js';
-import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
+import {
+  extractAuditActor,
+  extractClientIp,
+  extractUserAgent,
+} from '../utils/request-meta.js';
 
 export const businessRoutes: FastifyPluginAsync = async (fastify) => {
   // Require authentication for all business routes
@@ -33,6 +37,20 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = await businessService.createBusiness(userId, parseResult.data);
+
+    await auditService.log({
+      userId: request.isApiKeyAuth ? undefined : userId,
+      businessId: result.business.id,
+      action: 'BUSINESS_CREATED',
+      resourceType: 'BUSINESS',
+      resourceId: result.business.id,
+      ipAddress: extractClientIp(request),
+      userAgent: extractUserAgent(request),
+      changes: {
+        ...extractAuditActor(request),
+        name: result.business.name,
+      },
+    });
 
     return reply.status(201).send(
       createSuccessResponse(
@@ -149,6 +167,7 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       ipAddress: extractClientIp(request),
       userAgent: extractUserAgent(request),
       changes: {
+        ...extractAuditActor(request),
         name: updated?.name,
       },
     });
@@ -185,6 +204,9 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       resourceId: id,
       ipAddress: extractClientIp(request),
       userAgent: extractUserAgent(request),
+      changes: {
+        ...extractAuditActor(request),
+      },
     });
 
     return reply.status(200).send(

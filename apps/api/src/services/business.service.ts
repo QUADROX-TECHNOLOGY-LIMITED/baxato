@@ -90,18 +90,13 @@ export class BusinessService {
       throw new Error('Failed to create business record.');
     }
 
-    // 4. Provision MAIN & COMMISSION Wallets in integer Kobo
-    const [mainWallet, commissionWallet] = await db
+    // 4. Provision MAIN Wallet in integer Kobo
+    const [mainWallet] = await db
       .insert(wallets)
       .values([
         {
           businessId: newBusiness.id,
           type: WalletType.MAIN,
-          balance: 0n,
-        },
-        {
-          businessId: newBusiness.id,
-          type: WalletType.COMMISSION,
           balance: 0n,
         },
       ])
@@ -142,15 +137,6 @@ export class BusinessService {
               balanceKobo: mainWallet.balance.toString(),
               balanceNaira: koboToNaira(mainWallet.balance),
               formatted: formatNairaFromKobo(mainWallet.balance),
-            }
-          : null,
-        commission: commissionWallet
-          ? {
-              id: commissionWallet.id,
-              type: commissionWallet.type,
-              balanceKobo: commissionWallet.balance.toString(),
-              balanceNaira: koboToNaira(commissionWallet.balance),
-              formatted: formatNairaFromKobo(commissionWallet.balance),
             }
           : null,
       },
@@ -197,7 +183,6 @@ export class BusinessService {
           .where(eq(wallets.businessId, biz.id));
 
         const main = bizWallets.find((w) => w.type === 'MAIN');
-        const comm = bizWallets.find((w) => w.type === 'COMMISSION');
 
         const isOwner = biz.ownerId === userId;
         const membership = memberships.find((m) => m.businessId === biz.id);
@@ -222,14 +207,6 @@ export class BusinessService {
                   balanceKobo: main.balance.toString(),
                   balanceNaira: koboToNaira(main.balance),
                   formatted: formatNairaFromKobo(main.balance),
-                }
-              : null,
-            commission: comm
-              ? {
-                  id: comm.id,
-                  balanceKobo: comm.balance.toString(),
-                  balanceNaira: koboToNaira(comm.balance),
-                  formatted: formatNairaFromKobo(comm.balance),
                 }
               : null,
           },
@@ -275,7 +252,6 @@ export class BusinessService {
       .where(eq(wallets.businessId, biz.id));
 
     const main = bizWallets.find((w) => w.type === 'MAIN');
-    const comm = bizWallets.find((w) => w.type === 'COMMISSION');
 
     return {
       id: biz.id,
@@ -299,14 +275,6 @@ export class BusinessService {
               balanceKobo: main.balance.toString(),
               balanceNaira: koboToNaira(main.balance),
               formatted: formatNairaFromKobo(main.balance),
-            }
-          : null,
-        commission: comm
-          ? {
-              id: comm.id,
-              balanceKobo: comm.balance.toString(),
-              balanceNaira: koboToNaira(comm.balance),
-              formatted: formatNairaFromKobo(comm.balance),
             }
           : null,
       },
@@ -604,7 +572,6 @@ export class BusinessService {
       .where(eq(wallets.businessId, biz.id));
 
     const main = bizWallets.find((w) => w.type === 'MAIN');
-    const comm = bizWallets.find((w) => w.type === 'COMMISSION');
 
     return {
       token,
@@ -630,14 +597,6 @@ export class BusinessService {
               balanceKobo: main.balance.toString(),
               balanceNaira: koboToNaira(main.balance),
               formatted: formatNairaFromKobo(main.balance),
-            }
-          : null,
-        commission: comm
-          ? {
-              id: comm.id,
-              balanceKobo: comm.balance.toString(),
-              balanceNaira: koboToNaira(comm.balance),
-              formatted: formatNairaFromKobo(comm.balance),
             }
           : null,
       },

@@ -117,7 +117,7 @@ export async function seedDatabase() {
 
     if (business) {
       // 4. Seed Wallets
-      console.log('  -> Seeding merchant MAIN and COMMISSION wallets...');
+      console.log('  -> Seeding merchant MAIN wallet...');
       await db
         .insert(wallets)
         .values([
@@ -125,11 +125,6 @@ export async function seedDatabase() {
             businessId: business.id,
             type: WalletType.MAIN,
             balance: 10000000n, // ₦100,000 in Kobo
-          },
-          {
-            businessId: business.id,
-            type: WalletType.COMMISSION,
-            balance: 0n,
           },
         ])
         .onConflictDoNothing();

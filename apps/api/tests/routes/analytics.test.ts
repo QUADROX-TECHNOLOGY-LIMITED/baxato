@@ -220,7 +220,6 @@ describe('Analytics Domain & Endpoint (/analytics/overview)', () => {
             successfulVolume: '1000',
           },
         ],
-        commissionEarnedKobo: '0',
       });
 
       // Completed-only volume & discount + safe BigInt division (1000 / 3 = 333 kobo = ₦3.33)

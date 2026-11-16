@@ -88,24 +88,14 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
     });
 
     // 5. Seed Wallets
-    inMemoryDb.wallets.push(
-      {
-        id: 'wal_main_sample',
-        businessId: 'biz_sample_ops',
-        type: 'MAIN',
-        balance: 5000000n,
-        lockedBalance: 0n,
-        version: 1,
-      },
-      {
-        id: 'wal_comm_sample',
-        businessId: 'biz_sample_ops',
-        type: 'COMMISSION',
-        balance: 150000n,
-        lockedBalance: 0n,
-        version: 1,
-      },
-    );
+    inMemoryDb.wallets.push({
+      id: 'wal_main_sample',
+      businessId: 'biz_sample_ops',
+      type: 'MAIN',
+      balance: 5000000n,
+      lockedBalance: 0n,
+      version: 1,
+    });
 
     // 6. Seed Service Transaction
     inMemoryDb.serviceTransactions.push({

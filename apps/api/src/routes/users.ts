@@ -70,7 +70,6 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
           .where(eq(wallets.businessId, biz.id));
 
         const mainWallet = bizWallets.find((w) => w.type === 'MAIN');
-        const commissionWallet = bizWallets.find((w) => w.type === 'COMMISSION');
 
         return {
           id: biz.id,
@@ -88,14 +87,6 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
                   balanceKobo: mainWallet.balance.toString(),
                   balanceNaira: koboToNaira(mainWallet.balance),
                   formatted: formatNairaFromKobo(mainWallet.balance),
-                }
-              : null,
-            commission: commissionWallet
-              ? {
-                  id: commissionWallet.id,
-                  balanceKobo: commissionWallet.balance.toString(),
-                  balanceNaira: koboToNaira(commissionWallet.balance),
-                  formatted: formatNairaFromKobo(commissionWallet.balance),
                 }
               : null,
           },

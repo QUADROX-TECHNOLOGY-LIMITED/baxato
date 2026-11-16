@@ -24,6 +24,7 @@ export enum Permission {
   TENANT_WEBHOOKS_MANAGE = 'tenant:webhooks:manage',
   TENANT_TRANSACTIONS_READ = 'tenant:transactions:read',
   TENANT_SERVICES_EXECUTE = 'tenant:services:execute',
+  TENANT_AUDIT_READ = 'tenant:audit:read',
 }
 
 /**
@@ -63,6 +64,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, Permission[]> = {
     Permission.TENANT_WEBHOOKS_MANAGE,
     Permission.TENANT_TRANSACTIONS_READ,
     Permission.TENANT_SERVICES_EXECUTE,
+    Permission.TENANT_AUDIT_READ,
   ],
 
   // Business Admin: Can manage team and webhooks, but CANNOT delete business or owner
@@ -76,6 +78,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, Permission[]> = {
     Permission.TENANT_WEBHOOKS_MANAGE,
     Permission.TENANT_TRANSACTIONS_READ,
     Permission.TENANT_SERVICES_EXECUTE,
+    Permission.TENANT_AUDIT_READ,
   ],
 
   // Business Developer: Can manage API keys, webhooks, test services, and view transactions

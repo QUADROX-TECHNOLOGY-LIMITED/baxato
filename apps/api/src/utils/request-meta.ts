@@ -30,6 +30,51 @@ export interface AuditEventSummary {
   category: AuditCategory;
 }
 
+export interface AuditActorMetadata {
+  actorSource: 'DASHBOARD' | 'API_KEY';
+  actorEmail?: string;
+  apiKeyId?: string;
+  apiKeyName?: string;
+  environment?: string;
+}
+
+/**
+ * Actions that belong strictly to the user's personal account security & identity audit trail.
+ * Workspace operational logs exclude these and live on the dedicated Business Logs endpoint.
+ */
+export const ACCOUNT_AUDIT_ACTIONS = new Set([
+  'USER_REGISTERED',
+  'USER_LOGIN',
+  'STAFF_LOGIN_SUCCESS',
+  'ADMIN_LOGIN_SUCCESS',
+  'STAFF_2FA_ENROLLED_AND_LOGGED_IN',
+  'PROFILE_UPDATED',
+  'PASSWORD_CHANGE_REQUESTED',
+  'PASSWORD_CHANGED',
+  'USER_2FA_EMAIL_REQUESTED',
+  'USER_2FA_ENABLED',
+  'USER_2FA_DISABLED',
+  'KYC_VERIFIED',
+]);
+
+export function extractAuditActor(
+  request: Pick<FastifyRequest, 'isApiKeyAuth' | 'apiKey' | 'apiKeyEnvironment' | 'user'>,
+): AuditActorMetadata {
+  if (request.isApiKeyAuth && request.apiKey) {
+    return {
+      actorSource: 'API_KEY',
+      apiKeyId: request.apiKey.id,
+      apiKeyName: request.apiKey.name,
+      environment: request.apiKeyEnvironment || request.apiKey.environment,
+    };
+  }
+
+  return {
+    actorSource: 'DASHBOARD',
+    actorEmail: request.user?.email,
+  };
+}
+
 const SENSITIVE_AUDIT_KEYS = new Set([
   'provider',
   'providerName',
@@ -713,6 +758,20 @@ export function describeAuditEvent(entry: {
         description: 'Generated a new webhook signing secret',
         category: 'developer',
       };
+    case 'WEBHOOK_TEST_SENT':
+      return {
+        title: 'Test webhook sent',
+        description: c.environment
+          ? `Sent ${String(c.environment)} test event${c.eventType ? ` (${String(c.eventType)})` : ''}`
+          : 'Sent webhook test ping',
+        category: 'developer',
+      };
+    case 'BUSINESS_CREATED':
+      return {
+        title: 'Workspace created',
+        description: c.name ? `Created workspace "${String(c.name)}"` : 'Created new business workspace',
+        category: 'business',
+      };
     case 'BUSINESS_UPDATED':
       return {
         title: 'Workspace settings updated',
@@ -729,11 +788,88 @@ export function describeAuditEvent(entry: {
       return {
         title:
           action === 'AIRTIME_PURCHASE'
-            ? 'Airtime purchase completed'
+            ? 'Airtime purchased'
             : action === 'AIRTIME_PURCHASE_PROCESSING'
             ? 'Airtime purchase processing'
             : 'Airtime purchase failed',
-        description: parts || 'Airtime transaction',
+        description: parts || 'Airtime top-up',
+        category: 'transaction',
+      };
+    }
+    case 'DATA_PURCHASE':
+    case 'DATA_PURCHASE_PROCESSING':
+    case 'DATA_PURCHASE_FAILED': {
+      const amount = c.amountNaira !== undefined ? `₦${Number(c.amountNaira).toLocaleString()}` : '';
+      const plan = c.planName ? String(c.planName) : c.network ? `${String(c.network)} data` : 'Data bundle';
+      const recipient = c.recipient ? String(c.recipient) : '';
+      const parts = [amount, plan, recipient].filter(Boolean).join(' · ');
+      return {
+        title:
+          action === 'DATA_PURCHASE'
+            ? 'Data bundle purchased'
+            : action === 'DATA_PURCHASE_PROCESSING'
+            ? 'Data bundle processing'
+            : 'Data bundle failed',
+        description: parts || 'Mobile data purchase',
+        category: 'transaction',
+      };
+    }
+    case 'ELECTRICITY_PURCHASE':
+    case 'ELECTRICITY_PURCHASE_PROCESSING':
+    case 'ELECTRICITY_PURCHASE_FAILED': {
+      const amount = c.amountNaira !== undefined ? `₦${Number(c.amountNaira).toLocaleString()}` : '';
+      const disco = c.disco ? String(c.disco) : 'Electricity';
+      const meter = c.meterNumber ? String(c.meterNumber) : '';
+      const parts = [amount, disco, meter].filter(Boolean).join(' · ');
+      return {
+        title:
+          action === 'ELECTRICITY_PURCHASE'
+            ? 'Electricity paid'
+            : action === 'ELECTRICITY_PURCHASE_PROCESSING'
+            ? 'Electricity payment processing'
+            : 'Electricity payment failed',
+        description: parts || 'Electricity bill payment',
+        category: 'transaction',
+      };
+    }
+    case 'CABLE_PURCHASE':
+    case 'CABLE_PURCHASE_PROCESSING':
+    case 'CABLE_PURCHASE_FAILED': {
+      const amount = c.amountNaira !== undefined ? `₦${Number(c.amountNaira).toLocaleString()}` : '';
+      const bouquet = c.bouquetName
+        ? `${c.operator ? `${String(c.operator)} ` : ''}${String(c.bouquetName)}`
+        : c.operator
+        ? String(c.operator)
+        : 'Cable TV';
+      const smartcard = c.smartcard ? String(c.smartcard) : '';
+      const parts = [amount, bouquet, smartcard].filter(Boolean).join(' · ');
+      return {
+        title:
+          action === 'CABLE_PURCHASE'
+            ? 'Cable TV renewed'
+            : action === 'CABLE_PURCHASE_PROCESSING'
+            ? 'Cable TV renewal processing'
+            : 'Cable TV renewal failed',
+        description: parts || 'Cable TV subscription',
+        category: 'transaction',
+      };
+    }
+    case 'EDUCATION_PURCHASE':
+    case 'EDUCATION_PURCHASE_PROCESSING':
+    case 'EDUCATION_PURCHASE_FAILED': {
+      const amount = c.amountNaira !== undefined ? `₦${Number(c.amountNaira).toLocaleString()}` : '';
+      const pkg = c.packageCode ? String(c.packageCode) : c.examBody ? String(c.examBody) : 'Exam PIN';
+      const qty = c.quantity ? `×${String(c.quantity)}` : '';
+      const label = [pkg, qty].filter(Boolean).join(' ');
+      const parts = [amount, label].filter(Boolean).join(' · ');
+      return {
+        title:
+          action === 'EDUCATION_PURCHASE'
+            ? 'Exam PIN purchased'
+            : action === 'EDUCATION_PURCHASE_PROCESSING'
+            ? 'Exam PIN processing'
+            : 'Exam PIN purchase failed',
+        description: parts || 'Exam PIN purchase',
         category: 'transaction',
       };
     }

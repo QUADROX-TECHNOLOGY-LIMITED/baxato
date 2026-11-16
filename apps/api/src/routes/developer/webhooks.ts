@@ -12,7 +12,11 @@ import {
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 import { webhookDispatcherService } from '../../services/webhook-dispatcher.service.js';
 import { auditService } from '../../services/audit.service.js';
-import { extractClientIp, extractUserAgent } from '../../utils/request-meta.js';
+import {
+  extractAuditActor,
+  extractClientIp,
+  extractUserAgent,
+} from '../../utils/request-meta.js';
 
 export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -75,6 +79,7 @@ export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
         ipAddress: extractClientIp(request),
         userAgent: extractUserAgent(request),
         changes: {
+          ...extractAuditActor(request),
           environment:
             payload.webhookTestUrl !== undefined || payload.regenerateTestSecret
               ? 'TEST'
@@ -113,6 +118,22 @@ export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
       const { eventType, environment } = parseResult.data as TestWebhookInput;
 
       const result = await webhookDispatcherService.testWebhook(businessId, eventType, environment);
+
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'WEBHOOK_TEST_SENT',
+        resourceType: 'WEBHOOK',
+        resourceId: businessId,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+        changes: {
+          ...extractAuditActor(request),
+          environment,
+          eventType,
+        },
+      });
+
       return reply.send(createSuccessResponse(result, request.id));
     },
   );

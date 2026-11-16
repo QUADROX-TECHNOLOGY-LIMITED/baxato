@@ -29,6 +29,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { teamRoutes, inviteOnboardingRoutes } from './routes/team.js';
 import { adminRoutes } from './routes/admin.js';
 import { beneficiaryRoutes } from './routes/beneficiaries.js';
+import { auditLogRoutes } from './routes/audit-logs.js';
 import { realtimeService } from './services/realtime.service.js';
 
 export function buildServer(): FastifyInstance {
@@ -286,6 +287,8 @@ export function buildServer(): FastifyInstance {
   app.register(adminRoutes, { prefix: '/v1/admin' });
   app.register(beneficiaryRoutes, { prefix: '/beneficiaries' });
   app.register(beneficiaryRoutes, { prefix: '/v1/beneficiaries' });
+  app.register(auditLogRoutes, { prefix: '/audit-logs' });
+  app.register(auditLogRoutes, { prefix: '/v1/audit-logs' });
 
   app.addHook('onClose', async () => {
     await realtimeService.close();

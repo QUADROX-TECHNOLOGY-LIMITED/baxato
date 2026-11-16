@@ -1013,9 +1013,12 @@ export function createMockDatabase() {
     ilike: (col: unknown, val: unknown) => ({ type: 'ilike', col: getColName(col), val }),
     like: (col: unknown, val: unknown) => ({ type: 'like', col: getColName(col), val }),
     or: (...conditions: unknown[]) => ({ type: 'or', conditions }),
-    and: (...conditions: Array<{ type: string; col: unknown; val: unknown }>) => ({
+    not: (condition: unknown) => ({ type: 'not', condition }),
+    and: (...conditions: Array<{ type: string; col?: unknown; val?: unknown; condition?: unknown }>) => ({
       type: 'and',
-      conditions: conditions.map((c) => ({ ...c, col: getColName(c?.col) })),
+      conditions: conditions.map((c) =>
+        c && typeof c === 'object' && 'col' in c ? { ...c, col: getColName(c.col) } : c,
+      ),
     }),
     db: {
       select: (fields?: unknown) => ({
@@ -1166,6 +1169,10 @@ export function createMockDatabase() {
                   if (col === 'id') return inMemoryDb.users.filter((u) => u.id === p.val);
                   if (col === 'phone_number' || col === 'phonenumber') return inMemoryDb.users.filter((u) => u.phoneNumber === p.val);
                 }
+                if (p.type === 'inArray' && Array.isArray(p.val)) {
+                  const col = getColName(p.col);
+                  if (col === 'id') return inMemoryDb.users.filter((u) => (p.val as unknown[]).includes(u.id));
+                }
               }
               return inMemoryDb.users;
             }
@@ -1279,24 +1286,30 @@ export function createMockDatabase() {
             }
 
             if (isAuditLogsTable(table)) {
+              const matchesAuditPred = (a: MockAuditLog, cond: Record<string, unknown>): boolean => {
+                if (cond.type === 'not' && cond.condition && typeof cond.condition === 'object') {
+                  return !matchesAuditPred(a, cond.condition as Record<string, unknown>);
+                }
+                if (cond.type === 'inArray' && Array.isArray(cond.val)) {
+                  const col = getColName(cond.col);
+                  if (col === 'action') return (cond.val as unknown[]).includes(a.action);
+                  if (col === 'user_id' || col === 'userid') return (cond.val as unknown[]).includes(a.userId);
+                  if (col === 'business_id' || col === 'businessid') return (cond.val as unknown[]).includes(a.businessId);
+                }
+                if (cond.type === 'eq') {
+                  const col = getColName(cond.col);
+                  if (col === 'user_id' || col === 'userid') return a.userId === cond.val;
+                  if (col === 'business_id' || col === 'businessid') return a.businessId === cond.val;
+                  if (col === 'action') return a.action === cond.val;
+                }
+                if (cond.type === 'and' && Array.isArray(cond.conditions)) {
+                  return (cond.conditions as Array<Record<string, unknown>>).every((c) => matchesAuditPred(a, c));
+                }
+                return true;
+              };
+
               if (predicate && typeof predicate === 'object' && 'type' in predicate) {
-                const p = predicate as Record<string, unknown>;
-                if (p.type === 'eq') {
-                  const col = getColName(p.col);
-                  if (col === 'user_id' || col === 'userid') return inMemoryDb.auditLogs.filter((a) => a.userId === p.val);
-                  if (col === 'action') return inMemoryDb.auditLogs.filter((a) => a.action === p.val);
-                }
-                if (p.type === 'and' && Array.isArray(p.conditions)) {
-                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
-                  return inMemoryDb.auditLogs.filter((a) => {
-                    for (const c of conds) {
-                      const col = getColName(c.col);
-                      if ((col === 'user_id' || col === 'userid') && a.userId !== c.val) return false;
-                      if (col === 'action' && a.action !== c.val) return false;
-                    }
-                    return true;
-                  });
-                }
+                return inMemoryDb.auditLogs.filter((a) => matchesAuditPred(a, predicate as Record<string, unknown>));
               }
               return inMemoryDb.auditLogs;
             }

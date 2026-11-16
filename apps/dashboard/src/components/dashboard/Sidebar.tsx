@@ -17,6 +17,7 @@ import {
   Webhook,
   Settings,
   Users,
+  ScrollText,
   LogOut,
   Power,
   X,
@@ -170,6 +171,7 @@ export default function Sidebar({
         title: 'SETTINGS',
         items: [
           { label: 'Team Members', href: '/dashboard/team', icon: Users },
+          { label: 'Business Logs', href: '/dashboard/logs', icon: ScrollText },
           { label: 'Settings', href: '/dashboard/settings', icon: Settings },
         ],
       },

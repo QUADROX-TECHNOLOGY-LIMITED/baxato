@@ -9,6 +9,7 @@ import {
 import { electricityService } from '../../services/electricity.service.js';
 import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { executeWithServiceAudit } from '../../utils/service-audit.js';
 
 export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -134,18 +135,38 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
       const userId = request.user!.id;
       const idempotencyKey = (request.headers['x-idempotency-key'] as string) || undefined;
 
-      const receipt = await electricityService.purchaseElectricity({
-        businessId,
-        userId,
-        disco: upperDisco as DiscoCode,
-        meterNumber: body.meterNumber,
-        meterType,
-        amountKobo: parsedAmountKobo,
-        customerMobile: body.customerMobile,
-        customerName: body.customerName,
-        clientReference: body.clientReference,
-        idempotencyKey,
-      });
+      const receipt = await executeWithServiceAudit(
+        request,
+        {
+          actionPrefix: 'ELECTRICITY_PURCHASE',
+          successChanges: (res) => ({
+            clientReference: res.clientReference || body.clientReference,
+            disco: res.disco,
+            meterType: res.meterType,
+            meterNumber: res.meterNumber,
+            amountNaira: res.faceAmountNaira,
+          }),
+          failureChanges: {
+            clientReference: body.clientReference,
+            disco: upperDisco,
+            meterType,
+            meterNumber: body.meterNumber,
+          },
+        },
+        () =>
+          electricityService.purchaseElectricity({
+            businessId,
+            userId,
+            disco: upperDisco as DiscoCode,
+            meterNumber: body.meterNumber!,
+            meterType,
+            amountKobo: parsedAmountKobo,
+            customerMobile: body.customerMobile,
+            customerName: body.customerName,
+            clientReference: body.clientReference,
+            idempotencyKey,
+          }),
+      );
 
       return reply.status(201).send(createSuccessResponse(receipt, request.id));
     },

@@ -12,6 +12,7 @@ import {
 } from '../../services/data.service.js';
 import { serviceControlsService } from '../../services/service-controls.service.js';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
+import { executeWithServiceAudit } from '../../utils/service-audit.js';
 
 const VALID_DATA_CATEGORIES: DataPlanCategory[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'MEGA', 'SME'];
 const VALID_DATA_TYPES: DataDeliveryType[] = ['DIRECT', 'SME'];
@@ -121,15 +122,35 @@ export const dataRoutes: FastifyPluginAsync = async (fastify) => {
       const userId = request.user!.id;
       const idempotencyKey = (request.headers['x-idempotency-key'] as string) || undefined;
 
-      const receipt = await dataService.purchaseDataBundle({
-        businessId,
-        userId,
-        phone: body.phone,
-        planId: body.planId,
-        network: body.network,
-        clientReference: body.clientReference,
-        idempotencyKey,
-      });
+      const receipt = await executeWithServiceAudit(
+        request,
+        {
+          actionPrefix: 'DATA_PURCHASE',
+          successChanges: (res) => ({
+            clientReference: res.clientReference || body.clientReference,
+            network: res.network,
+            planName: res.planName,
+            recipient: res.recipientPhone,
+            amountNaira: res.faceAmountNaira,
+          }),
+          failureChanges: {
+            clientReference: body.clientReference,
+            network: body.network,
+            planId: body.planId,
+            recipient: body.phone,
+          },
+        },
+        () =>
+          dataService.purchaseDataBundle({
+            businessId,
+            userId,
+            phone: body.phone!,
+            planId: body.planId!,
+            network: body.network,
+            clientReference: body.clientReference,
+            idempotencyKey,
+          }),
+      );
 
       return reply.status(201).send(createSuccessResponse(receipt, request.id));
     },

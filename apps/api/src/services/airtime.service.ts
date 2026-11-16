@@ -32,7 +32,6 @@ import {
   providerRouterService,
   ProviderRouterService,
 } from './providers/index.js';
-import { auditService } from './audit.service.js';
 import { serviceControlsService } from './service-controls.service.js';
 import {
   TELCO_PREFIXES,
@@ -375,23 +374,6 @@ export class AirtimeService {
           createdAt: new Date(),
         };
 
-        // 8. Record audit log entry
-        await auditService.log({
-          userId: input.userId,
-          businessId: input.businessId,
-          action: 'AIRTIME_PURCHASE',
-          resourceType: 'TRANSACTION',
-          resourceId: txnRow.id,
-          changes: {
-            clientReference: clientRef,
-            network,
-            recipient: normalizedPhone,
-            amountNaira: koboToNaira(faceAmountKobo),
-            provider: vendResult.providerName,
-            status: 'SUCCESSFUL',
-          },
-        });
-
         // Save idempotency response if key provided
         if (input.idempotencyKey) {
           await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
@@ -444,22 +426,6 @@ export class AirtimeService {
           createdAt: new Date(),
         };
 
-        await auditService.log({
-          userId: input.userId,
-          businessId: input.businessId,
-          action: 'AIRTIME_PURCHASE_PROCESSING',
-          resourceType: 'TRANSACTION',
-          resourceId: txnRow.id,
-          changes: {
-            clientReference: clientRef,
-            network,
-            recipient: normalizedPhone,
-            amountNaira: koboToNaira(faceAmountKobo),
-            provider: vendResult.providerName,
-            status: 'PROCESSING',
-          },
-        });
-
         if (input.idempotencyKey) {
           await idempotencyService.completeLock(input.idempotencyKey, input.businessId, 201, receipt);
         }
@@ -489,23 +455,6 @@ export class AirtimeService {
       if (input.idempotencyKey) {
         await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
       }
-
-      // Record failure audit log
-      await auditService.log({
-        userId: input.userId,
-        businessId: input.businessId,
-        action: 'AIRTIME_PURCHASE_FAILED',
-        resourceType: 'TRANSACTION',
-        resourceId: txnRow.id,
-        changes: {
-          clientReference: clientRef,
-          network,
-          recipient: normalizedPhone,
-          amountNaira: koboToNaira(faceAmountKobo),
-          error: (error as Error).message,
-          status: 'FAILED',
-        },
-      });
 
       // Outbound Webhook Dispatch for Failure (fire-and-forget / non-blocking)
       webhookDispatcherService
