@@ -1,4 +1,10 @@
-import { db, auditLogs, eq, desc, and } from '@baxato/database';
+import { db, auditLogs, eq, desc } from '@baxato/database';
+import {
+  describeAuditEvent,
+  normalizeIpAddress,
+  parseUserAgent,
+  sanitizeAuditChanges,
+} from '../utils/request-meta.js';
 
 export function sanitizeForJson(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object') return {};
@@ -22,6 +28,12 @@ export interface AuditLogInput {
   changes?: Record<string, unknown>;
 }
 
+const LOGIN_ACTIONS = new Set([
+  'USER_LOGIN',
+  'STAFF_LOGIN_SUCCESS',
+  'ADMIN_LOGIN_SUCCESS',
+]);
+
 export class AuditService {
   /**
    * Persists an audit log entry for user and business activities.
@@ -30,14 +42,15 @@ export class AuditService {
   public async log(params: AuditLogInput): Promise<void> {
     try {
       if (!db || typeof db.insert !== 'function' || !auditLogs) return;
+      const cleanIp = normalizeIpAddress(params.ipAddress);
       await db.insert(auditLogs).values({
         userId: params.userId,
         businessId: params.businessId,
         action: params.action,
         resourceType: params.resourceType,
         resourceId: params.resourceId,
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent,
+        ipAddress: cleanIp || undefined,
+        userAgent: params.userAgent?.trim() || undefined,
         changes: sanitizeForJson(params.changes),
       });
     } catch (err) {
@@ -48,12 +61,13 @@ export class AuditService {
   }
 
   /**
-   * Retrieves chronological audit trail for a specific user.
+   * Retrieves chronological audit trail for a specific user with human-readable summaries
+   * and sanitized non-secret metadata.
    */
-  public async getLogsForUser(userId: string, limit = 15) {
+  public async getLogsForUser(userId: string, limit = 25) {
     try {
       if (!db || typeof db.select !== 'function') return [];
-      return await db
+      const rows = await db
         .select({
           id: auditLogs.id,
           action: auditLogs.action,
@@ -68,6 +82,26 @@ export class AuditService {
         .where(eq(auditLogs.userId, userId))
         .orderBy(desc(auditLogs.createdAt))
         .limit(limit);
+
+      return rows.map((row) => {
+        const cleanChanges = sanitizeAuditChanges(row.changes);
+        const summary = describeAuditEvent({
+          action: row.action,
+          resourceType: row.resourceType,
+          resourceId: row.resourceId,
+          changes: cleanChanges,
+        });
+        const parsedUa = row.userAgent ? parseUserAgent(row.userAgent) : null;
+        return {
+          ...row,
+          ipAddress: normalizeIpAddress(row.ipAddress),
+          changes: cleanChanges,
+          title: summary.title,
+          description: summary.description,
+          category: summary.category,
+          deviceName: parsedUa ? parsedUa.displayName : null,
+        };
+      });
     } catch (err) {
       console.error('[AuditService] Failed to fetch user audit logs:', err);
       return [];
@@ -75,23 +109,35 @@ export class AuditService {
   }
 
   /**
-   * Retrieves the latest login event for a user to display last active telemetry.
+   * Retrieves the latest login (or initial registration) event for a user.
    */
   public async getLastLoginForUser(userId: string) {
     try {
       if (!db || typeof db.select !== 'function') return null;
-      const [lastLogin] = await db
+      const rows = await db
         .select({
+          action: auditLogs.action,
           ipAddress: auditLogs.ipAddress,
           userAgent: auditLogs.userAgent,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
-        .where(and(eq(auditLogs.userId, userId), eq(auditLogs.action, 'USER_LOGIN')))
+        .where(eq(auditLogs.userId, userId))
         .orderBy(desc(auditLogs.createdAt))
-        .limit(1);
+        .limit(30);
 
-      return lastLogin || null;
+      const lastLogin =
+        rows.find((r) => LOGIN_ACTIONS.has(r.action)) ||
+        rows.find((r) => r.action === 'USER_REGISTERED') ||
+        null;
+
+      if (!lastLogin) return null;
+
+      return {
+        ipAddress: normalizeIpAddress(lastLogin.ipAddress),
+        userAgent: lastLogin.userAgent,
+        createdAt: lastLogin.createdAt,
+      };
     } catch (err) {
       console.error('[AuditService] Failed to fetch last login:', err);
       return null;
@@ -99,48 +145,61 @@ export class AuditService {
   }
 
   /**
-   * Retrieves recent distinct login sessions for a user across devices.
-   * Filters out automated test runners (node/undici) and deduplicates by distinct client platform.
+   * Retrieves recent distinct authenticated sessions for a user across browsers, devices, and IPs.
    */
-  public async getRecentLoginSessions(userId: string, limit = 6) {
+  public async getRecentLoginSessions(userId: string, limit = 8) {
     try {
       if (!db || typeof db.select !== 'function') return [];
       const rows = await db
         .select({
           id: auditLogs.id,
+          action: auditLogs.action,
           ipAddress: auditLogs.ipAddress,
           userAgent: auditLogs.userAgent,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
-        .where(and(eq(auditLogs.userId, userId), eq(auditLogs.action, 'USER_LOGIN')))
+        .where(eq(auditLogs.userId, userId))
         .orderBy(desc(auditLogs.createdAt))
-        .limit(30);
+        .limit(60);
 
-      // Filter out automated script user agents like "node", "axios", "undici"
-      const humanRows = rows.filter((r) => {
-        const ua = (r.userAgent || '').trim().toLowerCase();
-        return ua && ua !== 'node' && !ua.startsWith('node/') && !ua.startsWith('axios') && !ua.startsWith('undici');
-      });
+      const loginRows = rows.filter((r) => LOGIN_ACTIONS.has(r.action));
+      const candidateRows =
+        loginRows.length > 0
+          ? loginRows
+          : rows.filter((r) => r.action === 'USER_REGISTERED');
 
-      // Deduplicate by device/platform so distinct physical devices appear cleanly
       const seen = new Set<string>();
-      const distinct: typeof rows = [];
+      const distinct: Array<{
+        id: string;
+        ipAddress: string | null;
+        userAgent: string | null;
+        deviceName: string;
+        os: string;
+        browser: string;
+        category: string;
+        createdAt: Date;
+      }> = [];
 
-      for (const row of humanRows) {
-        const ua = row.userAgent || '';
-        let key = 'unknown';
-        if (/iPhone/i.test(ua)) key = 'apple-iphone';
-        else if (/iPad/i.test(ua)) key = 'apple-ipad';
-        else if (/Android/i.test(ua)) key = 'android-device';
-        else if (/Windows/i.test(ua)) key = 'windows-pc';
-        else if (/Macintosh|Mac OS X/i.test(ua)) key = 'macos-pc';
-        else if (/Linux/i.test(ua)) key = 'linux-pc';
-        else key = ua.slice(0, 30);
+      for (const row of candidateRows) {
+        const parsed = parseUserAgent(row.userAgent);
+        if (parsed.isAutomated) continue;
 
-        if (!seen.has(key)) {
-          seen.add(key);
-          distinct.push(row);
+        const cleanIp = normalizeIpAddress(row.ipAddress);
+        const dedupKey = `${parsed.fingerprintKey}::${cleanIp || 'unknown'}`;
+
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          distinct.push({
+            id: row.id,
+            ipAddress: cleanIp,
+            userAgent: row.userAgent,
+            deviceName: parsed.displayName,
+            os: parsed.os,
+            browser: parsed.browser,
+            category: parsed.category,
+            createdAt: row.createdAt,
+          });
         }
       }
 

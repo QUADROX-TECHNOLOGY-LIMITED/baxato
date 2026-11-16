@@ -4,12 +4,16 @@ import { proxyToBackendApi } from '@/lib/api-client';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
-    const result = await proxyToBackendApi('/auth/2fa/status', {
-      method: 'GET',
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      '/auth/2fa/status',
+      {
+        method: 'GET',
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
       },
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

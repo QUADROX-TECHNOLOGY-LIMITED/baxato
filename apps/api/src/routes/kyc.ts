@@ -9,6 +9,8 @@ import {
 import { db, users, kycVerifications, eq, desc } from '@baxato/database';
 import { kycService } from '../services/kyc.service.js';
 import { authenticate } from '../plugins/auth.plugin.js';
+import { auditService } from '../services/audit.service.js';
+import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
 
 export const kycRoutes: FastifyPluginAsync = async (fastify) => {
   // Apply authentication hook to all KYC routes
@@ -126,6 +128,19 @@ export const kycRoutes: FastifyPluginAsync = async (fastify) => {
       photoExtracted: verification.photoExtracted,
       rawResponse: verification.rawResponse || {},
       verifiedAt: new Date(),
+    });
+
+    await auditService.log({
+      userId: request.isApiKeyAuth ? undefined : user.id,
+      businessId: request.user?.businessId,
+      action: 'KYC_VERIFIED',
+      resourceType: 'KYC',
+      resourceId: user.id,
+      ipAddress: extractClientIp(request),
+      userAgent: extractUserAgent(request),
+      changes: {
+        kycStatus: KycStatus.VERIFIED,
+      },
     });
 
     return reply.status(200).send(

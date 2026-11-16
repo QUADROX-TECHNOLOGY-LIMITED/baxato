@@ -31,6 +31,7 @@ import { zeptoMailService } from '../services/zeptomail.service.js';
 import { twoFactorService } from '../services/two-factor.service.js';
 import { generateToken, authenticate } from '../plugins/auth.plugin.js';
 import { auditService } from '../services/audit.service.js';
+import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -209,8 +210,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       action: 'USER_REGISTERED',
       resourceType: 'USER',
       resourceId: newUser.id,
-      ipAddress: request.ip,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
+      ipAddress: extractClientIp(request),
+      userAgent: extractUserAgent(request),
       changes: {
         email: newUser.email,
         businessName: newBusiness?.name,
@@ -482,7 +483,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
               message:
                 user.twoFactorMethod === 'TOTP'
                   ? 'Please enter the 6-digit code from your authenticator app.'
-                  : `A 6-digit verification code has been dispatched to ${user.email}.`,
+                  : `A 6-digit verification code was sent to ${user.email}.`,
             },
             request.id,
           ),
@@ -539,9 +540,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       kycStatus: user.kycStatus as KycStatus,
     });
 
-    const forwardedIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
-    const realIp = (request.headers['x-real-ip'] as string)?.trim();
-    const clientIp = forwardedIp || realIp || request.ip || '127.0.0.1';
+    const clientIp = extractClientIp(request);
 
     // Record login in audit_logs
     await auditService.log({
@@ -551,7 +550,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       resourceType: 'USER',
       resourceId: user.id,
       ipAddress: clientIp,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
+      userAgent: extractUserAgent(request),
       changes: {
         email: user.email,
         role: user.role,
@@ -723,14 +722,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       kycStatus: user.kycStatus as KycStatus,
     });
 
-    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    const clientIp = extractClientIp(request);
     await auditService.log({
       userId: user.id,
       action: 'STAFF_LOGIN_SUCCESS',
       resourceType: 'USER',
       resourceId: user.id,
       ipAddress: clientIp,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
+      userAgent: extractUserAgent(request),
       changes: { email: user.email, role: user.role },
     });
 
@@ -885,14 +884,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       kycStatus: user.kycStatus as KycStatus,
     });
 
-    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    const clientIp = extractClientIp(request);
     await auditService.log({
       userId: user.id,
       action: 'ADMIN_LOGIN_SUCCESS',
       resourceType: 'USER',
       resourceId: user.id,
       ipAddress: clientIp,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
+      userAgent: extractUserAgent(request),
       changes: { email: user.email, role: user.role },
     });
 
@@ -1059,14 +1058,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       kycStatus: user.kycStatus as KycStatus,
     });
 
-    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip || '127.0.0.1';
+    const clientIp = extractClientIp(request);
     await auditService.log({
       userId: user.id,
       action: 'STAFF_2FA_ENROLLED_AND_LOGGED_IN',
       resourceType: 'USER',
       resourceId: user.id,
       ipAddress: clientIp,
-      userAgent: (request.headers['user-agent'] as string) || undefined,
+      userAgent: extractUserAgent(request),
       changes: { email: user.email, method },
     });
 
@@ -1154,8 +1153,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'PASSWORD_CHANGE_REQUESTED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { email: user.email },
       });
 
@@ -1231,8 +1230,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'PASSWORD_CHANGED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { email: user.email },
       });
 
@@ -1343,8 +1342,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'USER_2FA_EMAIL_REQUESTED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { email: user.email },
       });
 
@@ -1353,7 +1352,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             sent: true,
             email: user.email,
-            message: `A 6-digit verification code has been dispatched to ${user.email}.`,
+            message: `A 6-digit verification code was sent to ${user.email}.`,
           },
           request.id,
         ),
@@ -1410,8 +1409,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'USER_2FA_ENABLED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { method: 'EMAIL' },
       });
 
@@ -1536,8 +1535,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'USER_2FA_ENABLED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { method: 'TOTP' },
       });
 
@@ -1604,8 +1603,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'USER_2FA_DISABLED',
         resourceType: 'USER',
         resourceId: user.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: { enabled: false },
       });
 

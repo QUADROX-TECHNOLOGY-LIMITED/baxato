@@ -8,6 +8,8 @@ import {
 } from '@baxato/common';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 import { apiKeyService } from '../../services/api-key.service.js';
+import { auditService } from '../../services/audit.service.js';
+import { extractClientIp, extractUserAgent } from '../../utils/request-meta.js';
 
 export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -64,6 +66,21 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       });
 
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'API_KEY_CREATED',
+        resourceType: 'API_KEY',
+        resourceId: result.apiKey.id,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+        changes: {
+          name: result.apiKey.name,
+          environment: result.apiKey.environment,
+          keyPrefix: result.apiKey.keyPrefix,
+        },
+      });
+
       return reply.status(201).send(createSuccessResponse(result, request.id));
     },
   );
@@ -112,6 +129,22 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
       const keyId = request.params.id;
 
       const key = await apiKeyService.revokeApiKey(keyId, businessId);
+
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'API_KEY_REVOKED',
+        resourceType: 'API_KEY',
+        resourceId: keyId,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+        changes: {
+          name: key.name,
+          environment: key.environment,
+          keyPrefix: key.keyPrefix,
+        },
+      });
+
       return reply.send(createSuccessResponse(key, request.id));
     },
   );
@@ -136,6 +169,23 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
       const keyId = request.params.id;
 
       const result = await apiKeyService.rotateApiKey(keyId, businessId);
+
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'API_KEY_ROTATED',
+        resourceType: 'API_KEY',
+        resourceId: result.apiKey.id,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+        changes: {
+          name: result.apiKey.name,
+          environment: result.apiKey.environment,
+          keyPrefix: result.apiKey.keyPrefix,
+          rotatedFromId: keyId,
+        },
+      });
+
       return reply.send(createSuccessResponse(result, request.id));
     },
   );
@@ -160,6 +210,17 @@ export const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
       const keyId = request.params.id;
 
       await apiKeyService.deleteApiKey(keyId, businessId);
+
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'API_KEY_DELETED',
+        resourceType: 'API_KEY',
+        resourceId: keyId,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+      });
+
       return reply.send(createSuccessResponse({ deleted: true }, request.id));
     },
   );

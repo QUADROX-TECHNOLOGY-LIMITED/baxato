@@ -4,12 +4,16 @@ import { proxyToBackendApi } from '@/lib/api-client';
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
-    const result = await proxyToBackendApi('/users/me', {
-      method: 'GET',
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      '/users/me',
+      {
+        method: 'GET',
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
       },
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {
@@ -26,14 +30,18 @@ export async function PATCH(request: Request) {
     const authHeader = request.headers.get('authorization') || '';
     const body = await request.json();
 
-    const result = await proxyToBackendApi('/users/me', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      '/users/me',
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

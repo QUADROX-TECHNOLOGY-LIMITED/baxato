@@ -10,6 +10,7 @@ import {
 import { teamService } from '../services/team.service.js';
 import { requireTenantPermission } from '../plugins/rbac.plugin.js';
 import { authenticate } from '../plugins/auth.plugin.js';
+import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
 
 export const teamRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -60,8 +61,8 @@ export const teamRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-      const userAgent = request.headers['user-agent'] as string | undefined;
+      const clientIp = extractClientIp(request);
+      const userAgent = extractUserAgent(request);
 
       const result = await teamService.inviteMember(
         businessId,
@@ -100,8 +101,8 @@ export const teamRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('Invitation ID required');
       }
 
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-      const userAgent = request.headers['user-agent'] as string | undefined;
+      const clientIp = extractClientIp(request);
+      const userAgent = extractUserAgent(request);
 
       const result = await teamService.revokeInvitation(businessId, callerId, id, clientIp, userAgent);
       return reply.status(200).send(createSuccessResponse(result, request.id));
@@ -124,8 +125,8 @@ export const teamRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('Invitation ID required');
       }
 
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-      const userAgent = request.headers['user-agent'] as string | undefined;
+      const clientIp = extractClientIp(request);
+      const userAgent = extractUserAgent(request);
 
       const result = await teamService.resendInvitation(businessId, callerId, id, clientIp, userAgent);
       return reply.status(200).send(createSuccessResponse(result, request.id));
@@ -151,8 +152,8 @@ export const teamRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-      const userAgent = request.headers['user-agent'] as string | undefined;
+      const clientIp = extractClientIp(request);
+      const userAgent = extractUserAgent(request);
 
       const result = await teamService.updateMemberRole(
         businessId,
@@ -183,8 +184,8 @@ export const teamRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('Member ID required');
       }
 
-      const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-      const userAgent = request.headers['user-agent'] as string | undefined;
+      const clientIp = extractClientIp(request);
+      const userAgent = extractUserAgent(request);
 
       const result = await teamService.removeMember(businessId, callerId, id, clientIp, userAgent);
       return reply.status(200).send(createSuccessResponse(result, request.id));
@@ -229,8 +230,8 @@ export const inviteOnboardingRoutes: FastifyPluginAsync = async (fastify) => {
       // Ignored: non-logged-in user accepting invite
     }
 
-    const clientIp = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || request.ip;
-    const userAgent = request.headers['user-agent'] as string | undefined;
+    const clientIp = extractClientIp(request);
+    const userAgent = extractUserAgent(request);
 
     const result = await teamService.acceptInvitation({
       rawToken: parseResult.data.token,

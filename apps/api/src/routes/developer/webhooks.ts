@@ -11,6 +11,8 @@ import {
 } from '@baxato/common';
 import { requireTenantPermission } from '../../plugins/rbac.plugin.js';
 import { webhookDispatcherService } from '../../services/webhook-dispatcher.service.js';
+import { auditService } from '../../services/audit.service.js';
+import { extractClientIp, extractUserAgent } from '../../utils/request-meta.js';
 
 export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -58,10 +60,28 @@ export const developerWebhookRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const businessId = request.businessId!;
+      const payload = parseResult.data as UpdateWebhookConfigInput;
       const result = await webhookDispatcherService.updateWebhookConfig(
         businessId,
-        parseResult.data as UpdateWebhookConfigInput,
+        payload,
       );
+
+      await auditService.log({
+        userId: request.isApiKeyAuth ? undefined : request.user?.id,
+        businessId,
+        action: 'WEBHOOK_CONFIG_UPDATED',
+        resourceType: 'WEBHOOK',
+        resourceId: businessId,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
+        changes: {
+          environment:
+            payload.webhookTestUrl !== undefined || payload.regenerateTestSecret
+              ? 'TEST'
+              : 'LIVE',
+          regenerateSecret: Boolean(payload.regenerateSecret || payload.regenerateTestSecret),
+        },
+      });
 
       return reply.status(200).send(createSuccessResponse(result, request.id));
     },

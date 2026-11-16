@@ -472,4 +472,91 @@ describe('Settings & Security Endpoints (/users/me/security & /auth/change-passw
     const reloginBody: ApiResponse<{ user: { hideBalance: boolean } }> = reloginRes.json();
     expect(reloginBody.data?.user.hideBalance).toBe(true);
   });
+
+  it('extracts public IP through Cloudflare/proxy chains, distinguishes browsers on same OS, and enriches/sanitizes audit logs', async () => {
+    const { parseUserAgent, sanitizeAuditChanges } = await import('../../src/utils/request-meta');
+
+    expect(
+      parseUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+      ).browser,
+    ).toBe('Microsoft Edge');
+    expect(
+      parseUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/116.0.0.0',
+      ).browser,
+    ).toBe('Opera');
+    expect(
+      sanitizeAuditChanges({
+        provider: 'VTPASS',
+        secret: 'sk_live_secret',
+        environment: 'LIVE',
+      }),
+    ).toEqual({ environment: 'LIVE' });
+
+    const macEdgeUa =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
+    const winChromeUa =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const winEdgeUa =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
+
+    // Login from Windows Chrome behind private Docker + Cloudflare proxy hops
+    await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: {
+        'user-agent': winChromeUa,
+        'x-forwarded-for': '10.0.1.5, ::ffff:197.210.44.8, 172.18.0.2',
+      },
+      payload: {
+        email: userEmail,
+        password: 'BrandNewPassword2026!',
+      },
+    });
+
+    // Login from Windows Edge on same OS (should remain a separate active session)
+    await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: {
+        'user-agent': winEdgeUa,
+        'cf-connecting-ip': '::ffff:102.89.11.20',
+      },
+      payload: {
+        email: userEmail,
+        password: 'BrandNewPassword2026!',
+      },
+    });
+
+    // Query security telemetry from macOS Edge
+    const secRes = await app.inject({
+      method: 'GET',
+      url: '/users/me/security',
+      headers: {
+        authorization: `Bearer ${authToken}`,
+        'user-agent': macEdgeUa,
+        'cf-connecting-ip': '197.210.55.90',
+        'x-forwarded-for': '10.0.0.4, 172.17.0.1',
+      },
+    });
+
+    expect(secRes.statusCode).toBe(200);
+    const secBody = secRes.json();
+    expect(secBody.data.currentSession.ipAddress).toBe('197.210.55.90');
+    expect(secBody.data.currentSession.browser).toBe('Microsoft Edge');
+    expect(secBody.data.currentSession.os).toBe('macOS');
+
+    const sessions = secBody.data.activeSessions;
+    expect(sessions.some((s: any) => s.ipAddress === '197.210.44.8' && s.browser === 'Google Chrome')).toBe(true);
+    expect(sessions.some((s: any) => s.ipAddress === '102.89.11.20' && s.browser === 'Microsoft Edge')).toBe(true);
+
+    const loginLog = secBody.data.auditLogs.find(
+      (l: any) => l.action === 'USER_LOGIN' && l.ipAddress === '102.89.11.20',
+    );
+    expect(loginLog).toBeDefined();
+    expect(loginLog.title).toBe('Signed in');
+    expect(loginLog.category).toBe('auth');
+    expect(loginLog.deviceName).toContain('Microsoft Edge');
+  });
 });

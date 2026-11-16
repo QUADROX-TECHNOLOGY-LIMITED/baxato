@@ -10,6 +10,11 @@ import {
 import { db, users, businesses, wallets, eq } from '@baxato/database';
 import { authenticate } from '../plugins/auth.plugin.js';
 import { auditService } from '../services/audit.service.js';
+import {
+  extractClientIp,
+  extractUserAgent,
+  parseUserAgent,
+} from '../utils/request-meta.js';
 
 export const userRoutes: FastifyPluginAsync = async (fastify) => {
   // Apply authentication hook to all user routes
@@ -156,8 +161,8 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
         action: 'PROFILE_UPDATED',
         resourceType: 'USER',
         resourceId: updatedUser.id,
-        ipAddress: request.ip,
-        userAgent: (request.headers['user-agent'] as string) || undefined,
+        ipAddress: extractClientIp(request),
+        userAgent: extractUserAgent(request),
         changes: {
           firstName: updatedUser.firstName,
           lastName: updatedUser.lastName,
@@ -202,13 +207,12 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const lastLogin = await auditService.getLastLoginForUser(userId);
-    const auditLogs = await auditService.getLogsForUser(userId, 20);
-    const activeSessions = await auditService.getRecentLoginSessions(userId, 6);
+    const auditLogs = await auditService.getLogsForUser(userId, 25);
+    const activeSessions = await auditService.getRecentLoginSessions(userId, 8);
 
-    const forwarded = (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
-    const realIp = (request.headers['x-real-ip'] as string)?.trim();
-    const clientIp = forwarded || realIp || request.ip || '127.0.0.1';
-    const userAgent = (request.headers['user-agent'] as string) || 'Web Browser';
+    const clientIp = extractClientIp(request);
+    const userAgent = extractUserAgent(request) || null;
+    const currentDevice = parseUserAgent(userAgent);
 
     return reply.status(200).send(
       createSuccessResponse(
@@ -216,7 +220,11 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
           lastLoginAt: lastLogin?.createdAt || user.createdAt,
           currentSession: {
             ipAddress: clientIp,
-            userAgent,
+            userAgent: userAgent || 'Web Browser',
+            deviceName: currentDevice.displayName,
+            os: currentDevice.os,
+            browser: currentDevice.browser,
+            category: currentDevice.category,
             lastActiveAt: new Date().toISOString(),
           },
           activeSessions,

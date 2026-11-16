@@ -8,6 +8,8 @@ import {
 } from '@baxato/common';
 import { businessService } from '../services/business.service.js';
 import { authenticate } from '../plugins/auth.plugin.js';
+import { auditService } from '../services/audit.service.js';
+import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
 
 export const businessRoutes: FastifyPluginAsync = async (fastify) => {
   // Require authentication for all business routes
@@ -137,6 +139,20 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const updated = await businessService.updateBusiness(id, userId, parseResult.data);
+
+    await auditService.log({
+      userId: request.isApiKeyAuth ? undefined : userId,
+      businessId: id,
+      action: 'BUSINESS_UPDATED',
+      resourceType: 'BUSINESS',
+      resourceId: id,
+      ipAddress: extractClientIp(request),
+      userAgent: extractUserAgent(request),
+      changes: {
+        name: updated?.name,
+      },
+    });
+
     return reply.status(200).send(
       createSuccessResponse(
         {
@@ -160,6 +176,17 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = await businessService.regenerateWebhookSecret(id, userId);
+
+    await auditService.log({
+      userId: request.isApiKeyAuth ? undefined : userId,
+      businessId: id,
+      action: 'WEBHOOK_SECRET_REGENERATED',
+      resourceType: 'WEBHOOK',
+      resourceId: id,
+      ipAddress: extractClientIp(request),
+      userAgent: extractUserAgent(request),
+    });
+
     return reply.status(200).send(
       createSuccessResponse(
         {
