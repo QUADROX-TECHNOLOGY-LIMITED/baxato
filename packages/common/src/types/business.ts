@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { UserRole } from './enums.js';
 
 export const MAX_BUSINESSES_PER_USER = 3;
+export const MAX_BUSINESS_NAME_CHANGES = 3;
+
+export interface BusinessNameHistoryEntry {
+  previousName: string;
+  newName: string;
+  changedByUserId: string;
+  changedByEmail?: string | null;
+  changedAt: string;
+}
 
 export const createBusinessSchema = z.object({
   name: z.string().min(2, 'Business name must be at least 2 characters'),
@@ -22,9 +31,31 @@ export const switchBusinessSchema = z.object({
 export type SwitchBusinessInput = z.infer<typeof switchBusinessSchema>;
 
 export const updateBusinessSchema = z.object({
-  name: z.string().min(2).optional(),
-  websiteUrl: z.string().url().optional().or(z.literal('')),
-  webhookUrl: z.string().url('Invalid webhook URL').optional().or(z.literal('')),
+  name: z
+    .string()
+    .trim()
+    .min(2, 'Business name must be at least 2 characters')
+    .max(120, 'Business name cannot exceed 120 characters')
+    .optional(),
+  websiteUrl: z
+    .string()
+    .trim()
+    .url('Invalid website URL')
+    .optional()
+    .or(z.literal('')),
+  phoneNumber: z
+    .string()
+    .trim()
+    .min(7, 'Support phone number must be at least 7 digits')
+    .max(24, 'Support phone number is too long')
+    .optional()
+    .or(z.literal('')),
+  webhookUrl: z
+    .string()
+    .trim()
+    .url('Invalid webhook URL')
+    .optional()
+    .or(z.literal('')),
 });
 
 export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;

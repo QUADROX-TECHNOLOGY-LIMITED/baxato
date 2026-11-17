@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, boolean, jsonb, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { generateEntityId, UserRole, InvitationStatus } from '@baxato/common';
+import { generateEntityId, UserRole, InvitationStatus, type BusinessNameHistoryEntry } from '@baxato/common';
 
 export const userRoleEnum = pgEnum('user_role', [
   UserRole.SUPER_ADMIN,
@@ -86,6 +86,9 @@ export const businesses = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
+    initialName: text('initial_name'),
+    nameChangeCount: integer('name_change_count').default(0).notNull(),
+    nameHistory: jsonb('name_history').$type<BusinessNameHistoryEntry[]>().default([]).notNull(),
     slug: text('slug').notNull().unique(),
     email: text('email'),
     phoneNumber: text('phone_number'),

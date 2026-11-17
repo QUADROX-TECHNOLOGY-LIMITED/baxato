@@ -57,6 +57,13 @@
       "when": 1794763500000,
       "tag": "0007_add_cable_beneficiary_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794885500000,
+      "tag": "0008_add_business_name_history",
+      "breakpoints": true
     }
   ]
 }

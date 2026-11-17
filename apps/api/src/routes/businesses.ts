@@ -149,6 +149,11 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('Business ID required');
     }
 
+    const rawBody = (request.body || {}) as Record<string, unknown>;
+    if (rawBody.email !== undefined) {
+      throw new ValidationError('Business email cannot be modified.');
+    }
+
     const parseResult = updateBusinessSchema.safeParse(request.body);
     if (!parseResult.success) {
       throw new ValidationError(
@@ -169,6 +174,10 @@ export const businessRoutes: FastifyPluginAsync = async (fastify) => {
       changes: {
         ...extractAuditActor(request),
         name: updated?.name,
+        ...(updated?.previousName ? { previousName: updated.previousName } : {}),
+        ...(parseResult.data.phoneNumber !== undefined ? { phoneUpdated: true } : {}),
+        ...(parseResult.data.websiteUrl !== undefined ? { websiteUpdated: true } : {}),
+        nameChangeCount: updated?.nameChangeCount ?? 0,
       },
     });
 

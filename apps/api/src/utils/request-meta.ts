@@ -774,8 +774,16 @@ export function describeAuditEvent(entry: {
       };
     case 'BUSINESS_UPDATED':
       return {
-        title: 'Workspace settings updated',
-        description: c.name ? `Updated details for ${String(c.name)}` : 'Updated workspace details',
+        title:
+          c.previousName && c.name && c.previousName !== c.name
+            ? 'Workspace renamed'
+            : 'Workspace settings updated',
+        description:
+          c.previousName && c.name && c.previousName !== c.name
+            ? `Renamed workspace from "${String(c.previousName)}" to "${String(c.name)}"`
+            : c.name
+            ? `Updated details for ${String(c.name)}`
+            : 'Updated workspace details',
         category: 'business',
       };
     case 'AIRTIME_PURCHASE':

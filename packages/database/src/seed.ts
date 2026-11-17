@@ -106,6 +106,7 @@ export async function seedDatabase() {
       .values({
         ownerId: adminUser.id,
         name: 'Baxato Demo Merchant',
+        initialName: 'Baxato Demo Merchant',
         slug: 'baxato-demo-merchant',
         country: 'NG',
         state: 'Lagos',

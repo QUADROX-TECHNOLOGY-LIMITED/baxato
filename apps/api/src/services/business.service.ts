@@ -1,15 +1,18 @@
 import {
   MAX_BUSINESSES_PER_USER,
+  MAX_BUSINESS_NAME_CHANGES,
   BusinessCapExceededError,
   NotFoundError,
   ForbiddenError,
   ConflictError,
+  ValidationError,
   WalletType,
   UserRole,
   generateEntityId,
   formatNairaFromKobo,
   koboToNaira,
   KycStatus,
+  type BusinessNameHistoryEntry,
   type CreateBusinessInput,
   type UpdateBusinessInput,
 } from '@baxato/common';
@@ -69,11 +72,15 @@ export class BusinessService {
       businessEmail = owner?.email || null;
     }
 
+    const trimmedName = input.name.trim();
     const [newBusiness] = await db
       .insert(businesses)
       .values({
         ownerId,
-        name: input.name.trim(),
+        name: trimmedName,
+        initialName: trimmedName,
+        nameChangeCount: 0,
+        nameHistory: [],
         slug,
         email: businessEmail,
         phoneNumber: input.phoneNumber ? input.phoneNumber.trim() : null,
@@ -186,12 +193,22 @@ export class BusinessService {
 
         const isOwner = biz.ownerId === userId;
         const membership = memberships.find((m) => m.businessId === biz.id);
+        const [bizOwner] = biz.email
+          ? [null]
+          : await db
+              .select({ email: users.email })
+              .from(users)
+              .where(eq(users.id, biz.ownerId))
+              .limit(1);
 
         return {
           id: biz.id,
           name: biz.name,
+          initialName: biz.initialName || biz.name,
+          nameChangeCount: Number(biz.nameChangeCount ?? 0),
+          maxNameChanges: MAX_BUSINESS_NAME_CHANGES,
           slug: biz.slug,
-          email: biz.email,
+          email: biz.email || bizOwner?.email || null,
           phoneNumber: biz.phoneNumber,
           websiteUrl: biz.websiteUrl,
           country: biz.country,
@@ -251,19 +268,33 @@ export class BusinessService {
       .from(wallets)
       .where(eq(wallets.businessId, biz.id));
 
+    const [bizOwner] = await db
+      .select({ email: users.email, kycStatus: users.kycStatus })
+      .from(users)
+      .where(eq(users.id, biz.ownerId))
+      .limit(1);
+
     const main = bizWallets.find((w) => w.type === 'MAIN');
+    const nameChangeCount = Number(biz.nameChangeCount ?? 0);
+    const nameHistory = Array.isArray(biz.nameHistory) ? biz.nameHistory : [];
 
     return {
       id: biz.id,
       name: biz.name,
+      initialName: biz.initialName || biz.name,
+      nameChangeCount,
+      maxNameChanges: MAX_BUSINESS_NAME_CHANGES,
+      remainingNameChanges: Math.max(0, MAX_BUSINESS_NAME_CHANGES - nameChangeCount),
+      nameHistory,
       slug: biz.slug,
-      email: biz.email,
+      email: biz.email || bizOwner?.email || null,
       phoneNumber: biz.phoneNumber,
       websiteUrl: biz.websiteUrl,
       country: biz.country,
       state: biz.state,
       lga: biz.lga,
       status: biz.status,
+      ownerKycStatus: (bizOwner?.kycStatus as KycStatus) || KycStatus.UNVERIFIED,
       webhookUrl: biz.webhookUrl,
       webhookSecretMasked: biz.webhookSecret ? `${biz.webhookSecret.slice(0, 10)}...` : null,
       role: isOwner ? UserRole.BUSINESS_OWNER : memberRole,
@@ -283,9 +314,14 @@ export class BusinessService {
   }
 
   /**
-   * Updates business settings (name, websiteUrl, webhookUrl).
+   * Updates business settings (name up to 3 times, websiteUrl, phoneNumber, webhookUrl).
+   * Requires verified KYC on the workspace owner and Owner/Admin permissions.
    */
-  public async updateBusiness(businessId: string, userId: string, input: UpdateBusinessInput) {
+  public async updateBusiness(
+    businessId: string,
+    userId: string,
+    input: UpdateBusinessInput,
+  ) {
     const [biz] = await db
       .select()
       .from(businesses)
@@ -309,18 +345,80 @@ export class BusinessService {
       }
     }
 
+    const [ownerUser] = await db
+      .select({ id: users.id, email: users.email, kycStatus: users.kycStatus })
+      .from(users)
+      .where(eq(users.id, biz.ownerId))
+      .limit(1);
+
+    if (!ownerUser || ownerUser.kycStatus !== KycStatus.VERIFIED) {
+      throw new ForbiddenError('Complete identity (KYC) verification before updating business settings.');
+    }
+
+    const nextName = input.name?.trim();
+    const isRenaming = Boolean(nextName && nextName !== biz.name);
+    const currentChangeCount = Number(biz.nameChangeCount ?? 0);
+    const initialName = biz.initialName || biz.name;
+    const currentHistory: BusinessNameHistoryEntry[] = Array.isArray(biz.nameHistory)
+      ? biz.nameHistory
+      : [];
+
+    let nextChangeCount = currentChangeCount;
+    let nextHistory = currentHistory;
+
+    if (isRenaming) {
+      if (currentChangeCount >= MAX_BUSINESS_NAME_CHANGES) {
+        throw new ValidationError(
+          `Business name can only be changed up to ${MAX_BUSINESS_NAME_CHANGES} times.`,
+        );
+      }
+
+      const [callerUser] =
+        userId === ownerUser.id
+          ? [ownerUser]
+          : await db
+              .select({ email: users.email })
+              .from(users)
+              .where(eq(users.id, userId))
+              .limit(1);
+
+      nextChangeCount = currentChangeCount + 1;
+      nextHistory = [
+        ...currentHistory,
+        {
+          previousName: biz.name,
+          newName: nextName!,
+          changedByUserId: userId,
+          changedByEmail: callerUser?.email || null,
+          changedAt: new Date().toISOString(),
+        },
+      ];
+    }
+
     const [updated] = await db
       .update(businesses)
       .set({
-        ...(input.name ? { name: input.name.trim() } : {}),
-        ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl || null } : {}),
-        ...(input.webhookUrl !== undefined ? { webhookUrl: input.webhookUrl || null } : {}),
+        ...(isRenaming ? { name: nextName, initialName, nameChangeCount: nextChangeCount, nameHistory: nextHistory } : {}),
+        ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl ? input.websiteUrl.trim() : null } : {}),
+        ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber ? input.phoneNumber.trim() : null } : {}),
+        ...(input.webhookUrl !== undefined ? { webhookUrl: input.webhookUrl ? input.webhookUrl.trim() : null } : {}),
         updatedAt: new Date(),
       })
       .where(eq(businesses.id, businessId))
       .returning();
 
-    return updated;
+    const updatedCount = Number(updated?.nameChangeCount ?? nextChangeCount);
+    return {
+      ...updated,
+      email: updated?.email || ownerUser.email,
+      initialName: updated?.initialName || initialName,
+      nameChangeCount: updatedCount,
+      maxNameChanges: MAX_BUSINESS_NAME_CHANGES,
+      remainingNameChanges: Math.max(0, MAX_BUSINESS_NAME_CHANGES - updatedCount),
+      nameHistory: Array.isArray(updated?.nameHistory) ? updated.nameHistory : nextHistory,
+      ownerKycStatus: ownerUser.kycStatus as KycStatus,
+      previousName: isRenaming ? biz.name : undefined,
+    };
   }
 
   /**

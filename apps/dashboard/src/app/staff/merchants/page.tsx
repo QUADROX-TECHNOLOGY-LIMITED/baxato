@@ -224,6 +224,12 @@ export default function StaffMerchantsPage() {
 
                     <td className="py-2.5 px-4">
                       <div className="font-medium text-slate-900 dark:text-white">{m.name}</div>
+                      {m.ownerBusinesses?.[0]?.initialName &&
+                        m.ownerBusinesses[0].initialName !== m.name && (
+                          <div className="text-[10px] text-slate-500">
+                            Initial: {m.ownerBusinesses[0].initialName}
+                          </div>
+                        )}
                       <div className="text-[10px] text-slate-500 font-mono">{m.slug}</div>
                     </td>
 
@@ -490,6 +496,17 @@ export default function StaffMerchantsPage() {
                       <div className="font-semibold text-slate-900 dark:text-white">
                         {biz.name}
                       </div>
+                      {biz.initialName && biz.initialName !== biz.name && (
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                          Initial name: {biz.initialName}
+                        </div>
+                      )}
+                      {Array.isArray(biz.nameHistory) && biz.nameHistory.length > 0 && (
+                        <div className="text-[10px] text-slate-500 mt-0.5 space-y-0.5">
+                          <span className="font-medium">Previous names:</span>{' '}
+                          {biz.nameHistory.map((h: any) => h.previousName).join(' -> ')}
+                        </div>
+                      )}
                       <div className="text-[10px] text-slate-500 font-mono">
                         {biz.slug}
                       </div>

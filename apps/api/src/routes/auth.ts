@@ -118,7 +118,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         .values({
           ownerId: newUser.id,
           name: data.businessName.trim(),
+          initialName: data.businessName.trim(),
+          nameChangeCount: 0,
+          nameHistory: [],
           slug,
+          email: newUser.email,
+          phoneNumber: normalizedPhone,
           websiteUrl: data.websiteUrl || null,
           country: data.country.toUpperCase(),
           state: data.state.trim(),

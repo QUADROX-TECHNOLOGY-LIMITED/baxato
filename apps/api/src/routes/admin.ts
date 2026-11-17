@@ -682,7 +682,13 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             return {
               id: ub.id,
               name: ub.name,
+              initialName: ub.initialName || ub.name,
+              nameChangeCount: Number(ub.nameChangeCount ?? 0),
+              nameHistory: Array.isArray(ub.nameHistory) ? ub.nameHistory : [],
               slug: ub.slug,
+              email: ub.email || u.email,
+              phoneNumber: ub.phoneNumber || '',
+              websiteUrl: ub.websiteUrl || '',
               status: ub.status,
               country: ub.country,
               state: ub.state,
@@ -849,7 +855,13 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         return {
           id: b.id,
           name: b.name,
+          initialName: b.initialName || b.name,
+          nameChangeCount: Number(b.nameChangeCount ?? 0),
+          nameHistory: Array.isArray(b.nameHistory) ? b.nameHistory : [],
           slug: b.slug,
+          email: b.email || merchantUser?.email || '',
+          phoneNumber: b.phoneNumber || '',
+          websiteUrl: b.websiteUrl || '',
           status: b.status,
           country: b.country,
           state: b.state,
@@ -863,6 +875,8 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         };
       }),
     );
+
+    const primaryOwnerBiz = ownerBusinesses[0] || null;
 
     const [kycRecord] = merchantUser
       ? await db
@@ -930,7 +944,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
                 rawResponse: kycRecord.rawResponse,
               }
             : null,
-          primaryBusiness: primaryBiz,
+          primaryBusiness: primaryOwnerBiz,
           ownerBusinesses,
           wallets: {
             mainBalanceKobo: totalMainKobo.toString(),
@@ -938,7 +952,12 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             formattedMain: formatNairaFromKobo(Number(totalMainKobo)),
           },
           recentTransactions: recentTx.map((tx) => ({
-            ...tx,
+            id: tx.id,
+            serviceType: tx.serviceType,
+            status: tx.status,
+            recipient: tx.recipient,
+            clientReference: tx.clientReference,
+            createdAt: tx.createdAt,
             amountKobo: tx.amount.toString(),
             amountNaira: koboToNaira(tx.amount),
             formattedAmount: formatNairaFromKobo(tx.amount),

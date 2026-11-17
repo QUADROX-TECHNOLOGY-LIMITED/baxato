@@ -256,6 +256,21 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
       const body = res.json<ApiResponse<any[]>>();
       expect(body.success).toBe(true);
       expect(Array.isArray(body.data)).toBe(true);
+      const merchant = body.data?.find((m) => m.ownerId === 'usr_merchant_ops');
+      expect(merchant?.ownerBusinesses?.[0]?.initialName).toBe('Sample Pay Enterprise');
+      expect(merchant?.ownerBusinesses?.[0]?.nameChangeCount).toBe(0);
+
+      const detailRes = await app.inject({
+        method: 'GET',
+        url: '/admin/merchants/usr_merchant_ops',
+        headers: {
+          authorization: `Bearer ${staffToken}`,
+        },
+      });
+      expect(detailRes.statusCode).toBe(200);
+      const detailBody = detailRes.json<ApiResponse<any>>();
+      expect(detailBody.data?.primaryBusiness?.initialName).toBe('Sample Pay Enterprise');
+      expect(Array.isArray(detailBody.data?.ownerBusinesses?.[0]?.nameHistory)).toBe(true);
     });
   });
 

@@ -83,9 +83,13 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_url TEXT;`;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS webhook_test_secret TEXT;`;
 
-    // Idempotent schema guarantee for Multi-business contact fields
+    // Idempotent schema guarantee for Multi-business contact & name history fields
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT;`;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS phone_number TEXT;`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS initial_name TEXT;`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS name_change_count INTEGER DEFAULT 0 NOT NULL;`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS name_history JSONB DEFAULT '[]'::jsonb NOT NULL;`;
+    await sql`UPDATE businesses SET initial_name = name WHERE initial_name IS NULL;`;
 
     // Idempotent schema guarantee for Platform System Settings
     await sql`

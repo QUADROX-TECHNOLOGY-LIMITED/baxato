@@ -17,7 +17,7 @@ import {
   Webhook,
   Settings,
   Users,
-  ScrollText,
+  Building2,
   LogOut,
   Power,
   X,
@@ -220,8 +220,8 @@ export default function Sidebar({
         title: 'SETTINGS',
         items: [
           { label: 'Team Members', href: '/dashboard/team', icon: Users },
-          { label: 'Business Logs', href: '/dashboard/logs', icon: ScrollText },
-          { label: 'Settings', href: '/dashboard/settings', icon: Settings },
+          { label: 'Business Settings', href: '/dashboard/business', icon: Building2 },
+          { label: 'Account Settings', href: '/dashboard/settings', icon: Settings },
         ],
       },
     ];
@@ -239,7 +239,7 @@ export default function Sidebar({
         {
           id: 'ORGANIZATION',
           title: 'SETTINGS',
-          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+          items: [{ label: 'Account Settings', href: '/dashboard/settings', icon: Settings }],
         },
       ];
     }
@@ -250,7 +250,7 @@ export default function Sidebar({
         {
           id: 'ORGANIZATION',
           title: 'SETTINGS',
-          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+          items: [{ label: 'Account Settings', href: '/dashboard/settings', icon: Settings }],
         },
       ];
     }
@@ -262,7 +262,7 @@ export default function Sidebar({
         {
           id: 'ORGANIZATION',
           title: 'SETTINGS',
-          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+          items: [{ label: 'Account Settings', href: '/dashboard/settings', icon: Settings }],
         },
       ];
     }
@@ -273,7 +273,7 @@ export default function Sidebar({
         {
           id: 'ORGANIZATION',
           title: 'SETTINGS',
-          items: [{ label: 'Settings', href: '/dashboard/settings', icon: Settings }],
+          items: [{ label: 'Account Settings', href: '/dashboard/settings', icon: Settings }],
         },
       ];
     }

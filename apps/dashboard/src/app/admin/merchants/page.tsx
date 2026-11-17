@@ -317,6 +317,18 @@ export default function SuperAdminMerchantsPage() {
                           <p className="font-semibold text-slate-900 dark:text-white text-sm">
                             {displayName}
                           </p>
+                          {m.ownerBusinesses?.[0]?.initialName &&
+                            m.ownerBusinesses[0].initialName !== displayName && (
+                              <p className="text-[10px] text-slate-500">
+                                Initial: {m.ownerBusinesses[0].initialName}
+                                {Array.isArray(m.ownerBusinesses[0].nameHistory) &&
+                                m.ownerBusinesses[0].nameHistory.length > 0
+                                  ? ` (${m.ownerBusinesses[0].nameHistory.length} rename${
+                                      m.ownerBusinesses[0].nameHistory.length === 1 ? '' : 's'
+                                    })`
+                                  : ''}
+                              </p>
+                            )}
                           <p className="text-[11px] text-slate-400">
                             Registered {new Date(m.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </p>

@@ -31,7 +31,18 @@ export interface MockBusiness {
   id: string;
   ownerId: string;
   name: string;
+  initialName?: string | null;
+  nameChangeCount?: number;
+  nameHistory?: Array<{
+    previousName: string;
+    newName: string;
+    changedByUserId: string;
+    changedByEmail?: string | null;
+    changedAt: string;
+  }>;
   slug: string;
+  email?: string | null;
+  phoneNumber?: string | null;
   websiteUrl?: string | null;
   country: string;
   state: string;
@@ -641,7 +652,12 @@ export function createMockDatabase() {
           id: `biz_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           ownerId: String(u.ownerId),
           name: String(u.name),
+          initialName: u.initialName ? String(u.initialName) : String(u.name),
+          nameChangeCount: typeof u.nameChangeCount === 'number' ? u.nameChangeCount : 0,
+          nameHistory: Array.isArray(u.nameHistory) ? (u.nameHistory as MockBusiness['nameHistory']) : [],
           slug: String(u.slug),
+          email: u.email ? String(u.email) : null,
+          phoneNumber: u.phoneNumber ? String(u.phoneNumber) : null,
           websiteUrl: u.websiteUrl ? String(u.websiteUrl) : null,
           country: String(u.country || 'NG'),
           state: String(u.state || 'Lagos'),
