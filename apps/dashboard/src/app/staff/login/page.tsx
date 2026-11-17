@@ -1,21 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Eye,
   EyeOff,
   AlertCircle,
-  CheckCircle2,
-  Loader2,
   Copy,
   Check,
-  ArrowLeft,
   Smartphone,
   Mail,
 } from 'lucide-react';
-import ThemeToggle from '@/components/ThemeToggle';
+import BaxatoLoader from '@/components/BaxatoLoader';
+import { AUTH_INPUT_CLASS, AUTH_PRIMARY_BUTTON_CLASS } from '@/components/auth/AuthShell';
 
 type LoginStep = 'credentials' | '2fa_verify' | '2fa_setup';
 type SetupMethod = 'TOTP' | 'EMAIL';
@@ -23,17 +21,33 @@ type SetupMethod = 'TOTP' | 'EMAIL';
 export default function StaffLoginPage() {
   const router = useRouter();
 
-  // Primary credentials state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<LoginStep>('credentials');
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingSetup, setIsFetchingSetup] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusHint, setStatusHint] = useState<string | null>(null);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
 
-  // Check for expired session query param and ensure credentials are wiped clean
-  React.useEffect(() => {
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'TOTP' | 'EMAIL'>('TOTP');
+  const [twoFactorPrompt, setTwoFactorPrompt] = useState('');
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
+
+  const [tempToken, setTempToken] = useState('');
+  const [setupMethod, setSetupMethod] = useState<SetupMethod>('TOTP');
+  const [totpSetupData, setTotpSetupData] = useState<{
+    secret?: string;
+    qrCodeDataUrl?: string;
+    backupCodes?: string[];
+  } | null>(null);
+  const [setupCode, setSetupCode] = useState('');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
@@ -43,260 +57,27 @@ export default function StaffLoginPage() {
             localStorage.removeItem('bx_auth_token');
             localStorage.removeItem('bx_user');
             localStorage.removeItem('bx_business');
-            document.cookie = 'bx_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+            document.cookie =
+              'bx_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
           } catch {}
         }
       }
     } catch {}
   }, []);
 
-  // 2FA Verification state
-  const [twoFactorCode, setTwoFactorCode] = useState('');
-  const [twoFactorMethod, setTwoFactorMethod] = useState<'TOTP' | 'EMAIL'>('TOTP');
-  const [twoFactorPrompt, setTwoFactorPrompt] = useState('');
-  const [isResendingEmail, setIsResendingEmail] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(0);
-
-  // 2FA Setup state (first-time staff enrollment)
-  const [tempToken, setTempToken] = useState('');
-  const [setupMethod, setSetupMethod] = useState<SetupMethod>('TOTP');
-  const [totpSetupData, setTotpSetupData] = useState<{
-    secret?: string;
-    qrCodeDataUrl?: string;
-    backupCodes?: string[];
-  } | null>(null);
-  const [setupCode, setSetupCode] = useState('');
-  const [copiedSecret, setCopiedSecret] = useState(false);
-
-  // Countdown timer for resend
-  React.useEffect(() => {
+  useEffect(() => {
     if (resendCountdown > 0) {
       const timer = setTimeout(() => setResendCountdown((c) => c - 1), 1000);
       return () => clearTimeout(timer);
     }
   }, [resendCountdown]);
 
-  // 1. Submit Primary Credentials
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
+  useEffect(() => {
+    if (!statusHint) return;
+    const timer = setTimeout(() => setStatusHint(null), 2500);
+    return () => clearTimeout(timer);
+  }, [statusHint]);
 
-    const cleanEmail = email.toLowerCase().trim();
-
-    // STRICT CORPORATE DOMAIN CHECK: Do NOT even touch backend/database if not @baxato.com
-    if (!cleanEmail.endsWith('@baxato.com')) {
-      setErrorMessage('Staff login requires an official @baxato.com email address.');
-      return;
-    }
-
-    if (!password) {
-      setErrorMessage('Password is required.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/staff/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: password.trim(),
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok || !data?.success) {
-        setErrorMessage(data?.error?.message || 'Invalid email or password.');
-        return;
-      }
-
-      // Check for 2FA flows
-      if (data.data?.requiresTwoFactorSetup) {
-        setTempToken(data.data.tempToken);
-        setStep('2fa_setup');
-        initiateTotpSetup(data.data.tempToken);
-      } else if (data.data?.requiresTwoFactor) {
-        setTwoFactorMethod(data.data.twoFactorMethod || 'EMAIL');
-        setTwoFactorPrompt(
-          data.data.message ||
-            (data.data.twoFactorMethod === 'TOTP'
-              ? 'Enter the 6-digit code from your authenticator app.'
-              : `Enter the 6-digit verification code sent to ${cleanEmail}.`),
-        );
-        if (data.data.twoFactorMethod === 'EMAIL') {
-          setResendCountdown(60);
-        }
-        setStep('2fa_verify');
-      } else if (data.data?.token) {
-        completeStaffSession(data.data);
-      }
-    } catch {
-      setErrorMessage('Network error connecting to staff authentication service.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 2. Submit Existing 2FA Code
-  const handleVerify2FaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = twoFactorCode.trim();
-    if (cleanCode.length !== 6) {
-      setErrorMessage('Verification code must be 6 digits.');
-      return;
-    }
-
-    setErrorMessage(null);
-    setIsLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/staff/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          password,
-          twoFactorCode: cleanCode,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        setErrorMessage(data?.error?.message || 'Invalid verification code.');
-        return;
-      }
-
-      completeStaffSession(data.data);
-    } catch {
-      setErrorMessage('Network error verifying code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 3. Initiate TOTP setup for first-time staff
-  const initiateTotpSetup = async (tokenToUse: string) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const res = await fetch('/api/auth/staff/2fa/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tempToken: tokenToUse,
-          method: 'TOTP',
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success) {
-        setTotpSetupData(data.data);
-      } else {
-        setErrorMessage(data?.error?.message || 'Failed to initialize authenticator setup.');
-      }
-    } catch {
-      setErrorMessage('Network error loading QR code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 4. Initiate Email OTP setup for first-time staff
-  const initiateEmailSetup = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setSetupCode('');
-    try {
-      const res = await fetch('/api/auth/staff/2fa/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tempToken,
-          method: 'EMAIL',
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success) {
-        setResendCountdown(60);
-      } else {
-        setErrorMessage(data?.error?.message || 'Failed to dispatch verification code.');
-      }
-    } catch {
-      setErrorMessage('Network error requesting email code.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 5. Complete First-Time 2FA Enrollment & Login
-  const handleCompleteSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = setupCode.trim();
-    if (cleanCode.length !== 6) {
-      setErrorMessage('Verification code must be 6 digits.');
-      return;
-    }
-
-    setErrorMessage(null);
-    setIsLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/staff/2fa/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tempToken,
-          method: setupMethod,
-          code: cleanCode,
-          secret: setupMethod === 'TOTP' ? totpSetupData?.secret : undefined,
-          backupCodes: setupMethod === 'TOTP' ? totpSetupData?.backupCodes : undefined,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        setErrorMessage(data?.error?.message || 'Invalid verification code.');
-        return;
-      }
-
-      completeStaffSession(data.data);
-    } catch {
-      setErrorMessage('Network error finalizing setup.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Resend Email OTP during existing 2FA verify
-  const handleResendOtp = async () => {
-    if (resendCountdown > 0 || isResendingEmail) return;
-    setIsResendingEmail(true);
-    setErrorMessage(null);
-    try {
-      const res = await fetch('/api/auth/staff/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          password,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success) {
-        setResendCountdown(60);
-      } else {
-        setErrorMessage(data?.error?.message || 'Failed to resend code.');
-      }
-    } catch {
-      setErrorMessage('Network error resending code.');
-    } finally {
-      setIsResendingEmail(false);
-    }
-  };
-
-  // Common Session Completion
   const completeStaffSession = (data: any) => {
     if (data?.token) {
       try {
@@ -315,330 +96,572 @@ export default function StaffLoginPage() {
     }
   };
 
-  const copySecret = (text: string) => {
+  const initiateTotpSetup = async (tokenToUse: string) => {
+    setIsFetchingSetup(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/auth/staff/2fa/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tempToken: tokenToUse,
+          method: 'TOTP',
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setTotpSetupData(data.data);
+      } else {
+        setErrorMessage(data?.error?.message || 'Failed to load authenticator setup.');
+      }
+    } catch {
+      setErrorMessage('Network error loading authenticator setup.');
+    } finally {
+      setIsFetchingSetup(false);
+    }
+  };
+
+  const initiateEmailSetup = async () => {
+    setIsFetchingSetup(true);
+    setErrorMessage(null);
+    setSetupCode('');
+    try {
+      const res = await fetch('/api/auth/staff/2fa/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tempToken,
+          method: 'EMAIL',
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setResendCountdown(60);
+        setStatusHint('Code sent');
+      } else {
+        setErrorMessage(data?.error?.message || 'Unable to send verification code.');
+      }
+    } catch {
+      setErrorMessage('Network error requesting email code.');
+    } finally {
+      setIsFetchingSetup(false);
+    }
+  };
+
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setStatusHint(null);
+
+    const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail.endsWith('@baxato.com')) {
+      setErrorMessage('Staff login requires a @baxato.com email address.');
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('Password is required.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/staff/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: password.trim(),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setErrorMessage(data?.error?.message || 'Invalid email or password.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.data?.requiresTwoFactorSetup) {
+        setTempToken(data.data.tempToken);
+        setStep('2fa_setup');
+        setIsLoading(false);
+        void initiateTotpSetup(data.data.tempToken);
+      } else if (data.data?.requiresTwoFactor) {
+        const method = data.data.twoFactorMethod || 'EMAIL';
+        setTwoFactorMethod(method);
+        setTwoFactorPrompt(
+          method === 'TOTP'
+            ? 'Enter the 6-digit code from your authenticator app.'
+            : `Enter the 6-digit code sent to ${cleanEmail}.`,
+        );
+        if (method === 'EMAIL') {
+          setResendCountdown(60);
+          setStatusHint('Code sent');
+        }
+        setStep('2fa_verify');
+        setIsLoading(false);
+      } else if (data.data?.token) {
+        completeStaffSession(data.data);
+      } else {
+        setIsLoading(false);
+      }
+    } catch {
+      setErrorMessage('Network error connecting to staff login.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerify2FaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = twoFactorCode.trim();
+    if (cleanCode.length !== 6) {
+      setErrorMessage('Verification code must be 6 digits.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/staff/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          password,
+          twoFactorCode: cleanCode,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setErrorMessage(data?.error?.message || 'Invalid verification code.');
+        setIsLoading(false);
+        return;
+      }
+
+      completeStaffSession(data.data);
+    } catch {
+      setErrorMessage('Network error verifying code.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompleteSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = setupCode.trim();
+    if (cleanCode.length !== 6) {
+      setErrorMessage('Verification code must be 6 digits.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/staff/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tempToken,
+          method: setupMethod,
+          code: cleanCode,
+          secret: setupMethod === 'TOTP' ? totpSetupData?.secret : undefined,
+          backupCodes: setupMethod === 'TOTP' ? totpSetupData?.backupCodes : undefined,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setErrorMessage(data?.error?.message || 'Invalid verification code.');
+        setIsLoading(false);
+        return;
+      }
+
+      completeStaffSession(data.data);
+    } catch {
+      setErrorMessage('Network error completing setup.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCountdown > 0 || isResendingEmail) return;
+    setIsResendingEmail(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/auth/staff/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          password,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setResendCountdown(60);
+        setStatusHint('Code sent');
+      } else {
+        setErrorMessage(data?.error?.message || 'Failed to resend code.');
+      }
+    } catch {
+      setErrorMessage('Network error resending code.');
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
+
+  const copyValue = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedSecret(true);
-    setTimeout(() => setCopiedSecret(false), 2000);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-8 sm:py-12 bg-slate-50 dark:bg-[#070D18] text-slate-800 dark:text-slate-200 transition-colors duration-200 relative">
-      {/* Top Bar with ThemeToggle */}
-      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
-        <ThemeToggle />
-      </div>
+    <div className="min-h-[100dvh] flex flex-col justify-center items-center px-4 sm:px-6 py-8 bg-white dark:bg-[#070D18] text-slate-900 dark:text-slate-100 transition-colors duration-200 relative">
+      {isLoading && (
+        <BaxatoLoader
+          variant="fullscreen"
+          className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden"
+        />
+      )}
 
-      {/* Main Container */}
-      <div className="w-full max-w-sm sm:max-w-md">
-        {/* Header Branding */}
-        <div className="text-center mb-6">
-          <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0A1324] p-1 mx-auto mb-3">
+      <div className="w-full max-w-[400px] my-auto">
+        <div className="flex flex-col items-center text-center mb-7">
+          <div className="relative w-10 h-10 mb-3">
             <Image
-              src="/baxato-logo.jpg"
-              alt="Baxato"
+              src="/baxato-mark.svg"
+              alt="BAXATO"
               fill
               priority
-              className="object-contain rounded-lg"
+              className="object-contain"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Staff Sign in
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white [text-wrap:balance]">
+            {step === 'credentials'
+              ? 'Staff Login'
+              : step === '2fa_verify'
+                ? 'Two-Factor Verification'
+                : 'Set Up Two-Factor Security'}
           </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {step === 'credentials'
+              ? 'BAXATO Operations Console'
+              : step === '2fa_verify'
+                ? twoFactorPrompt
+                : 'Choose a verification method for your staff account.'}
+          </p>
         </div>
 
-        {/* Card Box */}
-        <div className="bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm dark:shadow-xl transition-colors">
-          {/* Session Expired / Re-authentication Notice */}
-          {isSessionExpired && !errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2 shadow-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-              <div className="leading-relaxed font-medium">Your staff session has expired. Please sign in again to continue.</div>
-            </div>
-          )}
+        {isSessionExpired && !errorMessage && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" aria-hidden="true" />
+            <span>Your session expired. Sign in again to continue.</span>
+          </div>
+        )}
 
-          {/* Error Banner */}
-          {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-              <div className="leading-relaxed">{errorMessage}</div>
-            </div>
-          )}
+        {errorMessage && (
+          <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" aria-hidden="true" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
-          {/* STEP 1: PRIMARY CREDENTIALS */}
-          {step === 'credentials' && (
-            <form onSubmit={handleCredentialsSubmit} noValidate className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Email
-                </label>
+        {statusHint && (
+          <div className="mb-4 text-center text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            {statusHint}
+          </div>
+        )}
+
+        {step === 'credentials' && (
+          <form onSubmit={handleCredentialsSubmit} noValidate className="space-y-4">
+            <div>
+              <label
+                htmlFor="staff-email"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                Staff Email
+              </label>
+              <input
+                id="staff-email"
+                type="email"
+                required
+                autoFocus
+                autoComplete="username"
+                placeholder="name@baxato.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={AUTH_INPUT_CLASS}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="staff-password"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                Password
+              </label>
+              <div className="relative">
                 <input
-                  type="email"
+                  id="staff-password"
+                  type={showPassword ? 'text' : 'password'}
                   required
-                  autoFocus
-                  placeholder="name@baxato.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A1324] text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-colors"
+                  autoComplete="current-password"
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`${AUTH_INPUT_CLASS} pr-12`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                  )}
+                </button>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A1324] text-slate-900 dark:text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-colors"
-                  />
+            <button
+              type="submit"
+              disabled={isLoading || !email.trim() || !password}
+              className={`${AUTH_PRIMARY_BUTTON_CLASS} mt-2`}
+            >
+              <span>Login</span>
+            </button>
+          </form>
+        )}
+
+        {step === '2fa_verify' && (
+          <form onSubmit={handleVerify2FaSubmit} noValidate className="space-y-4">
+            <div>
+              <label
+                htmlFor="staff-2fa-code"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                6-Digit Code
+              </label>
+              <input
+                id="staff-2fa-code"
+                type="text"
+                inputMode="numeric"
+                required
+                maxLength={6}
+                placeholder="000000"
+                autoFocus
+                autoComplete="one-time-code"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                className={`${AUTH_INPUT_CLASS} text-center text-lg font-mono tracking-[0.35em]`}
+              />
+            </div>
+
+            {twoFactorMethod === 'EMAIL' && (
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>Didn&apos;t receive a code?</span>
+                {resendCountdown > 0 ? (
+                  <span className="tabular-nums">Resend in {resendCountdown}s</span>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    onClick={handleResendOtp}
+                    disabled={isResendingEmail}
+                    className="min-h-11 px-2 text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline disabled:opacity-50"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Send code
                   </button>
-                </div>
+                )}
               </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading || twoFactorCode.length !== 6}
+              className={AUTH_PRIMARY_BUTTON_CLASS}
+            >
+              <span>Verify</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setStep('credentials');
+                setTwoFactorCode('');
+                setErrorMessage(null);
+              }}
+              className="w-full min-h-11 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Use another account
+            </button>
+          </form>
+        )}
+
+        {step === '2fa_setup' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setSetupMethod('TOTP');
+                  if (!totpSetupData) void initiateTotpSetup(tempToken);
+                }}
+                className={`min-h-10 px-3 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  setupMethod === 'TOTP'
+                    ? 'bg-[#126BEB] text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Authenticator</span>
+              </button>
 
               <button
-                type="submit"
-                disabled={isLoading || !email.trim() || !password}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm bg-[#126BEB] hover:bg-[#0E58C4] text-white transition-all shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+                type="button"
+                onClick={() => {
+                  setSetupMethod('EMAIL');
+                  void initiateEmailSetup();
+                }}
+                className={`min-h-10 px-3 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  setupMethod === 'EMAIL'
+                    ? 'bg-[#126BEB] text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <span>Sign in</span>
-                )}
+                <Mail className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Email</span>
               </button>
-            </form>
-          )}
+            </div>
 
-          {/* STEP 2A: EXISTING 2FA VERIFICATION */}
-          {step === '2fa_verify' && (
-            <form onSubmit={handleVerify2FaSubmit} noValidate className="space-y-4">
-              <div className="text-center pb-1">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-                  Two-Factor Authentication
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  {twoFactorPrompt}
-                </p>
-              </div>
+            {isFetchingSetup ? (
+              <BaxatoLoader variant="inline" className="py-6" />
+            ) : (
+              <>
+                {setupMethod === 'TOTP' && (
+                  <div className="space-y-3">
+                    {totpSetupData?.qrCodeDataUrl && (
+                      <div className="flex flex-col items-center p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white">
+                        <img
+                          src={totpSetupData.qrCodeDataUrl}
+                          alt="Authenticator QR code"
+                          className="w-36 h-36 object-contain"
+                        />
+                        <span className="text-[11px] text-slate-500 mt-2">
+                          Scan with your authenticator app
+                        </span>
+                      </div>
+                    )}
 
+                    {totpSetupData?.secret && (
+                      <div className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs font-mono">
+                        <span className="truncate text-slate-700 dark:text-slate-300">
+                          {totpSetupData.secret}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyValue(totpSetupData.secret!, 'secret')}
+                          aria-label="Copy setup key"
+                          className="min-h-9 min-w-9 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-900 dark:hover:text-white shrink-0"
+                        >
+                          {copiedKey === 'secret' ? (
+                            <Check className="w-4 h-4 text-emerald-500" aria-hidden="true" />
+                          ) : (
+                            <Copy className="w-4 h-4" aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {Array.isArray(totpSetupData?.backupCodes) && totpSetupData.backupCodes.length > 0 && (
+                      <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-slate-700 dark:text-slate-300">
+                            Recovery Codes
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => copyValue(totpSetupData.backupCodes!.join('\n'), 'backup')}
+                            className="text-[#126BEB] dark:text-[#38BDF8] font-medium hover:underline flex items-center gap-1"
+                          >
+                            {copiedKey === 'backup' ? (
+                              <>
+                                <Check className="w-3 h-3" aria-hidden="true" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" aria-hidden="true" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                          {totpSetupData.backupCodes.map((code) => (
+                            <span key={code}>{code}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {setupMethod === 'EMAIL' && (
+                  <p className="text-xs text-center text-slate-600 dark:text-slate-300 py-2">
+                    Enter the 6-digit code sent to <strong className="font-semibold">{email}</strong>.
+                  </p>
+                )}
+              </>
+            )}
+
+            <form onSubmit={handleCompleteSetup} noValidate className="space-y-3">
               <div>
+                <label
+                  htmlFor="staff-setup-code"
+                  className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  Confirmation Code
+                </label>
                 <input
+                  id="staff-setup-code"
                   type="text"
+                  inputMode="numeric"
                   required
                   maxLength={6}
                   placeholder="000000"
-                  autoFocus
-                  autoComplete="one-time-code"
-                  value={twoFactorCode}
-                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center text-xl font-mono tracking-[0.4em] py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A1324] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-colors"
+                  value={setupCode}
+                  onChange={(e) => setSetupCode(e.target.value.replace(/\D/g, ''))}
+                  className={`${AUTH_INPUT_CLASS} text-center text-lg font-mono tracking-[0.35em]`}
                 />
               </div>
 
-              {twoFactorMethod === 'EMAIL' && (
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
-                  <span>Didn&apos;t receive code?</span>
-                  {resendCountdown > 0 ? (
-                    <span>Resend in {resendCountdown}s</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={isResendingEmail}
-                      className="text-[#126BEB] hover:underline font-semibold disabled:opacity-50"
-                    >
-                      Resend code
-                    </button>
-                  )}
-                </div>
-              )}
-
               <button
                 type="submit"
-                disabled={isLoading || twoFactorCode.length !== 6}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm bg-[#126BEB] hover:bg-[#0E58C4] text-white transition-all shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                disabled={isLoading || setupCode.length !== 6}
+                className={AUTH_PRIMARY_BUTTON_CLASS}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying...</span>
-                  </>
-                ) : (
-                  <span>Verify code</span>
-                )}
+                <span>Confirm</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setStep('credentials');
-                  setTwoFactorCode('');
+                  setSetupCode('');
                   setErrorMessage(null);
                 }}
-                className="w-full py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center gap-1"
+                className="w-full min-h-11 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to sign in</span>
+                Cancel
               </button>
             </form>
-          )}
-
-          {/* STEP 2B: 2FA SETUP (FIRST-TIME ENROLLMENT) */}
-          {step === '2fa_setup' && (
-            <div className="space-y-4">
-              <div className="text-center pb-1">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-                  Set Up Two-Factor Authentication
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Select a method to secure your account.
-                </p>
-              </div>
-
-              {/* Method Switcher */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSetupMethod('TOTP');
-                    if (!totpSetupData) initiateTotpSetup(tempToken);
-                  }}
-                  className={`py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    setupMethod === 'TOTP'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>Authenticator</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSetupMethod('EMAIL');
-                    initiateEmailSetup();
-                  }}
-                  className={`py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    setupMethod === 'EMAIL'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Email</span>
-                </button>
-              </div>
-
-              {/* TOTP Method */}
-              {setupMethod === 'TOTP' && (
-                <div className="space-y-3">
-                  {totpSetupData?.qrCodeDataUrl ? (
-                    <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-slate-200 dark:border-slate-800">
-                      <img
-                        src={totpSetupData.qrCodeDataUrl}
-                        alt="Scan QR code"
-                        className="w-36 h-36 object-contain"
-                      />
-                      <span className="text-[11px] text-slate-500 mt-1">
-                        Scan with Google Authenticator or 1Password
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="py-6 flex justify-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-[#126BEB]" />
-                    </div>
-                  )}
-
-                  {totpSetupData?.secret && (
-                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                      <div className="truncate text-slate-600 dark:text-slate-300 pr-2">
-                        Key: {totpSetupData.secret}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copySecret(totpSetupData.secret!)}
-                        className="p-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white shrink-0"
-                      >
-                        {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Email Method */}
-              {setupMethod === 'EMAIL' && (
-                <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-xs text-blue-800 dark:text-blue-300">
-                  Verification code sent to <strong>{email}</strong>.
-                </div>
-              )}
-
-              {/* 6-Digit Setup Verification */}
-              <form onSubmit={handleCompleteSetup} noValidate className="space-y-3 pt-1">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 text-center">
-                    Enter 6-digit confirmation code
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    placeholder="000000"
-                    autoFocus
-                    value={setupCode}
-                    onChange={(e) => setSetupCode(e.target.value.replace(/\D/g, ''))}
-                    className="w-full text-center text-xl font-mono tracking-[0.4em] py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0A1324] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#126BEB] transition-colors"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading || setupCode.length !== 6}
-                  className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Activating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Confirm and sign in</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep('credentials');
-                    setSetupCode('');
-                    setErrorMessage(null);
-                  }}
-                  className="w-full py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center gap-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Cancel</span>
-                </button>
-              </form>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

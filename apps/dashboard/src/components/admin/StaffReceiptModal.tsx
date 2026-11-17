@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
+import ModalDialog from '@/components/ModalDialog';
 import { printStaffReceipt } from '@/lib/receipt-printer';
 
 interface StaffReceiptModalProps {
@@ -26,7 +27,7 @@ export default function StaffReceiptModal({
 }: StaffReceiptModalProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  if (!isOpen || !tx) return null;
+  if (!tx) return null;
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -51,7 +52,7 @@ export default function StaffReceiptModal({
   const tokenFormatted = formatToken(rawToken);
   const units = meta.units || tx.units;
   const customerName = meta.customerName || meta.name || tx.userName;
-  const discoName = meta.discoName || meta.disco || meta.operator || 'DISCO';
+  const discoName = meta.discoName || meta.disco || meta.operator || 'Electricity';
 
   const formattedDate = new Date(tx.createdAt).toLocaleDateString('en-NG', {
     day: '2-digit',
@@ -63,290 +64,297 @@ export default function StaffReceiptModal({
   });
 
   const handlePrint = () => {
-    if (tx) {
-      printStaffReceipt(tx);
-    }
+    printStaffReceipt(tx);
   };
 
+  const refValue = tx.requestReference || tx.clientReference || tx.id;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-md my-auto bg-white dark:bg-[#0D1726] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header Bar (Hidden on print) */}
-        <div className="no-print flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#080E1A]">
-          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-            Transaction Receipt
-          </span>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
-            aria-label="Close receipt"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* PRINTABLE RECEIPT */}
-        <div
-          id="staff-printable-receipt"
-          className="p-5 sm:p-6 space-y-4 text-slate-900 dark:text-white"
+    <ModalDialog
+      isOpen={isOpen && Boolean(tx)}
+      onClose={onClose}
+      ariaLabelledBy="staff-receipt-title"
+      maxWidthClass="max-w-md"
+      className="bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+    >
+      {/* Modal Header Bar */}
+      <div className="no-print flex items-center justify-between px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-[#070D18]/60">
+        <h2
+          id="staff-receipt-title"
+          className="text-sm font-semibold text-slate-900 dark:text-white"
         >
-          {/* Brand Header */}
-          <div className="text-center pb-3 border-b border-dashed border-slate-300 dark:border-slate-700 space-y-1">
-            <div className="flex items-center justify-center gap-2">
-              <div className="relative w-6 h-6 rounded overflow-hidden bg-white p-0.5 border border-slate-200 shrink-0">
-                <Image
-                  src="/baxato-logo.jpg"
-                  alt="Baxato"
-                  fill
-                  priority
-                  className="object-contain"
-                />
-              </div>
-              <span className="font-extrabold text-base tracking-wider text-slate-900 dark:text-white">
-                BAXATO
-              </span>
-            </div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
-              Transaction Receipt
-            </p>
-          </div>
+          Transaction Receipt
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close receipt"
+          className="min-h-10 min-w-10 -mr-2 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
+        >
+          <X className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
 
-          {/* Status & Amount */}
-          <div className="text-center py-1 space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold">
-              {tx.status === 'SUCCESSFUL' ? (
-                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Successful
-                </span>
-              ) : tx.status === 'FAILED' ? (
-                <span className="flex items-center gap-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-3 py-1 rounded-full border border-red-200 dark:border-red-800">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  Failed
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800">
-                  <Clock className="w-3.5 h-3.5" />
-                  Pending
-                </span>
-              )}
+      {/* Printable Receipt Body */}
+      <div
+        id="staff-printable-receipt"
+        className="p-5 sm:p-6 space-y-4 text-slate-900 dark:text-white max-h-[72dvh] overflow-y-auto"
+      >
+        <div className="text-center pb-3 border-b border-dashed border-slate-300 dark:border-slate-700 space-y-1.5">
+          <div className="flex items-center justify-center gap-2">
+            <div className="relative w-6 h-6 shrink-0">
+              <Image
+                src="/baxato-mark.svg"
+                alt="BAXATO"
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
-
-            <div className="text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-white pt-1">
-              {tx.formattedAmount || `₦${Number(tx.amountNaira || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`}
-            </div>
-
-            <span className="text-[11px] text-slate-500 font-medium block">
-              {tx.serviceType.replace('_', ' ')}
+            <span className="font-bold text-base tracking-tight text-slate-900 dark:text-white">
+              BAXATO
             </span>
           </div>
+          <p className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">
+            Transaction Receipt
+          </p>
+        </div>
 
-          {/* ELECTRICITY STS TOKEN */}
-          {isElectricity && tokenFormatted && (
-            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-800/80 text-center space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">
-                Token
+        <div className="text-center py-1 space-y-1.5">
+          <div className="inline-flex items-center justify-center">
+            {tx.status === 'SUCCESSFUL' ? (
+              <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full text-xs font-semibold border border-emerald-200 dark:border-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Successful</span>
               </span>
-              <div className="text-lg font-mono font-black tracking-widest text-amber-950 dark:text-amber-200 select-all">
-                {tokenFormatted}
+            ) : tx.status === 'FAILED' ? (
+              <span className="inline-flex items-center gap-1.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-full text-xs font-semibold border border-rose-200 dark:border-rose-800">
+                <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Failed</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full text-xs font-semibold border border-amber-200 dark:border-amber-800">
+                <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{tx.status || 'Pending'}</span>
+              </span>
+            )}
+          </div>
+
+          <div className="text-2xl font-bold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white pt-1">
+            {tx.formattedAmount ||
+              `₦${Number(tx.amountNaira || 0).toLocaleString('en-NG', {
+                minimumFractionDigits: 2,
+              })}`}
+          </div>
+
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
+            {(tx.serviceType || '').replace(/_/g, ' ')}
+          </span>
+        </div>
+
+        {isElectricity && tokenFormatted && (
+          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 text-center space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">
+              Electricity Token
+            </span>
+            <div className="text-lg font-mono font-bold tracking-widest text-amber-950 dark:text-amber-200 select-all">
+              {tokenFormatted}
+            </div>
+            <div className="no-print pt-0.5 flex justify-center">
+              <button
+                type="button"
+                onClick={() => copyToClipboard(rawToken, 'token')}
+                className="min-h-9 px-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline"
+              >
+                {copiedKey === 'token' ? (
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                <span>{copiedKey === 'token' ? 'Copied' : 'Copy token'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <dl className="space-y-2.5 text-xs border-t border-b border-dashed border-slate-300 dark:border-slate-700 py-3.5">
+          <div className="flex justify-between items-center gap-3">
+            <dt className="text-slate-500 dark:text-slate-400 shrink-0">Recipient</dt>
+            <dd className="font-semibold font-mono text-slate-900 dark:text-white text-right truncate">
+              {tx.recipient}
+            </dd>
+          </div>
+
+          {isElectricity && (
+            <>
+              <div className="flex justify-between items-center gap-3">
+                <dt className="text-slate-500 dark:text-slate-400 shrink-0">Utility</dt>
+                <dd className="font-semibold text-slate-900 dark:text-white text-right">
+                  {discoName}
+                </dd>
               </div>
-              <div className="no-print pt-0.5 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(rawToken, 'token')}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline"
-                >
-                  {copiedKey === 'token' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  <span>Copy</span>
-                </button>
-              </div>
+              {units && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Units</dt>
+                  <dd className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono text-right">
+                    {units} kWh
+                  </dd>
+                </div>
+              )}
+              {customerName && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Customer</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white truncate text-right">
+                    {customerName}
+                  </dd>
+                </div>
+              )}
+            </>
+          )}
+
+          {isData && (
+            <>
+              {meta.network && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Network</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white font-mono">
+                    {meta.network}
+                  </dd>
+                </div>
+              )}
+              {(meta.planName || meta.capacity) && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Plan</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white text-right">
+                    {meta.planName || meta.capacity}
+                  </dd>
+                </div>
+              )}
+            </>
+          )}
+
+          {isAirtime && meta.network && (
+            <div className="flex justify-between items-center gap-3">
+              <dt className="text-slate-500 dark:text-slate-400 shrink-0">Network</dt>
+              <dd className="font-semibold text-slate-900 dark:text-white font-mono">
+                {meta.network}
+              </dd>
             </div>
           )}
 
-          {/* RECEIPT DETAILS */}
-          <div className="space-y-2 text-xs border-t border-b border-dashed border-slate-300 dark:border-slate-700 py-3">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Recipient:</span>
-              <span className="font-semibold font-mono text-slate-900 dark:text-white">
-                {tx.recipient}
-              </span>
-            </div>
-
-            {isElectricity && (
-              <>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">DISCO:</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {discoName}
-                  </span>
+          {isCable && (
+            <>
+              {meta.operator && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Operator</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{meta.operator}</dd>
                 </div>
-                {units && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Units:</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                      {units} kWh
-                    </span>
-                  </div>
-                )}
-                {customerName && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Customer Name:</span>
-                    <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                      {customerName}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
+              )}
+              {meta.bouquet && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Bouquet</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white text-right">
+                    {meta.bouquet}
+                  </dd>
+                </div>
+              )}
+              {customerName && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Customer</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white truncate text-right">
+                    {customerName}
+                  </dd>
+                </div>
+              )}
+            </>
+          )}
 
-            {isData && (
-              <>
-                {meta.network && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Network:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                      {meta.network}
-                    </span>
-                  </div>
-                )}
-                {(meta.planName || meta.capacity) && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Plan:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {meta.planName || meta.capacity}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
+          {isExam && (
+            <>
+              {meta.examBody && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">Exam Body</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{meta.examBody}</dd>
+                </div>
+              )}
+              {meta.pin && (
+                <div className="flex justify-between items-center gap-3">
+                  <dt className="text-slate-500 dark:text-slate-400 shrink-0">PIN</dt>
+                  <dd className="font-mono font-bold text-slate-900 dark:text-white">{meta.pin}</dd>
+                </div>
+              )}
+            </>
+          )}
 
-            {isAirtime && meta.network && (
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Network:</span>
-                <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                  {meta.network}
-                </span>
-              </div>
-            )}
-
-            {isCable && (
-              <>
-                {meta.operator && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Operator:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {meta.operator}
-                    </span>
-                  </div>
-                )}
-                {meta.bouquet && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Bouquet:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {meta.bouquet}
-                    </span>
-                  </div>
-                )}
-                {customerName && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Customer Name:</span>
-                    <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                      {customerName}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {isExam && (
-              <>
-                {meta.examBody && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Exam Body:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {meta.examBody}
-                    </span>
-                  </div>
-                )}
-                {meta.pin && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">PIN:</span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-white">
-                      {meta.pin}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-slate-500">Merchant:</span>
-              <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                {tx.businessName || 'Baxato Merchant'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Reference:</span>
-              <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 dark:text-slate-300">
-                <span className="truncate max-w-[180px]">
-                  {tx.requestReference || tx.clientReference || tx.id}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(tx.requestReference || tx.clientReference || tx.id, 'ref')}
-                  className="no-print text-slate-400 hover:text-slate-600"
-                >
-                  {copiedKey === 'ref' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                </button>
-              </div>
-            </div>
-
-            {tx.providerReference && (
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Gateway Ref:</span>
-                <span className="font-mono text-[10px] text-slate-500 truncate max-w-[180px]">
-                  {tx.providerReference}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Date:</span>
-              <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                {formattedDate}
-              </span>
-            </div>
+          <div className="flex justify-between items-center gap-3 pt-1">
+            <dt className="text-slate-500 dark:text-slate-400 shrink-0">Merchant</dt>
+            <dd className="font-medium text-slate-900 dark:text-white truncate text-right">
+              {tx.businessName || 'BAXATO Merchant'}
+            </dd>
           </div>
 
-          {/* Simple Footer */}
-          <div className="text-center pt-1 text-[11px] text-slate-400 space-y-0.5">
-            <p className="font-medium text-slate-600 dark:text-slate-400">
-              Thank you for choosing Baxato.
-            </p>
-            <p className="text-[10px]">support@baxato.com</p>
+          <div className="flex justify-between items-center gap-3">
+            <dt className="text-slate-500 dark:text-slate-400 shrink-0">Reference</dt>
+            <dd className="flex items-center gap-1.5 font-mono text-[11px] text-slate-700 dark:text-slate-300 min-w-0">
+              <span className="truncate">{refValue}</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(refValue, 'ref')}
+                aria-label="Copy transaction reference"
+                className="no-print min-h-8 min-w-8 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white shrink-0"
+              >
+                {copiedKey === 'ref' ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+              </button>
+            </dd>
           </div>
-        </div>
 
-        {/* MODAL ACTIONS (Hidden on print) */}
-        <div className="no-print p-4 bg-slate-50 dark:bg-[#080E1A] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="py-2 px-4 rounded-xl text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition"
-          >
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="py-2 px-5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print Receipt</span>
-          </button>
+          {tx.providerReference && (
+            <div className="flex justify-between items-center gap-3">
+              <dt className="text-slate-500 dark:text-slate-400 shrink-0">Gateway Ref</dt>
+              <dd className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate text-right">
+                {tx.providerReference}
+              </dd>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center gap-3">
+            <dt className="text-slate-500 dark:text-slate-400 shrink-0">Date</dt>
+            <dd className="text-slate-600 dark:text-slate-400 text-[11px] text-right">
+              {formattedDate}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="text-center pt-1 text-[11px] text-slate-400 space-y-0.5">
+          <p className="font-medium text-slate-600 dark:text-slate-400">
+            BAXATO Operations Record
+          </p>
+          <p className="text-[10px]">support@baxato.com</p>
         </div>
       </div>
-    </div>
+
+      {/* Modal Actions */}
+      <div className="no-print px-5 py-4 bg-slate-50/70 dark:bg-[#070D18]/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-11 px-4 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="h-11 px-5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2"
+        >
+          <Printer className="w-4 h-4" aria-hidden="true" />
+          <span>Print Receipt</span>
+        </button>
+      </div>
+    </ModalDialog>
   );
 }
