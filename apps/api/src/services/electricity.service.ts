@@ -870,6 +870,8 @@ export class ElectricityService {
         : (config.monnifyPostpaidProductCode || config.monnifyPrepaidProductCode);
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
+    let executedProviderName: any = txnRow.providerName;
+    let executedProviderRef: string | undefined;
     try {
       const vendResult = await this.router.vendService(
         {
@@ -889,6 +891,8 @@ export class ElectricityService {
         },
         txnRow.id,
       );
+      executedProviderName = vendResult.providerName;
+      executedProviderRef = vendResult.providerReference;
 
       if (
         vendResult.status === TransactionStatus.PROCESSING ||
@@ -1093,6 +1097,8 @@ export class ElectricityService {
         .update(serviceTransactions)
         .set({
           status: TransactionStatus.FAILED,
+          providerName: executedProviderName,
+          ...(executedProviderRef ? { providerReference: executedProviderRef } : {}),
           errorMessage: (error as Error).message,
           updatedAt: new Date(),
         })

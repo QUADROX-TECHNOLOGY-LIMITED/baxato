@@ -25,6 +25,7 @@ export interface CustomerValidationResult {
   maximumAmountKobo?: bigint;
   isMismatch?: boolean;
   detectedMeterType?: 'PREPAID' | 'POSTPAID';
+  validationReference?: string;
   responseCode: string;
   responseMessage: string;
   rawResponse?: Record<string, unknown>;
@@ -137,6 +138,7 @@ export enum ProviderRoutingStrategy {
   MONNIFY_ONLY = 'MONNIFY_ONLY',
   VTPASS_ONLY = 'VTPASS_ONLY',
   PRIMARY_FALLBACK = 'PRIMARY_FALLBACK',
+  VTPASS_FALLBACK = 'VTPASS_FALLBACK',
 }
 
 /**

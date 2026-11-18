@@ -44,6 +44,7 @@ export class ProviderRouterService {
   private readonly providers: Map<ProviderName, ProviderAdapter> = new Map();
   private readonly circuitBreakers: Map<ProviderName, CircuitBreaker> = new Map();
   private readonly routingConfigs: Map<ServiceType, ServiceRoutingConfig> = new Map();
+  private readonly explicitlyConfiguredServices: Set<ServiceType> = new Set();
 
   constructor(options: ProviderRouterOptions) {
     this.db = options.db;
@@ -162,6 +163,11 @@ export class ProviderRouterService {
         fallback = ProviderName.VTPASS;
         allowFailover = true;
         break;
+      case ProviderRoutingStrategy.VTPASS_FALLBACK:
+        primary = ProviderName.VTPASS;
+        fallback = ProviderName.MONNIFY;
+        allowFailover = true;
+        break;
       default:
         primary = ProviderName.MONNIFY;
         fallback = undefined;
@@ -178,6 +184,7 @@ export class ProviderRouterService {
     };
 
     this.routingConfigs.set(serviceType, updated);
+    this.explicitlyConfiguredServices.add(serviceType);
     return updated;
   }
 
@@ -230,7 +237,21 @@ export class ProviderRouterService {
 
         const pool = explicitlyEnabled.length > 0 ? explicitlyEnabled : eligibleProviders;
 
-        if (pool.length > 0) {
+        if (this.explicitlyConfiguredServices.has(serviceType) && config) {
+          // Staff/Admin explicitly switched strategy at runtime — honor selected primary & fallback
+          // unless explicitly disabled in PostgreSQL `providers.config`.
+          if (!disabledProviderNames.has(config.primaryProvider)) {
+            primaryName = config.primaryProvider;
+          }
+          fallbackName =
+            config.allowFailover &&
+            config.fallbackProvider &&
+            !disabledProviderNames.has(config.fallbackProvider)
+              ? config.fallbackProvider
+              : undefined;
+          allowFailover = Boolean(config.allowFailover && fallbackName);
+          source = `Runtime Routing Override (${primaryName}${fallbackName ? ` -> ${fallbackName}` : ''})`;
+        } else if (pool.length > 0) {
           // If in-memory strategy specifically designates a primaryProvider,
           // prioritize it if it exists in the active eligible pool.
           const primaryCandidate =

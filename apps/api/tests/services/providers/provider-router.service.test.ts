@@ -340,4 +340,29 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
     expect(vt?.health.isHealthy).toBe(true);
     expect(vt?.circuitBreaker.state).toBe('CLOSED');
   });
+
+  it('supports VTPASS_FALLBACK: uses VTPass as primary and automatically fails over to Monnify when VTPass fails', async () => {
+    router.updateRoutingConfig(
+      ServiceType.AIRTIME,
+      ProviderRoutingStrategy.VTPASS_FALLBACK,
+      true,
+    );
+
+    (mockVtpass.vendService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('VTPass upstream down'),
+    );
+
+    const result = await router.vendService({
+      serviceType: ServiceType.AIRTIME,
+      paymentCode: 'MTN',
+      customerId: '08031234567',
+      amountKobo: 10000n,
+      requestReference: 'REF_VTP_TO_MNFY',
+    });
+
+    expect(mockVtpass.vendService).toHaveBeenCalledTimes(1);
+    expect(mockMonnify.vendService).toHaveBeenCalledTimes(1);
+    expect(result.providerName).toBe(ProviderName.MONNIFY);
+    expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
+  });
 });

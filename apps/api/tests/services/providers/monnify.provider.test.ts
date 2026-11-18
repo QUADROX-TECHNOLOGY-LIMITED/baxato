@@ -191,10 +191,50 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
     const requery = await provider.requeryTransaction('REF_001');
     expect(requery.status).toBe(TransactionStatus.SUCCESSFUL);
     expect(requery.amountKobo).toBe(50000n);
+    expect(mockFetch.mock.calls[1]?.[0]).toContain('vendReference=REF_001');
 
     // Health probe
     const health = await provider.getHealth();
     expect(health.providerName).toBe(ProviderName.MONNIFY);
     expect(health.isHealthy).toBe(true);
+  });
+
+  it('sends vendReference and vendAmount in Monnify /vas/bills-payment/vend payload', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          requestSuccessful: true,
+          responseMessage: 'success',
+          responseCode: '0',
+          responseBody: { accessToken: 'mon_token', expiresIn: 3600 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          requestSuccessful: true,
+          responseMessage: 'success',
+          responseCode: '0',
+          responseBody: {
+            vendReference: '241199887766',
+            vendStatus: 'SUCCESS',
+          },
+        }),
+      });
+    global.fetch = mockFetch;
+
+    await provider.vendService({
+      serviceType: ServiceType.AIRTIME,
+      paymentCode: 'MTN',
+      customerId: '08031234567',
+      amountKobo: 25000n,
+      requestReference: '241199887766',
+    });
+
+    const vendBody = JSON.parse(mockFetch.mock.calls[1]?.[1]?.body as string);
+    expect(vendBody.vendReference).toBe('241199887766');
+    expect(vendBody.vendAmount).toBe(250);
   });
 });

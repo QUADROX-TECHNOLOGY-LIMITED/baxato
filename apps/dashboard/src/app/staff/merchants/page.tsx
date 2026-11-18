@@ -232,14 +232,9 @@ export default function StaffMerchantsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight [text-wrap:balance]">
-          Merchants & KYC
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Review registered accounts, business details, and NIN verification records.
-        </p>
-      </div>
+      <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight [text-wrap:balance]">
+        Merchants &amp; KYC
+      </h1>
 
       {/* Section Tabs */}
       <div
@@ -402,7 +397,7 @@ export default function StaffMerchantsPage() {
                         onClick={() => setSelectedMerchant(m)}
                         className="w-full h-11 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                       >
-                        Inspect
+                        View
                       </button>
                     </article>
                   );
@@ -479,9 +474,9 @@ export default function StaffMerchantsPage() {
                               <button
                                 type="button"
                                 onClick={() => setSelectedMerchant(m)}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium text-slate-900 dark:text-white transition-colors"
+                                className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium text-slate-900 dark:text-white transition-colors"
                               >
-                                Inspect
+                                View
                               </button>
                             </td>
                           </tr>
@@ -770,18 +765,13 @@ export default function StaffMerchantsPage() {
       >
         {selectedMerchant && (
           <div className="flex flex-col max-h-[85dvh]">
-            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
-              <div>
-                <h2
-                  id="merchant-inspector-title"
-                  className="text-base font-semibold text-slate-900 dark:text-white"
-                >
-                  Merchant & Business Details
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Account profile, identity record, and submitted business information.
-                </p>
-              </div>
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+              <h2
+                id="merchant-inspector-title"
+                className="text-base font-semibold text-slate-900 dark:text-white"
+              >
+                Merchant Details
+              </h2>
               <button
                 type="button"
                 onClick={() => setSelectedMerchant(null)}

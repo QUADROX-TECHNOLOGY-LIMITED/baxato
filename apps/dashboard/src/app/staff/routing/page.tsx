@@ -22,12 +22,15 @@ import {
 } from '@/lib/auth-session';
 import { showToast } from '@/lib/toast';
 
-type RoutingStrategy = 'PRIMARY_FALLBACK' | 'MONNIFY_ONLY' | 'VTPASS_ONLY';
+type RoutingStrategy =
+  | 'PRIMARY_FALLBACK'
+  | 'VTPASS_FALLBACK'
+  | 'MONNIFY_ONLY'
+  | 'VTPASS_ONLY';
 
 interface ServiceItem {
   type: string;
   name: string;
-  description: string;
   icon: React.ComponentType<{ className?: string }>;
   defaultStrategy: RoutingStrategy;
 }
@@ -36,44 +39,45 @@ const SERVICES: ServiceItem[] = [
   {
     type: 'AIRTIME',
     name: 'Airtime',
-    description: 'Local and direct carrier top-ups',
     icon: Smartphone,
     defaultStrategy: 'MONNIFY_ONLY',
   },
   {
     type: 'DATA',
     name: 'Data Bundles',
-    description: 'SME and direct carrier data plans',
     icon: Wifi,
     defaultStrategy: 'MONNIFY_ONLY',
   },
   {
     type: 'ELECTRICITY',
     name: 'Electricity',
-    description: 'Prepaid and postpaid utility tokens',
     icon: Zap,
     defaultStrategy: 'MONNIFY_ONLY',
   },
   {
     type: 'CABLE_TV',
     name: 'Cable TV',
-    description: 'Digital TV bouquets and renewals',
     icon: Tv,
     defaultStrategy: 'MONNIFY_ONLY',
   },
   {
     type: 'EXAM_PIN',
     name: 'Exam PINs',
-    description: 'Academic PIN issuance',
     icon: GraduationCap,
     defaultStrategy: 'MONNIFY_ONLY',
   },
 ];
 
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  MONNIFY: 'Monnify',
+  VTPASS: 'VTPass',
+};
+
 const STRATEGY_SELECT_OPTIONS: SelectOption<RoutingStrategy>[] = [
-  { value: 'PRIMARY_FALLBACK', label: 'Primary + Failover (Monnify -> VTPass)' },
-  { value: 'MONNIFY_ONLY', label: 'Monnify Only' },
-  { value: 'VTPASS_ONLY', label: 'VTPass Only' },
+  { value: 'PRIMARY_FALLBACK', label: 'Monnify → VTPass (Fallback)' },
+  { value: 'VTPASS_FALLBACK', label: 'VTPass → Monnify (Fallback)' },
+  { value: 'MONNIFY_ONLY', label: 'Monnify only' },
+  { value: 'VTPASS_ONLY', label: 'VTPass only' },
 ];
 
 export default function StaffRoutingPage() {
@@ -101,40 +105,31 @@ export default function StaffRoutingPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json().catch(() => null);
-
       if (handleAuthResponse(res, data)) return;
 
       if (res.ok && data?.success) {
-        const routes = data.data?.routing || data.data?.routingTable || [];
-        const providers = data.data?.providers || data.data?.providerStatuses || [];
-        setProviderStatuses(providers);
+        const statuses = data.data?.providerStatuses || data.data?.providers || [];
+        const routing = data.data?.routingTable || data.data?.routing || [];
 
-        const initial: Record<string, RoutingStrategy> = {};
-        SERVICES.forEach((s) => {
-          const cfg = routes.find((r: any) => r.serviceType === s.type);
-          const strategy = cfg?.strategy;
-          if (
-            strategy === 'PRIMARY_FALLBACK' ||
-            strategy === 'MONNIFY_ONLY' ||
-            strategy === 'VTPASS_ONLY'
-          ) {
-            initial[s.type] = strategy;
-          } else {
-            initial[s.type] = s.defaultStrategy;
-          }
-        });
-        setSavedStrategies(initial);
-        setDraftStrategies(initial);
+        setProviderStatuses(statuses);
+
+        const initialMap: Record<string, RoutingStrategy> = {};
+        for (const s of SERVICES) {
+          const found = routing.find((r: any) => r.serviceType === s.type);
+          initialMap[s.type] = (found?.strategy as RoutingStrategy) || s.defaultStrategy;
+        }
+        setSavedStrategies(initialMap);
+        setDraftStrategies(initialMap);
       } else {
         setStatusMessage({
           type: 'error',
-          text: data?.error?.message || 'Unable to load provider routing and health.',
+          text: data?.error?.message || 'Unable to load routing.',
         });
       }
     } catch {
       setStatusMessage({
         type: 'error',
-        text: 'Network error loading provider routing.',
+        text: 'Network error loading routing.',
       });
     } finally {
       setIsLoading(false);
@@ -155,6 +150,7 @@ export default function StaffRoutingPage() {
     if (!selectedStrategy) return;
 
     const option = STRATEGY_SELECT_OPTIONS.find((o) => o.value === selectedStrategy);
+    const serviceItem = SERVICES.find((s) => s.type === serviceType);
     try {
       setSavingService(serviceType);
       setStatusMessage(null);
@@ -173,7 +169,8 @@ export default function StaffRoutingPage() {
         body: JSON.stringify({
           serviceType,
           strategy: selectedStrategy,
-          allowFailover: selectedStrategy === 'PRIMARY_FALLBACK',
+          allowFailover:
+            selectedStrategy === 'PRIMARY_FALLBACK' || selectedStrategy === 'VTPASS_FALLBACK',
         }),
       });
 
@@ -181,17 +178,17 @@ export default function StaffRoutingPage() {
       if (handleAuthResponse(res, data)) return;
 
       if (res.ok && data?.success) {
-        const msg = `${serviceType.replace(/_/g, ' ')} routing updated to ${option?.label || selectedStrategy}.`;
+        const msg = `${serviceItem?.name || serviceType} set to ${option?.label || selectedStrategy}.`;
         setStatusMessage({ type: 'success', text: msg });
         showToast({ type: 'success', message: msg });
         setSavedStrategies((prev) => ({ ...prev, [serviceType]: selectedStrategy }));
       } else {
-        const msg = data?.error?.message || `Failed to update routing for ${serviceType}.`;
+        const msg = data?.error?.message || 'Unable to update routing.';
         setStatusMessage({ type: 'error', text: msg });
         showToast({ type: 'error', message: msg });
       }
     } catch {
-      const msg = 'Network error saving routing configuration.';
+      const msg = 'Network error saving routing.';
       setStatusMessage({ type: 'error', text: msg });
       showToast({ type: 'error', message: msg });
     } finally {
@@ -205,14 +202,9 @@ export default function StaffRoutingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight [text-wrap:balance]">
-          Routing & Health
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Gateway connectivity and service routing preferences.
-        </p>
-      </div>
+      <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight [text-wrap:balance]">
+        Routing &amp; Health
+      </h1>
 
       {statusMessage && (
         <div
@@ -234,80 +226,63 @@ export default function StaffRoutingPage() {
             type="button"
             onClick={() => setStatusMessage(null)}
             aria-label="Dismiss message"
-            className="min-h-8 min-w-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/5 shrink-0"
+            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/5 shrink-0"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      {/* Gateway Health */}
+      {/* Gateways */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-          Gateway Health
+          Gateways
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {providerStatuses.map((p: any) => {
             const isHealthy = Boolean(p.health?.isHealthy);
-            const cb = p.circuitBreaker || {};
-            const cbState = cb.state || 'CLOSED';
+            const latency = Number(p.health?.latencyMs || 0);
+            const displayName = PROVIDER_DISPLAY_NAMES[p.providerName] || p.providerName;
+
             return (
               <div
                 key={p.providerName}
-                className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 space-y-3"
+                className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {p.providerName}
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {p.health?.message || 'Status probe ready'}
-                    </p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
-                      isHealthy
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/60'
-                        : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/60'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${isHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                      aria-hidden="true"
-                    />
-                    <span>{isHealthy ? 'Healthy' : 'Degraded'}</span>
-                  </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {displayName}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                    {isHealthy
+                      ? latency > 0
+                        ? `Response time: ${latency} ms`
+                        : 'Connected'
+                      : 'Connection unavailable'}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800/80 text-xs">
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400 block">Latency</span>
-                    <span className="font-medium tabular-nums text-slate-900 dark:text-white mt-0.5 block">
-                      {p.health?.latencyMs ?? 0}ms
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400 block">Circuit</span>
-                    <span className="font-medium text-slate-900 dark:text-white mt-0.5 block">
-                      {cbState}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400 block">Errors</span>
-                    <span className="font-medium tabular-nums text-slate-900 dark:text-white mt-0.5 block">
-                      {cb.failures ?? 0} / {cb.totalRequests ?? 0}
-                    </span>
-                  </div>
-                </div>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border shrink-0 ${
+                    isHealthy
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/60'
+                      : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/60'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${isHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                    aria-hidden="true"
+                  />
+                  <span>{isHealthy ? 'Online' : 'Offline'}</span>
+                </span>
               </div>
             );
           })}
         </div>
       </section>
 
-      {/* Service Routing Rules */}
+      {/* Service Routing */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Service Routing
@@ -326,27 +301,22 @@ export default function StaffRoutingPage() {
                 key={s.type}
                 className="relative has-[[aria-expanded=true]]:z-30 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4"
               >
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
+                <div className="space-y-3.5">
+                  <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
                       <Icon className="w-4 h-4 text-slate-700 dark:text-slate-200" aria-hidden="true" />
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {s.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {s.description}
-                      </p>
-                    </div>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {s.name}
+                    </h3>
                   </div>
 
                   <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
-                      Strategy
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400 block">
+                      Gateway
                     </span>
                     <StaffFilterSelect
-                      ariaLabel={`${s.name} routing strategy`}
+                      ariaLabel={`${s.name} gateway`}
                       options={STRATEGY_SELECT_OPTIONS}
                       value={currentStrategy}
                       onChange={(val) =>
@@ -366,7 +336,7 @@ export default function StaffRoutingPage() {
                   className="w-full h-11 sm:h-10 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
                 >
                   {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                  <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                  <span>Save</span>
                 </button>
               </div>
             );

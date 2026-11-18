@@ -196,8 +196,8 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
       expect(body.data).toHaveProperty('today');
       expect(body.data).toHaveProperty('merchants');
       expect(body.data).toHaveProperty('providers');
-      expect(body.data).toHaveProperty('attentionTransactions');
       expect(body.data.treasury).toBeUndefined();
+      expect(body.data.recentTransactions).toBeUndefined();
       expect(body.data.today.todayRevenueNaira).toBeUndefined();
     });
 
@@ -333,6 +333,29 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
       expect(body.success).toBe(true);
       expect(body.data.config.primaryProvider).toBe(ProviderName.MONNIFY);
       expect(body.data.config.strategy).toBe(ProviderRoutingStrategy.MONNIFY_ONLY);
+    });
+
+    it('allows Staff to switch routing strategy to VTPass with Monnify fallback (VTPASS_FALLBACK)', async () => {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/admin/providers/routing',
+        headers: {
+          authorization: `Bearer ${staffToken}`,
+        },
+        payload: {
+          serviceType: ServiceType.DATA,
+          strategy: ProviderRoutingStrategy.VTPASS_FALLBACK,
+          allowFailover: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json<ApiResponse<any>>();
+      expect(body.success).toBe(true);
+      expect(body.data.config.primaryProvider).toBe(ProviderName.VTPASS);
+      expect(body.data.config.fallbackProvider).toBe(ProviderName.MONNIFY);
+      expect(body.data.config.allowFailover).toBe(true);
+      expect(body.data.config.strategy).toBe(ProviderRoutingStrategy.VTPASS_FALLBACK);
     });
 
     it('rejects invalid serviceType with 400', async () => {

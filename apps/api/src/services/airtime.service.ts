@@ -311,6 +311,8 @@ export class AirtimeService {
     }
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
+    let executedProviderName: any = txnRow.providerName;
+    let executedProviderRef: string | undefined;
     try {
       const vendResult = await this.router.vendService(
         {
@@ -327,6 +329,8 @@ export class AirtimeService {
         },
         txnRow.id,
       );
+      executedProviderName = vendResult.providerName;
+      executedProviderRef = vendResult.providerReference;
 
       if (vendResult.status === TransactionStatus.SUCCESSFUL) {
         // 6. Update transaction to SUCCESSFUL
@@ -457,6 +461,8 @@ export class AirtimeService {
         .update(serviceTransactions)
         .set({
           status: TransactionStatus.FAILED,
+          providerName: executedProviderName,
+          ...(executedProviderRef ? { providerReference: executedProviderRef } : {}),
           errorMessage: (error as Error).message,
           updatedAt: new Date(),
         })

@@ -168,44 +168,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .where(gte(serviceTransactions.createdAt, todayStart))
       .groupBy(serviceTransactions.serviceType);
 
-    // 6. Operational Exceptions Queue (PENDING, PROCESSING & FAILED transactions requiring triage)
-    const attentionRows = await db
-      .select()
-      .from(serviceTransactions)
-      .where(
-        inArray(serviceTransactions.status, [
-          TransactionStatus.PENDING,
-          TransactionStatus.PROCESSING,
-          TransactionStatus.FAILED,
-        ]),
-      )
-      .orderBy(desc(serviceTransactions.createdAt))
-      .limit(12);
-
-    const attentionBizIds = Array.from(
-      new Set(attentionRows.map((r) => r.businessId).filter(Boolean)),
-    );
-    const attentionBizMap = new Map<string, string>();
-    if (attentionBizIds.length > 0) {
-      const bizRows = await db
-        .select({ id: businesses.id, name: businesses.name })
-        .from(businesses)
-        .where(inArray(businesses.id, attentionBizIds));
-      for (const b of bizRows) {
-        attentionBizMap.set(b.id, b.name);
-      }
-    }
-
-    const sortedAttentionRows = [...attentionRows]
-      .sort((a, b) => {
-        const aPending = a.status === TransactionStatus.PENDING || a.status === TransactionStatus.PROCESSING ? 0 : 1;
-        const bPending = b.status === TransactionStatus.PENDING || b.status === TransactionStatus.PROCESSING ? 0 : 1;
-        if (aPending !== bPending) return aPending - bPending;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      })
-      .slice(0, 10);
-
-    // 7. Recent Platform Transactions (retained for Super Admin overview)
+    // 6. Recent Platform Transactions (Super Admin only — never exposed on Staff Overview)
     const recentTxns = canReadFinancials
       ? await db
           .select({
@@ -308,24 +271,6 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
                   feesNaira: koboToNaira(BigInt(s.feesKobo || '0')),
                 }
               : {}),
-          })),
-          attentionTransactions: sortedAttentionRows.map((t) => ({
-            id: t.id,
-            reference: t.requestReference || t.clientReference || t.id,
-            requestReference: t.requestReference,
-            clientReference: t.clientReference,
-            providerReference: t.providerReference,
-            serviceType: t.serviceType,
-            amountNaira: koboToNaira(BigInt(t.amount || 0n)),
-            formattedAmount: formatNairaFromKobo(BigInt(t.amount || 0n)),
-            status: t.status,
-            recipient: t.recipient,
-            errorMessage: t.errorMessage || null,
-            createdAt:
-              t.createdAt instanceof Date
-                ? t.createdAt.toISOString()
-                : String(t.createdAt || new Date().toISOString()),
-            businessName: attentionBizMap.get(t.businessId) || 'Merchant',
           })),
           ...(canReadFinancials
             ? {
@@ -608,11 +553,14 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       let updatedStatus = tx.status;
       let syncMessage = '';
 
+      const rawProviderMsg = String(requeryResult.responseMessage || '');
+      const isNotFoundOnProvider = /not\s*found|invalid\s*request/i.test(rawProviderMsg);
+
       if (tx.status === TransactionStatus.SUCCESSFUL) {
         if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
-          syncMessage = 'Confirmed: Gateway verifies transaction is SUCCESSFUL.';
+          syncMessage = 'Confirmed successful on gateway.';
         } else {
-          syncMessage = `Preserved: Local state is SUCCESSFUL. Gateway returned: ${requeryResult.responseMessage || 'Inconclusive'}.`;
+          syncMessage = `Local status remains Successful (${rawProviderMsg || 'no change reported'}).`;
         }
         if (requeryResult.providerReference && !tx.providerReference) {
           await db
@@ -631,7 +579,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
         // Never silently flip a refunded transaction back to SUCCESSFUL without funds!
         if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
           syncMessage =
-            'Alert: Gateway reports SUCCESSFUL, but this transaction was already refunded to the merchant wallet. Status preserved as FAILED — escalate to Super Admin for manual ledger reconciliation.';
+            'Gateway reports Successful, but this transaction was already refunded. Status kept as Failed — escalate to Super Admin.';
           await auditService.log({
             userId: request.user?.id,
             businessId: tx.businessId,
@@ -644,10 +592,15 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
               providerResponseCode: requeryResult.responseCode,
             },
           });
+        } else if (isNotFoundOnProvider && !tx.providerReference) {
+          syncMessage =
+            'Not found on gateway — this request failed before processing and the merchant wallet was already refunded.';
         } else if (requeryResult.status === TransactionStatus.FAILED) {
-          syncMessage = `Confirmed: Gateway confirms transaction is FAILED (${requeryResult.responseMessage || requeryResult.responseCode}).`;
+          syncMessage = `Confirmed failed on gateway (${rawProviderMsg || requeryResult.responseCode}).`;
         } else {
-          syncMessage = `Preserved: Local state is ${tx.status}. Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}).`;
+          syncMessage = isNotFoundOnProvider
+            ? 'Reference not found on gateway. Local status remains Failed (wallet already refunded).'
+            : `Status remains Failed (${rawProviderMsg || requeryResult.responseCode}).`;
         }
       } else {
         // In-flight PENDING / PROCESSING transaction
@@ -687,7 +640,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (claimed) {
             updatedStatus = TransactionStatus.SUCCESSFUL;
-            syncMessage = 'Updated: Gateway confirmed transaction is SUCCESSFUL.';
+            syncMessage = 'Updated to Successful.';
 
             try {
               const mainWallet = await walletService.getBusinessWallet(tx.businessId, WalletType.MAIN);
@@ -761,7 +714,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             const mainWallet = await walletService.getBusinessWallet(tx.businessId, WalletType.MAIN);
             await walletService.creditWallet(mainWallet.id, tx.totalAmount);
             updatedStatus = TransactionStatus.FAILED;
-            syncMessage = `Updated: Gateway confirmed FAILED (${requeryResult.responseMessage}). Merchant wallet refunded ${formatNairaFromKobo(tx.totalAmount)}.`;
+            syncMessage = `Confirmed failed on gateway. Refunded ${formatNairaFromKobo(tx.totalAmount)} to merchant wallet.`;
 
             await auditService.log({
               userId: request.user?.id,
@@ -791,9 +744,11 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
           requeryResult.responseCode === '99' ||
           requeryResult.responseCode === '099'
         ) {
-          syncMessage = `Inconclusive: Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+          syncMessage = isNotFoundOnProvider
+            ? 'Reference not found on gateway yet. Status remains Pending.'
+            : `Still processing (${rawProviderMsg || requeryResult.responseCode}).`;
         } else {
-          syncMessage = `Unchanged: Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+          syncMessage = `Status unchanged (${rawProviderMsg || requeryResult.responseCode}).`;
         }
       }
 

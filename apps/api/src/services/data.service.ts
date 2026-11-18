@@ -401,6 +401,8 @@ export class DataService {
     }
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
+    let executedProviderName: any = primaryProvider;
+    let executedProviderRef: string | undefined;
     try {
       const vendResult = await this.router.vendService(
         {
@@ -421,6 +423,8 @@ export class DataService {
         },
         txnRow.id,
       );
+      executedProviderName = vendResult.providerName;
+      executedProviderRef = vendResult.providerReference;
 
       if (
         vendResult.status === TransactionStatus.PROCESSING ||
@@ -561,6 +565,8 @@ export class DataService {
         .update(serviceTransactions)
         .set({
           status: TransactionStatus.FAILED,
+          providerName: executedProviderName,
+          ...(executedProviderRef ? { providerReference: executedProviderRef } : {}),
           errorMessage: (error as Error).message,
           updatedAt: new Date(),
         })
