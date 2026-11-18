@@ -569,19 +569,23 @@ export class DataService {
       // 8. Unrecoverable Failure: Rollback wallet deduction & record reversal
       await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
 
-      await db
-        .update(serviceTransactions)
-        .set({
-          status: TransactionStatus.FAILED,
-          providerName: executedProviderName,
-          ...(executedProviderRef ? { providerReference: executedProviderRef } : {}),
-          errorMessage: (error as Error).message,
-          updatedAt: new Date(),
-        })
-        .where(eq(serviceTransactions.id, txnRow.id));
+      try {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.FAILED,
+            providerName: executedProviderName,
+            ...(executedProviderRef ? { providerReference: executedProviderRef } : {}),
+            errorMessage: (error as Error).message,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+      } catch (dbErr) {
+        console.error('[DataService] Failed to persist FAILED rollback state:', dbErr);
+      }
 
       if (input.idempotencyKey) {
-        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId).catch(() => {});
       }
 
       // Outbound Webhook Dispatch for Failure (fire-and-forget / non-blocking)

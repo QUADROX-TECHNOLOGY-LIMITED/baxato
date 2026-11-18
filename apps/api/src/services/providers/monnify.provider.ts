@@ -270,13 +270,24 @@ export class MonnifyProvider implements ProviderAdapter {
       `${this.config.apiKey}:${this.config.secretKey}`,
     ).toString('base64');
 
-    const res = await fetch(`${this.config.baseUrl}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.config.baseUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (networkErr) {
+      throw new AppError(
+        'Upstream payment gateway unavailable. Please try again.',
+        503,
+        'PROVIDER_UNAVAILABLE',
+        true,
+        { originalError: (networkErr as Error).message },
+      );
+    }
 
     const rawData = await safeParseResponse(res);
 
@@ -409,14 +420,25 @@ export class MonnifyProvider implements ProviderAdapter {
       productCode,
     };
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (networkErr) {
+      throw new AppError(
+        'Customer verification service unreachable',
+        503,
+        'PROVIDER_UNAVAILABLE',
+        true,
+        { originalError: (networkErr as Error).message },
+      );
+    }
 
     const rawData = await safeParseResponse(res);
     const data = (rawData || {}) as {
@@ -611,14 +633,25 @@ export class MonnifyProvider implements ProviderAdapter {
       payload.validationReference = request.metadata.validationReference;
     }
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (networkErr) {
+      throw new AppError(
+        'Billing provider service unreachable',
+        503,
+        'PROVIDER_UNAVAILABLE',
+        true,
+        { originalError: (networkErr as Error).message },
+      );
+    }
 
     const rawData = await safeParseResponse(res);
     const data = (rawData || {
@@ -741,16 +774,21 @@ export class MonnifyProvider implements ProviderAdapter {
     };
 
     for (const ref of candidateRefs) {
-      const res = await fetch(
-        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(ref)}`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+      let res: Response;
+      try {
+        res = await fetch(
+          `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(ref)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
           },
-        },
-      );
+        );
+      } catch {
+        continue;
+      }
       const parsed = (await safeParseResponse(res)) as MonnifyRequeryResponse | null;
       if (parsed) {
         data = parsed;

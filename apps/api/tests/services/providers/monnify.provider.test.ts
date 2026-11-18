@@ -279,4 +279,22 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
     expect(vendRes.responseCode).toBe('VEND_FAILED');
     expect(vendRes.providerReference).toBe('BX-20261118-FAIL01');
   });
+
+  it('wraps network errors in operational AppError instead of throwing raw TypeError', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(
+      provider.vendService({
+        serviceType: ServiceType.AIRTIME,
+        paymentCode: 'MTN',
+        customerId: '08011111111',
+        amountKobo: 10000n,
+        requestReference: '202611181235BXNET001',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'PROVIDER_UNAVAILABLE',
+      isOperational: true,
+    });
+  });
 });

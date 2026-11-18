@@ -5,7 +5,7 @@ import {
   AppError,
 } from '@baxato/common';
 import { Env, env } from '@baxato/config';
-import { Database, providerTransactions, providers, db } from '@baxato/database';
+import { Database, providerTransactions, providers, db, eq } from '@baxato/database';
 import {
   ProviderAdapter,
   CustomerValidationRequest,
@@ -189,25 +189,181 @@ export class ProviderRouterService {
     return updated;
   }
 
+  private getProviderConfigKey(serviceType: ServiceType): string {
+    if (serviceType === ServiceType.CABLE_TV) return 'cable';
+    return serviceType.toLowerCase();
+  }
+
+  private inferStrategyFromDbProviders(
+    serviceType: ServiceType,
+    dbProviders: Array<typeof providers.$inferSelect>,
+  ): { strategy: ProviderRoutingStrategy; allowFailover: boolean } | null {
+    const serviceKey = this.getProviderConfigKey(serviceType);
+    const active = dbProviders.filter((p) => p.status === 'ACTIVE');
+    if (active.length === 0) return null;
+
+    const isDisabledForService = (p: typeof providers.$inferSelect) => {
+      if (!p.config || typeof p.config !== 'object') return false;
+      const cfg = p.config as Record<string, unknown>;
+      return cfg[serviceKey] === false || cfg[serviceType] === false;
+    };
+
+    const eligible = active.filter((p) => !isDisabledForService(p));
+    if (eligible.length === 0) return null;
+
+    const primary = eligible.find((p) => p.isPrimary) || eligible[0]!;
+    const hasVtpass = eligible.some((p) => p.name === ProviderName.VTPASS);
+    const hasMonnify = eligible.some((p) => p.name === ProviderName.MONNIFY);
+
+    if (primary.name === ProviderName.VTPASS) {
+      if (hasMonnify && eligible.find((p) => p.name === ProviderName.MONNIFY && p.config && (p.config as Record<string, unknown>)[serviceKey] === true)) {
+        return { strategy: ProviderRoutingStrategy.VTPASS_FALLBACK, allowFailover: true };
+      }
+      return { strategy: ProviderRoutingStrategy.VTPASS_ONLY, allowFailover: false };
+    }
+
+    if (hasVtpass && eligible.find((p) => p.name === ProviderName.VTPASS && p.config && (p.config as Record<string, unknown>)[serviceKey] === true)) {
+      return { strategy: ProviderRoutingStrategy.PRIMARY_FALLBACK, allowFailover: true };
+    }
+
+    return { strategy: ProviderRoutingStrategy.MONNIFY_ONLY, allowFailover: false };
+  }
+
+  public async syncDatabaseProvidersForRouting(
+    serviceType: ServiceType,
+    strategy: ProviderRoutingStrategy,
+  ): Promise<void> {
+    if (!this.db) return;
+    try {
+      const rows = await this.db.select().from(providers);
+      if (rows.length === 0) return;
+
+      const serviceKey = this.getProviderConfigKey(serviceType);
+      const monnifyEnabled =
+        strategy === ProviderRoutingStrategy.MONNIFY_ONLY ||
+        strategy === ProviderRoutingStrategy.PRIMARY_FALLBACK ||
+        strategy === ProviderRoutingStrategy.VTPASS_FALLBACK;
+      const vtpassEnabled =
+        strategy === ProviderRoutingStrategy.VTPASS_ONLY ||
+        strategy === ProviderRoutingStrategy.VTPASS_FALLBACK ||
+        strategy === ProviderRoutingStrategy.PRIMARY_FALLBACK;
+
+      const desiredPrimary =
+        strategy === ProviderRoutingStrategy.VTPASS_ONLY ||
+        strategy === ProviderRoutingStrategy.VTPASS_FALLBACK
+          ? ProviderName.VTPASS
+          : ProviderName.MONNIFY;
+
+      const allConfigs = Array.from(this.routingConfigs.values());
+      const vtpassPrimaryCount = allConfigs.filter(
+        (c) => c.primaryProvider === ProviderName.VTPASS,
+      ).length;
+      const monnifyPrimaryCount = allConfigs.filter(
+        (c) => c.primaryProvider === ProviderName.MONNIFY,
+      ).length;
+      const overallPrimary =
+        vtpassPrimaryCount > monnifyPrimaryCount
+          ? ProviderName.VTPASS
+          : monnifyPrimaryCount > vtpassPrimaryCount
+            ? ProviderName.MONNIFY
+            : desiredPrimary;
+
+      for (const row of rows) {
+        const cfg = { ...((row.config || {}) as Record<string, unknown>) };
+        if (row.name === ProviderName.MONNIFY) {
+          cfg[serviceKey] = monnifyEnabled;
+          await this.db
+            .update(providers)
+            .set({
+              isPrimary: overallPrimary === ProviderName.MONNIFY,
+              config: cfg,
+              updatedAt: new Date(),
+            })
+            .where(eq(providers.id, row.id));
+        } else if (row.name === ProviderName.VTPASS) {
+          cfg[serviceKey] = vtpassEnabled;
+          await this.db
+            .update(providers)
+            .set({
+              isPrimary: overallPrimary === ProviderName.VTPASS,
+              config: cfg,
+              updatedAt: new Date(),
+            })
+            .where(eq(providers.id, row.id));
+        }
+      }
+    } catch (err) {
+      console.warn('[ProviderRouterService] Failed to sync providers table:', err);
+    }
+  }
+
+  /**
+   * Updates routing for a service, persists the full per-service routing snapshot
+   * to PostgreSQL `system_settings`, and synchronizes the `providers` table.
+   */
+  public async persistRoutingUpdate(
+    serviceType: ServiceType,
+    strategy: ProviderRoutingStrategy,
+    allowFailover: boolean = false,
+    updatedById?: string,
+  ): Promise<ServiceRoutingConfig> {
+    await this.hydratePersistedRouting();
+    const updated = this.updateRoutingConfig(serviceType, strategy, allowFailover);
+
+    if (this.db) {
+      const fullServiceRouting = Object.fromEntries(
+        this.getRoutingConfig().map((cfg) => [cfg.serviceType, cfg.strategy]),
+      );
+
+      await Promise.all([
+        serviceControlsService
+          .updateSettings({ serviceRouting: fullServiceRouting }, updatedById)
+          .catch((err) => {
+            console.error('[ProviderRouterService] Failed to persist service routing setting:', err);
+          }),
+        this.syncDatabaseProvidersForRouting(serviceType, strategy),
+      ]);
+    }
+
+    return updated;
+  }
+
   public async hydratePersistedRouting(): Promise<ServiceRoutingConfig[]> {
     if (!this.db) {
       return this.getRoutingConfig();
     }
     try {
-      const settings = await serviceControlsService.getSettings();
+      const [settings, dbProviders] = await Promise.all([
+        serviceControlsService.getSettings(),
+        this.db.select().from(providers).catch(() => []),
+      ]);
+
       const persisted = settings.serviceRouting || {};
       const validStrategies = new Set<string>(Object.values(ProviderRoutingStrategy));
-      for (const [svc, strat] of Object.entries(persisted)) {
-        if (
-          Object.values(ServiceType).includes(svc as ServiceType) &&
-          validStrategies.has(strat)
-        ) {
+      const allServices: ServiceType[] = [
+        ServiceType.AIRTIME,
+        ServiceType.DATA,
+        ServiceType.CABLE_TV,
+        ServiceType.ELECTRICITY,
+        ServiceType.EXAM_PIN,
+      ];
+
+      for (const svc of allServices) {
+        const strat = persisted[svc];
+        if (strat && validStrategies.has(strat)) {
           this.updateRoutingConfig(
-            svc as ServiceType,
+            svc,
             strat as ProviderRoutingStrategy,
             strat === ProviderRoutingStrategy.PRIMARY_FALLBACK ||
               strat === ProviderRoutingStrategy.VTPASS_FALLBACK,
           );
+        } else if (!this.explicitlyConfiguredServices.has(svc) && dbProviders.length > 0) {
+          const inferred = this.inferStrategyFromDbProviders(svc, dbProviders);
+          if (inferred) {
+            this.updateRoutingConfig(svc, inferred.strategy, inferred.allowFailover);
+            // Keep unpersisted inference out of explicitlyConfiguredServices unless system_settings saved it
+            this.explicitlyConfiguredServices.delete(svc);
+          }
         }
       }
     } catch {
@@ -233,7 +389,7 @@ export class ProviderRouterService {
     if (this.db) {
       try {
         const dbProviders = await this.db.select().from(providers);
-        const serviceKey = serviceType.toLowerCase();
+        const serviceKey = this.getProviderConfigKey(serviceType);
 
         // 1. Only consider providers whose status is 'ACTIVE' in TablePlus
         const activeDbProviders = dbProviders.filter((p) => p.status === 'ACTIVE');
@@ -285,8 +441,8 @@ export class ProviderRouterService {
           // prioritize it if it exists in the active eligible pool.
           const primaryCandidate =
             pool.find((p) => p.name === config?.primaryProvider && p.isPrimary) ||
-            pool.find((p) => p.name === config?.primaryProvider) ||
             pool.find((p) => p.isPrimary) ||
+            pool.find((p) => p.name === config?.primaryProvider) ||
             pool[0]!;
           primaryName = primaryCandidate.name as ProviderName;
 

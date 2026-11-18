@@ -7,37 +7,39 @@ export async function seedProviders() {
   console.log('  -> Seeding providers (Monnify & VTpass)...');
   await db
     .insert(providers)
-    .values([
-      {
-        name: ProviderName.MONNIFY,
-        status: 'ACTIVE',
-        isPrimary: true,
-        failureRate: 0,
-        config: {
-          airtime: true,
-          data: true,
-          electricity: true,
-          cable: true,
-          exam_pin: true,
-        },
+    .values({
+      name: ProviderName.MONNIFY,
+      status: 'ACTIVE',
+      isPrimary: true,
+      failureRate: 0,
+      config: {
+        airtime: true,
+        data: true,
+        electricity: true,
+        cable: true,
+        exam_pin: true,
       },
-      {
-        name: ProviderName.VTPASS,
-        status: 'ACTIVE',
-        isPrimary: false,
-        failureRate: 0,
-        config: {
-          airtime: true,
-          electricity: true,
-          cable: true,
-          data: true,
-          exam_pin: false,
-        },
-      },
-    ])
+    })
     .onConflictDoNothing();
 
-  // If providers already exist in DB, ensure Monnify has services active
+  await db
+    .insert(providers)
+    .values({
+      name: ProviderName.VTPASS,
+      status: 'ACTIVE',
+      isPrimary: false,
+      failureRate: 0,
+      config: {
+        airtime: true,
+        electricity: true,
+        cable: true,
+        data: true,
+        exam_pin: false,
+      },
+    })
+    .onConflictDoNothing();
+
+  // Only backfill completely missing service config keys; never overwrite admin-chosen isPrimary or toggled service settings.
   try {
     const existing = await db.select().from(providers);
     for (const p of existing) {
@@ -46,7 +48,6 @@ export async function seedProviders() {
         await db
           .update(providers)
           .set({
-            isPrimary: true,
             config: {
               ...cfg,
               airtime: true,
@@ -58,15 +59,16 @@ export async function seedProviders() {
           })
           .where(eq(providers.id, p.id));
       }
-      if (p.name === ProviderName.VTPASS && cfg.cable === false) {
+      if (p.name === ProviderName.VTPASS && (cfg.airtime === undefined || cfg.data === undefined || cfg.cable === undefined)) {
         await db
           .update(providers)
           .set({
             config: {
               ...cfg,
-              airtime: true,
-              electricity: true,
-              cable: true,
+              airtime: cfg.airtime ?? true,
+              electricity: cfg.electricity ?? true,
+              cable: cfg.cable ?? true,
+              data: cfg.data ?? true,
             },
           })
           .where(eq(providers.id, p.id));

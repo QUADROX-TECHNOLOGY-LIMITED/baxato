@@ -7,15 +7,19 @@ export async function POST(request: Request) {
     const idempotencyKey = request.headers.get('x-idempotency-key') || '';
     const payload = await request.json();
 
-    const result = await proxyToBackendApi('/services/education/purchase', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authHeader ? { Authorization: authHeader } : {}),
-        ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}),
+    const result = await proxyToBackendApi(
+      '/services/education/purchase',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}),
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

@@ -395,4 +395,44 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
     expect(result.providerName).toBe(ProviderName.MONNIFY);
     expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
   });
+
+  it('honors database providers.isPrimary=true for VTPASS instead of falling back to default MONNIFY on restart', async () => {
+    const fakeDb: any = {
+      select: () => ({
+        from: async () => [
+          {
+            id: 'prv_monnify',
+            name: ProviderName.MONNIFY,
+            status: 'ACTIVE',
+            isPrimary: false,
+            failureRate: 0,
+            config: { airtime: true, data: true, electricity: true, cable: true, exam_pin: true },
+          },
+          {
+            id: 'prv_vtpass',
+            name: ProviderName.VTPASS,
+            status: 'ACTIVE',
+            isPrimary: true,
+            failureRate: 0,
+            config: { airtime: true, data: true, electricity: true, cable: true, exam_pin: false },
+          },
+        ],
+      }),
+    };
+
+    const dbRouter = new ProviderRouterService({
+      env,
+      db: fakeDb,
+      monnifyProvider: mockMonnify,
+      vtpassProvider: mockVtpass,
+    });
+
+    const hydrated = await dbRouter.hydratePersistedRouting();
+    const airtimeHydrated = hydrated.find((c) => c.serviceType === ServiceType.AIRTIME);
+    expect(airtimeHydrated?.primaryProvider).toBe(ProviderName.VTPASS);
+
+    const route = await dbRouter.resolveDynamicRouting(ServiceType.AIRTIME);
+    expect(route.primaryName).toBe(ProviderName.VTPASS);
+    expect(route.fallbackName).toBe(ProviderName.MONNIFY);
+  });
 });

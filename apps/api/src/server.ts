@@ -210,10 +210,25 @@ export function buildServer(): FastifyInstance {
 
   // 3. Global Error Handler formatting standard ApiResponse envelope
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string; details?: unknown }, request, reply) => {
-    const isAppError = error instanceof AppError;
-    const isOperationalError = isAppError && error.isOperational !== false;
-    const statusCode = isAppError ? error.statusCode : typeof error.statusCode === 'number' ? error.statusCode : 500;
-    const errorCode = isAppError ? error.code : typeof error.code === 'string' ? error.code : 'INTERNAL_SERVER_ERROR';
+    const isOperationalError =
+      (error instanceof AppError && error.isOperational !== false) ||
+      (typeof error === 'object' &&
+        error !== null &&
+        'isOperational' in error &&
+        (error as { isOperational?: unknown }).isOperational === true &&
+        typeof error.statusCode === 'number');
+    const statusCode: number =
+      error instanceof AppError
+        ? error.statusCode
+        : typeof error.statusCode === 'number'
+          ? error.statusCode
+          : 500;
+    const errorCode: string =
+      error instanceof AppError
+        ? error.code
+        : typeof error.code === 'string'
+          ? error.code
+          : 'INTERNAL_SERVER_ERROR';
     const message =
       !isOperationalError && statusCode >= 500 && env.NODE_ENV === 'production'
         ? 'An unexpected error occurred. Please contact support.'
@@ -229,7 +244,7 @@ export function buildServer(): FastifyInstance {
       {
         code: errorCode,
         message,
-        details: isAppError ? error.details : error.details,
+        details: error.details,
       },
       request.id,
     );

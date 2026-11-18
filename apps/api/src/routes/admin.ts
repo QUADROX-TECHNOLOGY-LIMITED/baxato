@@ -1354,23 +1354,13 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
 
-    await providerRouterService.hydratePersistedRouting();
     const previousConfigs = providerRouterService.getRoutingConfig(body.serviceType);
-    const updated = providerRouterService.updateRoutingConfig(
+    const updated = await providerRouterService.persistRoutingUpdate(
       body.serviceType,
       body.strategy,
       body.allowFailover ?? true,
+      request.user?.id,
     );
-
-    // Persist active routing strategy in PostgreSQL system_settings across restarts/deploys
-    await serviceControlsService
-      .updateSettings(
-        { serviceRouting: { [body.serviceType]: body.strategy } },
-        request.user?.id,
-      )
-      .catch((err) => {
-        console.error('[AdminRoutes] Failed to persist service routing setting:', err);
-      });
 
     // Audit the routing update executed by Staff
     await auditService.log({

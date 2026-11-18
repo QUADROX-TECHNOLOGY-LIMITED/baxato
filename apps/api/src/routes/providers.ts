@@ -20,6 +20,7 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
     '',
     { preHandler: [requirePlatformPermission(Permission.PLATFORM_PROVIDERS_MANAGE)] },
     async (request, reply) => {
+      await providerRouterService.hydratePersistedRouting();
       const routingTable = providerRouterService.getRoutingConfig();
       const providersList = providerRouterService.getRegisteredProviders();
       return reply.status(200).send(
@@ -84,10 +85,11 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const updated = providerRouterService.updateRoutingConfig(
+      const updated = await providerRouterService.persistRoutingUpdate(
         body.serviceType,
         body.strategy,
         body.allowFailover ?? true,
+        request.user?.id,
       );
 
       return reply.status(200).send(

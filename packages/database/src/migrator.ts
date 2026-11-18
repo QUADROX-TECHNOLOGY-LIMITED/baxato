@@ -43,6 +43,18 @@ export async function runMigrations(): Promise<boolean> {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_backup_codes JSONB DEFAULT '[]'::jsonb NOT NULL;`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS hide_balance BOOLEAN DEFAULT FALSE NOT NULL;`;
 
+    // Idempotent schema guarantee for Provider & Transaction enums (must exist before seedProviders & service inserts)
+    try {
+      await sql`ALTER TYPE provider_name ADD VALUE IF NOT EXISTS 'VTPASS';`;
+    } catch (enumErr) {
+      console.warn('[Database Migration] provider_name VTPASS enum notice:', enumErr);
+    }
+    try {
+      await sql`ALTER TYPE transaction_status ADD VALUE IF NOT EXISTS 'PROCESSING';`;
+    } catch {
+      // Ignore if already exists
+    }
+
     // Idempotent schema guarantee for Team & RBAC
     try {
       await sql`ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'FINANCE';`;

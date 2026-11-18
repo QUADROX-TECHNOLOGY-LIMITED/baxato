@@ -852,17 +852,21 @@ export class EducationService {
       // 8. Rollback on failure: Refund wallet and update transaction to FAILED
       await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
 
-      await db
-        .update(serviceTransactions)
-        .set({
-          status: TransactionStatus.FAILED,
-          errorMessage: (error as Error).message,
-          updatedAt: new Date(),
-        })
-        .where(eq(serviceTransactions.id, txnRow.id));
+      try {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.FAILED,
+            errorMessage: (error as Error).message,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+      } catch (dbErr) {
+        console.error('[EducationService] Failed to persist FAILED rollback state:', dbErr);
+      }
 
       if (input.idempotencyKey) {
-        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId).catch(() => {});
       }
 
       // Outbound Webhook Dispatch for Failure (fire-and-forget / non-blocking)
