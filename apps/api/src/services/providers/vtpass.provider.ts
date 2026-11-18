@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import {
   ProviderName,
   TransactionStatus,
@@ -34,7 +35,7 @@ export function generateVtpassRequestId(): string {
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
-  const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+  const randomSuffix = crypto.randomInt(100000, 1000000);
   return `${year}${month}${day}${hours}${minutes}${seconds}${randomSuffix}`;
 }
 
@@ -650,10 +651,11 @@ export class VtpassProvider implements ProviderAdapter {
       data?.content?.transactions?.units ||
       undefined;
 
-    const providerReference =
-      String(data?.content?.transactions?.transactionId ?? '') ||
-      data?.requestId ||
-      requestId;
+    // On SUCCESSFUL vends, prefer transactionId if returned; on PROCESSING vends,
+    // preserve the exact VTpass request_id so /api/requery can always locate the order.
+    const providerReference = isSuccess
+      ? String(data?.content?.transactions?.transactionId ?? '') || data?.requestId || requestId
+      : String(data?.requestId ?? '') || requestId;
 
     return {
       status,
@@ -668,7 +670,7 @@ export class VtpassProvider implements ProviderAdapter {
       token,
       units,
       customerAddress: data?.content?.transactions?.unique_element,
-      rawResponse: data ?? undefined,
+      rawResponse: data ? { ...data, _vtpassRequestId: requestId } : { _vtpassRequestId: requestId },
     };
   }
 
@@ -683,11 +685,23 @@ export class VtpassProvider implements ProviderAdapter {
     const primaryRef = providerReference || requestReference;
     const endpoint = `${this.config.baseUrl}/requery`;
 
-    let res = await fetch(endpoint, {
-      method: 'POST',
-      headers: this.getHeaders('POST'),
-      body: JSON.stringify({ request_id: primaryRef }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: this.getHeaders('POST'),
+        body: JSON.stringify({ request_id: primaryRef }),
+      });
+    } catch (networkErr) {
+      return {
+        status: TransactionStatus.PROCESSING,
+        providerName: this.providerName,
+        providerReference: primaryRef,
+        requestReference,
+        responseCode: 'NETWORK_ERROR',
+        responseMessage: (networkErr as Error).message || 'Upstream requery unreachable',
+      };
+    }
 
     let data = await safeParseResponse(res);
 
@@ -698,14 +712,18 @@ export class VtpassProvider implements ProviderAdapter {
         : undefined;
 
     if ((!data || data.code !== '000') && fallbackRef) {
-      const fallbackRes = await fetch(endpoint, {
-        method: 'POST',
-        headers: this.getHeaders('POST'),
-        body: JSON.stringify({ request_id: fallbackRef }),
-      });
-      const fallbackData = await safeParseResponse(fallbackRes);
-      if (fallbackData && fallbackData.code === '000') {
-        data = fallbackData;
+      try {
+        const fallbackRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: this.getHeaders('POST'),
+          body: JSON.stringify({ request_id: fallbackRef }),
+        });
+        const fallbackData = await safeParseResponse(fallbackRes);
+        if (fallbackData && (fallbackData.code === '000' || fallbackData.code === '016' || fallbackData.code === '040')) {
+          data = fallbackData;
+        }
+      } catch {
+        // Keep primary response if fallback network call fails
       }
     }
 
@@ -716,14 +734,13 @@ export class VtpassProvider implements ProviderAdapter {
       code === '000' &&
       (txStatus === 'delivered' || txStatus === 'successful');
 
-    const isProcessing =
-      code === '099' ||
-      txStatus === 'pending' ||
-      txStatus === 'initiated';
-
+    // NEVER classify lookup errors (e.g. 015 invalid request_id) or HTTP 5xx/empty responses
+    // as FAILED; only explicit terminal failure/reversal codes from VTpass confirm failure.
     const isExplicitFailed =
       txStatus === 'failed' ||
-      (code !== '000' && code !== '099' && !isProcessing);
+      txStatus === 'reversed' ||
+      code === '016' ||
+      code === '040';
 
     let status = TransactionStatus.PROCESSING;
     if (isSuccess) {

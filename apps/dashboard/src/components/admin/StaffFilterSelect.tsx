@@ -53,7 +53,7 @@ export default function StaffFilterSelect<T extends string = string>({
   const activeOption = options.find((opt) => opt.value === value) || options[0];
 
   return (
-    <div ref={wrapperRef} className={`relative ${className}`.trim()}>
+    <div ref={wrapperRef} className={`relative ${isOpen ? 'z-50' : 'z-10'} ${className}`.trim()}>
       <button
         type="button"
         disabled={disabled}

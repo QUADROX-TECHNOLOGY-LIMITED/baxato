@@ -69,12 +69,16 @@ export function buildServer(): FastifyInstance {
       }
       try {
         const u = new URL(origin);
-        if (
-          u.hostname.endsWith('baxato.com') ||
-          u.hostname.endsWith('baxato.ng') ||
-          u.hostname === 'localhost' ||
-          u.hostname === '127.0.0.1'
-        ) {
+        const isProdDomain =
+          u.protocol === 'https:' &&
+          (u.hostname === 'baxato.com' ||
+            u.hostname.endsWith('.baxato.com') ||
+            u.hostname === 'baxato.ng' ||
+            u.hostname.endsWith('.baxato.ng'));
+        const isLocalDev =
+          env.NODE_ENV !== 'production' &&
+          (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+        if (isProdDomain || isLocalDev) {
           return cb(null, true);
         }
       } catch {

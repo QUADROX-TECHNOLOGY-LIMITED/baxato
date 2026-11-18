@@ -125,7 +125,7 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
 
     const data = parseResult.data;
 
-    const [updatedUser] = await db
+    const [updatedRow] = await db
       .update(users)
       .set({
         ...(data.firstName ? { firstName: data.firstName.trim() } : {}),
@@ -135,11 +135,46 @@ export const userRoutes: FastifyPluginAsync = async (fastify) => {
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
-      .returning();
+      .returning({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        middleName: users.middleName,
+        phoneNumber: users.phoneNumber,
+        avatarUrl: users.avatarUrl,
+        isEmailVerified: users.isEmailVerified,
+        isPhoneVerified: users.isPhoneVerified,
+        kycStatus: users.kycStatus,
+        role: users.role,
+        status: users.status,
+        hideBalance: users.hideBalance,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
 
-    if (!updatedUser) {
+    if (!updatedRow) {
       throw new NotFoundError('User not found');
     }
+
+    // Explicitly pick strictly public profile fields (defends against mock/ORM full-row returns)
+    const updatedUser = {
+      id: updatedRow.id,
+      email: updatedRow.email,
+      firstName: updatedRow.firstName,
+      lastName: updatedRow.lastName,
+      middleName: updatedRow.middleName ?? null,
+      phoneNumber: updatedRow.phoneNumber,
+      avatarUrl: updatedRow.avatarUrl ?? null,
+      isEmailVerified: updatedRow.isEmailVerified,
+      isPhoneVerified: updatedRow.isPhoneVerified,
+      kycStatus: updatedRow.kycStatus,
+      role: updatedRow.role,
+      status: updatedRow.status,
+      hideBalance: Boolean(updatedRow.hideBalance),
+      createdAt: updatedRow.createdAt,
+      updatedAt: updatedRow.updatedAt,
+    };
 
     const hasProfileChange = Boolean(
       data.firstName || data.lastName || data.middleName !== undefined,

@@ -24,6 +24,7 @@ import {
   and,
   or,
   desc,
+  inArray,
 } from '@baxato/database';
 import { walletService } from './wallet.service.js';
 import { ledgerService } from './ledger.service.js';
@@ -814,40 +815,49 @@ export class ElectricityService {
     await walletService.debitWallet(mainWallet.id, amountToDebitKobo);
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
-    // 4. Generate references & initialize service transaction row
+    // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('ELEC');
 
-    const [txnRow] = await db
-      .insert(serviceTransactions)
-      .values({
-        businessId: input.businessId,
-        userId: input.userId,
-        serviceType: ServiceType.ELECTRICITY,
-        amount: faceAmountKobo,
-        fee: 0n,
-        discount: discountKobo,
-        totalAmount: amountToDebitKobo,
-        status: TransactionStatus.PROCESSING,
-        recipient: cleanMeter,
-        providerName: 'MONNIFY' as any,
-        clientReference: clientRef,
-        requestReference,
-        metadata: {
-          disco: input.disco,
-          discoName: config.name,
-          meterType: input.meterType,
-          customerName: input.customerName || null,
-          customerMobile: input.customerMobile || null,
-          faceAmountKobo: faceAmountKobo.toString(),
-          discountKobo: discountKobo.toString(),
-          amountToDebitKobo: amountToDebitKobo.toString(),
-        },
-      })
-      .returning();
+    let txnRow: typeof serviceTransactions.$inferSelect | undefined;
+    try {
+      [txnRow] = await db
+        .insert(serviceTransactions)
+        .values({
+          businessId: input.businessId,
+          userId: input.userId,
+          serviceType: ServiceType.ELECTRICITY,
+          amount: faceAmountKobo,
+          fee: 0n,
+          discount: discountKobo,
+          totalAmount: amountToDebitKobo,
+          status: TransactionStatus.PROCESSING,
+          recipient: cleanMeter,
+          providerName: 'MONNIFY' as any,
+          clientReference: clientRef,
+          requestReference,
+          metadata: {
+            disco: input.disco,
+            discoName: config.name,
+            meterType: input.meterType,
+            customerName: input.customerName || null,
+            customerMobile: input.customerMobile || null,
+            faceAmountKobo: faceAmountKobo.toString(),
+            discountKobo: discountKobo.toString(),
+            amountToDebitKobo: amountToDebitKobo.toString(),
+          },
+        })
+        .returning();
 
-    if (!txnRow) {
-      throw new Error('Failed to create transaction record');
+      if (!txnRow) {
+        throw new Error('Failed to create transaction record');
+      }
+    } catch (insertError) {
+      await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
+      if (input.idempotencyKey) {
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+      }
+      throw insertError;
     }
 
     const monnifyBillerCode =
@@ -1231,13 +1241,13 @@ export class ElectricityService {
       );
 
       if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
-        const meta = (row.metadata as Record<string, unknown>) || {};
+        const meta = { ...((row.metadata as Record<string, unknown>) || {}) };
         if (requeryResult.token) meta.token = requeryResult.token;
         if (requeryResult.units) meta.units = requeryResult.units;
         if (requeryResult.tariff) meta.tariff = requeryResult.tariff;
         if (requeryResult.feeder) meta.feeder = requeryResult.feeder;
 
-        await db
+        const [claimed] = await db
           .update(serviceTransactions)
           .set({
             status: TransactionStatus.SUCCESSFUL,
@@ -1245,7 +1255,25 @@ export class ElectricityService {
             metadata: meta,
             updatedAt: new Date(),
           })
-          .where(eq(serviceTransactions.id, row.id));
+          .where(
+            and(
+              eq(serviceTransactions.id, row.id),
+              inArray(serviceTransactions.status, [
+                TransactionStatus.PENDING,
+                TransactionStatus.PROCESSING,
+              ]),
+            ),
+          )
+          .returning();
+
+        if (!claimed) {
+          const [latest] = await db
+            .select()
+            .from(serviceTransactions)
+            .where(eq(serviceTransactions.id, row.id))
+            .limit(1);
+          return this.mapRowToReceiptDto(latest || row);
+        }
 
         const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
         await ledgerService
@@ -1287,16 +1315,36 @@ export class ElectricityService {
       }
 
       if (requeryResult.status === TransactionStatus.FAILED) {
-        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
-        await walletService.creditWallet(mainWallet.id, row.totalAmount);
-
-        await db
+        // Atomically claim terminal FAILED transition BEFORE crediting wallet to prevent double refunds
+        const [claimed] = await db
           .update(serviceTransactions)
           .set({
             status: TransactionStatus.FAILED,
+            errorMessage: requeryResult.responseMessage || 'Electricity vending failed upstream',
             updatedAt: new Date(),
           })
-          .where(eq(serviceTransactions.id, row.id));
+          .where(
+            and(
+              eq(serviceTransactions.id, row.id),
+              inArray(serviceTransactions.status, [
+                TransactionStatus.PENDING,
+                TransactionStatus.PROCESSING,
+              ]),
+            ),
+          )
+          .returning();
+
+        if (!claimed) {
+          const [latest] = await db
+            .select()
+            .from(serviceTransactions)
+            .where(eq(serviceTransactions.id, row.id))
+            .limit(1);
+          return this.mapRowToReceiptDto(latest || row);
+        }
+
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await walletService.creditWallet(mainWallet.id, row.totalAmount);
 
         const updatedRow = { ...row, status: TransactionStatus.FAILED };
         const receipt = this.mapRowToReceiptDto(updatedRow);

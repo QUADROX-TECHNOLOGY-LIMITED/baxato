@@ -148,7 +148,11 @@ export class LedgerService {
   /**
    * Retrieves a paginated financial ledger statement for a wallet.
    */
-  public async getWalletStatement(walletId: string, limit = 50): Promise<LedgerStatementDto> {
+  public async getWalletStatement(
+    walletId: string,
+    limit = 50,
+    businessId?: string,
+  ): Promise<LedgerStatementDto> {
     const [wallet] = await db
       .select({ id: wallets.id, businessId: wallets.businessId })
       .from(wallets)
@@ -156,6 +160,10 @@ export class LedgerService {
       .limit(1);
 
     if (!wallet) {
+      throw new NotFoundError('Wallet');
+    }
+
+    if (businessId && wallet.businessId !== businessId) {
       throw new NotFoundError('Wallet');
     }
 
@@ -202,7 +210,7 @@ export class LedgerService {
    * Computes mathematical audit integrity: verifies that current wallet balance
    * exactly equals the cumulative net sum of all historical ledger entries.
    */
-  public async verifyWalletLedgerAudit(walletId: string) {
+  public async verifyWalletLedgerAudit(walletId: string, businessId?: string) {
     const [wallet] = await db
       .select()
       .from(wallets)
@@ -210,6 +218,10 @@ export class LedgerService {
       .limit(1);
 
     if (!wallet) {
+      throw new NotFoundError('Wallet');
+    }
+
+    if (businessId && wallet.businessId !== businessId) {
       throw new NotFoundError('Wallet');
     }
 

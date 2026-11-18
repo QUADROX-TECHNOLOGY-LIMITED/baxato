@@ -23,6 +23,7 @@ import {
   and,
   or,
   desc,
+  inArray,
 } from '@baxato/database';
 import { walletService } from './wallet.service.js';
 import { ledgerService } from './ledger.service.js';
@@ -267,37 +268,46 @@ export class AirtimeService {
     await walletService.debitWallet(mainWallet.id, amountToDebitKobo);
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
-    // 4. Generate reference & initialize service transaction row
+    // 4. Generate reference & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('AIRTIME');
 
-    const [txnRow] = await db
-      .insert(serviceTransactions)
-      .values({
-        businessId: input.businessId,
-        userId: input.userId,
-        serviceType: ServiceType.AIRTIME,
-        amount: faceAmountKobo,
-        fee: 0n,
-        discount: discountKobo,
-        totalAmount: amountToDebitKobo,
-        status: TransactionStatus.PROCESSING,
-        recipient: normalizedPhone,
-        providerName: 'MONNIFY' as any, // initial provider
-        clientReference: clientRef,
-        requestReference,
-        metadata: {
-          network,
-          networkName: config.name,
-          faceAmountKobo: faceAmountKobo.toString(),
-          discountKobo: discountKobo.toString(),
-          amountToDebitKobo: amountToDebitKobo.toString(),
-        },
-      })
-      .returning();
+    let txnRow: typeof serviceTransactions.$inferSelect | undefined;
+    try {
+      [txnRow] = await db
+        .insert(serviceTransactions)
+        .values({
+          businessId: input.businessId,
+          userId: input.userId,
+          serviceType: ServiceType.AIRTIME,
+          amount: faceAmountKobo,
+          fee: 0n,
+          discount: discountKobo,
+          totalAmount: amountToDebitKobo,
+          status: TransactionStatus.PROCESSING,
+          recipient: normalizedPhone,
+          providerName: 'MONNIFY' as any, // initial provider
+          clientReference: clientRef,
+          requestReference,
+          metadata: {
+            network,
+            networkName: config.name,
+            faceAmountKobo: faceAmountKobo.toString(),
+            discountKobo: discountKobo.toString(),
+            amountToDebitKobo: amountToDebitKobo.toString(),
+          },
+        })
+        .returning();
 
-    if (!txnRow) {
-      throw new Error('Failed to create transaction record');
+      if (!txnRow) {
+        throw new Error('Failed to create transaction record');
+      }
+    } catch (insertError) {
+      await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
+      if (input.idempotencyKey) {
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+      }
+      throw insertError;
     }
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
@@ -589,14 +599,32 @@ export class AirtimeService {
       );
 
       if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
-        await db
+        const [claimed] = await db
           .update(serviceTransactions)
           .set({
             status: TransactionStatus.SUCCESSFUL,
             providerReference: requeryResult.providerReference || row.providerReference,
             updatedAt: new Date(),
           })
-          .where(eq(serviceTransactions.id, row.id));
+          .where(
+            and(
+              eq(serviceTransactions.id, row.id),
+              inArray(serviceTransactions.status, [
+                TransactionStatus.PENDING,
+                TransactionStatus.PROCESSING,
+              ]),
+            ),
+          )
+          .returning();
+
+        if (!claimed) {
+          const [latest] = await db
+            .select()
+            .from(serviceTransactions)
+            .where(eq(serviceTransactions.id, row.id))
+            .limit(1);
+          return this.mapRowToReceiptDto(latest || row);
+        }
 
         // Ensure double-entry ledger is committed if not already recorded
         const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
@@ -638,18 +666,36 @@ export class AirtimeService {
       }
 
       if (requeryResult.status === TransactionStatus.FAILED) {
-        // Confirmed failed: reverse wallet deduction
-        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
-        await walletService.creditWallet(mainWallet.id, row.totalAmount);
-
-        await db
+        // Atomically claim terminal FAILED transition BEFORE crediting wallet to prevent double refunds
+        const [claimed] = await db
           .update(serviceTransactions)
           .set({
             status: TransactionStatus.FAILED,
             errorMessage: requeryResult.responseMessage || 'Airtime vending failed upstream',
             updatedAt: new Date(),
           })
-          .where(eq(serviceTransactions.id, row.id));
+          .where(
+            and(
+              eq(serviceTransactions.id, row.id),
+              inArray(serviceTransactions.status, [
+                TransactionStatus.PENDING,
+                TransactionStatus.PROCESSING,
+              ]),
+            ),
+          )
+          .returning();
+
+        if (!claimed) {
+          const [latest] = await db
+            .select()
+            .from(serviceTransactions)
+            .where(eq(serviceTransactions.id, row.id))
+            .limit(1);
+          return this.mapRowToReceiptDto(latest || row);
+        }
+
+        const mainWallet = await walletService.getBusinessWallet(row.businessId, WalletType.MAIN);
+        await walletService.creditWallet(mainWallet.id, row.totalAmount);
 
         const updatedRow = {
           ...row,

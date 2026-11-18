@@ -247,11 +247,18 @@ export class KycService {
     const oLast = officialLast.toLowerCase().trim();
     const officialNames = [oFirst, oMiddle, oLast].filter(Boolean);
 
-    if (uFirst && !officialNames.some((n) => n === uFirst || n.includes(uFirst) || uFirst.includes(n))) {
+    const matchesOfficialPart = (userPart: string) =>
+      officialNames.some(
+        (n) =>
+          n === userPart ||
+          (userPart.length >= 3 && n.length >= 3 && (n.includes(userPart) || userPart.includes(n))),
+      );
+
+    if (uFirst && !matchesOfficialPart(uFirst)) {
       matchScore -= 50;
     }
 
-    if (uLast && !officialNames.some((n) => n === uLast || n.includes(uLast) || uLast.includes(n))) {
+    if (uLast && !matchesOfficialPart(uLast)) {
       matchScore -= 50;
     }
 
@@ -261,7 +268,7 @@ export class KycService {
         matchScore,
         photoExtracted: Boolean(photo),
         isNameMismatch: true,
-        failureReason: `Name Mismatch: The registered name (${userProvidedFirstName} ${userProvidedLastName}) does not match official NIMC records (${officialFirst} ${officialLast}).`,
+        failureReason: `Name Mismatch: The submitted name (${userProvidedFirstName} ${userProvidedLastName}) does not match official NIMC records for this NIN.`,
         rawResponse: data,
         cached: isFromCache,
       };

@@ -24,9 +24,11 @@ import {
   users,
   eq,
   and,
+  inArray,
 } from '@baxato/database';
 import crypto from 'crypto';
 import { generateToken } from '../plugins/auth.plugin.js';
+import { assertSafeWebhookUrl } from './webhook-dispatcher.service.js';
 
 export class BusinessService {
   /**
@@ -133,8 +135,14 @@ export class BusinessService {
         })
       : undefined;
 
+    const {
+      webhookSecret: _stripSecret,
+      webhookTestSecret: _stripTestSecret,
+      ...safeNewBusiness
+    } = newBusiness;
+
     return {
-      business: newBusiness,
+      business: safeNewBusiness,
       token,
       wallets: {
         main: mainWallet
@@ -176,7 +184,7 @@ export class BusinessService {
       memberBusinesses = await db
         .select()
         .from(businesses)
-        .where(eq(businesses.id, memberBizIds[0]!));
+        .where(inArray(businesses.id, memberBizIds));
     }
 
     const allBusinesses = [...owned, ...memberBusinesses];
@@ -395,21 +403,34 @@ export class BusinessService {
       ];
     }
 
+    const validatedWebhookUrl =
+      input.webhookUrl !== undefined
+        ? input.webhookUrl
+          ? await assertSafeWebhookUrl(input.webhookUrl.trim())
+          : null
+        : undefined;
+
     const [updated] = await db
       .update(businesses)
       .set({
         ...(isRenaming ? { name: nextName, initialName, nameChangeCount: nextChangeCount, nameHistory: nextHistory } : {}),
         ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl ? input.websiteUrl.trim() : null } : {}),
         ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber ? input.phoneNumber.trim() : null } : {}),
-        ...(input.webhookUrl !== undefined ? { webhookUrl: input.webhookUrl ? input.webhookUrl.trim() : null } : {}),
+        ...(validatedWebhookUrl !== undefined ? { webhookUrl: validatedWebhookUrl } : {}),
         updatedAt: new Date(),
       })
       .where(eq(businesses.id, businessId))
       .returning();
 
+    const {
+      webhookSecret: _stripUpdatedSecret,
+      webhookTestSecret: _stripUpdatedTestSecret,
+      ...safeUpdated
+    } = updated || ({} as NonNullable<typeof updated>);
+
     const updatedCount = Number(updated?.nameChangeCount ?? nextChangeCount);
     return {
-      ...updated,
+      ...safeUpdated,
       email: updated?.email || ownerUser.email,
       initialName: updated?.initialName || initialName,
       nameChangeCount: updatedCount,
@@ -480,15 +501,37 @@ export class BusinessService {
       }
     }
 
+    const normalizedInviteEmail = email.toLowerCase().trim();
+    if (normalizedInviteEmail.endsWith('@baxato.com')) {
+      throw new ForbiddenError('Platform staff emails cannot be added as merchant workspace members.');
+    }
+    if (role === UserRole.BUSINESS_OWNER) {
+      throw new ValidationError('Cannot assign Business Owner role via team invitation.');
+    }
+
     // Find invited user by email
     const [targetUser] = await db
-      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+      })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(eq(users.email, normalizedInviteEmail))
       .limit(1);
 
     if (!targetUser) {
       throw new NotFoundError(`User with email ${email}`);
+    }
+
+    if (
+      targetUser.role === UserRole.SUPER_ADMIN ||
+      targetUser.role === UserRole.STAFF ||
+      targetUser.role === UserRole.SUPPORT
+    ) {
+      throw new ForbiddenError('Platform accounts cannot be added as merchant workspace members.');
     }
 
     // Check if already a member

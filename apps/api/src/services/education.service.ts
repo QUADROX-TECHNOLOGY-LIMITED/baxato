@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import {
   ExamBody,
   ExamServiceType,
@@ -262,6 +263,9 @@ export class EducationService {
     if (markupKobo < 0n) {
       throw new ValidationError('Markup cannot be negative.');
     }
+    if (markupKobo > 5000000n) {
+      throw new ValidationError('Markup cannot exceed 5,000,000 Kobo (₦50,000).');
+    }
     this.tenantCustomMarkups.set(`${businessId}:${packageCode}`, markupKobo);
   }
 
@@ -426,11 +430,25 @@ export class EducationService {
           `Invalid JAMB Profile Code: '${input.candidateId}'. Must be exactly 10 numeric digits.`,
         );
       }
+      if (quantity > 1) {
+        throw new ValidationError(
+          'JAMB examination PINs are bound to a single candidate profile code (maximum quantity: 1).',
+        );
+      }
     } else {
       if (!/^\d{11}$/.test(cleanCandidateId)) {
         throw new ValidationError(
           `Invalid recipient phone number: '${input.candidateId}'. Must be 11 numeric digits.`,
         );
+      }
+    }
+
+    if (input.customMarkupKobo !== undefined) {
+      if (input.customMarkupKobo < 0n) {
+        throw new ValidationError('Markup cannot be negative.');
+      }
+      if (input.customMarkupKobo > 5000000n) {
+        throw new ValidationError('Markup cannot exceed 5,000,000 Kobo (₦50,000).');
       }
     }
 
@@ -454,96 +472,114 @@ export class EducationService {
         : this.tenantCustomMarkups.get(`${input.businessId}:${pkg.packageCode}`) ??
           pkg.defaultMarkupKobo;
 
-    const baseCostKobo = pkg.baseCostKobo * BigInt(quantity);
-    const markupKobo = customMarkup * BigInt(quantity);
-    const amountToDebitKobo = baseCostKobo; // Merchant is debited wholesale cost for inventory
+    let baseCostKobo = pkg.baseCostKobo * BigInt(quantity);
+    let markupKobo = customMarkup * BigInt(quantity);
+    let amountToDebitKobo = baseCostKobo; // Merchant is debited wholesale cost for inventory
 
     // 3. Resolve Business Wallets & Debit Balance with Concurrency Lock
     const mainWallet = await walletService.getBusinessWallet(input.businessId, WalletType.MAIN);
     const balanceBeforeKobo = BigInt(mainWallet.balanceKobo);
 
     await walletService.debitWallet(mainWallet.id, amountToDebitKobo);
-    const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
+    let balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
-    // 4. Generate references & initialize service transaction row
+    // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('EPN');
 
-    const [txnRow] = await db
-      .insert(serviceTransactions)
-      .values({
-        businessId: input.businessId,
-        userId: input.userId,
-        serviceType: ServiceType.EXAM_PIN,
-        amount: baseCostKobo + markupKobo,
-        fee: markupKobo,
-        discount: 0n,
-        totalAmount: amountToDebitKobo,
-        status: TransactionStatus.PROCESSING,
-        recipient: cleanCandidateId,
-        providerName: 'MONNIFY' as any,
-        clientReference: clientRef,
-        requestReference,
-        metadata: {
-          packageCode: pkg.packageCode,
-          packageName: pkg.name,
-          examBody: pkg.examBody,
-          serviceType: pkg.serviceType,
-          quantity,
-          candidateId: cleanCandidateId,
-          candidateName: input.candidateName || null,
-          baseCostKobo: baseCostKobo.toString(),
-          markupKobo: markupKobo.toString(),
-          amountToDebitKobo: amountToDebitKobo.toString(),
-        },
-      })
-      .returning();
+    let txnRow: typeof serviceTransactions.$inferSelect | undefined;
+    try {
+      [txnRow] = await db
+        .insert(serviceTransactions)
+        .values({
+          businessId: input.businessId,
+          userId: input.userId,
+          serviceType: ServiceType.EXAM_PIN,
+          amount: baseCostKobo + markupKobo,
+          fee: markupKobo,
+          discount: 0n,
+          totalAmount: amountToDebitKobo,
+          status: TransactionStatus.PROCESSING,
+          recipient: cleanCandidateId,
+          providerName: 'MONNIFY' as any,
+          clientReference: clientRef,
+          requestReference,
+          metadata: {
+            packageCode: pkg.packageCode,
+            packageName: pkg.name,
+            examBody: pkg.examBody,
+            serviceType: pkg.serviceType,
+            quantity,
+            candidateId: cleanCandidateId,
+            candidateName: input.candidateName || null,
+            baseCostKobo: baseCostKobo.toString(),
+            markupKobo: markupKobo.toString(),
+            amountToDebitKobo: amountToDebitKobo.toString(),
+          },
+        })
+        .returning();
 
-    if (!txnRow) {
-      throw new Error('Failed to create transaction record');
+      if (!txnRow) {
+        throw new Error('Failed to create transaction record');
+      }
+    } catch (insertError) {
+      await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
+      if (input.idempotencyKey) {
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+      }
+      throw insertError;
     }
 
     // 5. Dual-Fulfillment Engine: Live Provider with Encrypted Inventory Fallback
+    let fulfilledCount = 0;
     try {
-      let dispensedPins: Array<{ pin: string; serialNumber?: string; instructions?: string }> = [];
+      const dispensedPins: Array<{ pin: string; serialNumber?: string; instructions?: string }> = [];
       let fulfillmentSource: 'LIVE_PROVIDER' | 'ENCRYPTED_INVENTORY' = 'LIVE_PROVIDER';
       let providerReference = requestReference;
       let providerName = 'MONNIFY';
 
-      // Attempt 1: Live Provider Vending
+      // Attempt 1: Live Provider Vending (exact quantity loop)
       try {
-        const vendResult = await this.router.vendService(
-          {
-            serviceType: ServiceType.EXAM_PIN,
-            paymentCode: pkg.paymentCode,
-            customerId: cleanCandidateId,
-            customerMobile: input.candidateEmail || cleanCandidateId,
-            amountKobo: pkg.baseCostKobo,
-            requestReference,
-          },
-          txnRow.id,
-        );
+        for (let i = 0; i < quantity; i++) {
+          const subRef = i === 0 ? requestReference : `${requestReference}${i}`;
+          const vendResult = await this.router.vendService(
+            {
+              serviceType: ServiceType.EXAM_PIN,
+              paymentCode: pkg.paymentCode,
+              customerId: cleanCandidateId,
+              customerMobile: input.candidateEmail || cleanCandidateId,
+              amountKobo: pkg.baseCostKobo,
+              requestReference: subRef,
+            },
+            txnRow.id,
+          );
 
-        if (vendResult.status === TransactionStatus.SUCCESSFUL) {
-          const pin = vendResult.pinData?.pin || vendResult.token;
-          if (pin) {
-            dispensedPins.push({
-              pin,
-              serialNumber:
-                vendResult.pinData?.serialNumber ||
-                `${pkg.examBody}-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-              instructions: vendResult.pinData?.instructions || pkg.instructions,
-            });
-            providerReference = vendResult.providerReference || requestReference;
-            providerName = vendResult.providerName;
+          if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
+            break;
           }
+
+          const pin = vendResult.pinData?.pin || vendResult.token;
+          if (!pin) {
+            break;
+          }
+
+          dispensedPins.push({
+            pin,
+            serialNumber:
+              vendResult.pinData?.serialNumber ||
+              `${pkg.examBody}-${new Date().getFullYear()}-${crypto.randomInt(100000, 1000000)}`,
+            instructions: vendResult.pinData?.instructions || pkg.instructions,
+          });
+          providerReference = vendResult.providerReference || subRef;
+          providerName = vendResult.providerName;
         }
       } catch {
-        // Live provider failed; continue to Encrypted Inventory Fallback
+        // Live provider failed; continue to Encrypted Inventory Fallback for remaining PINs
       }
 
-      // Attempt 2: Fallback to Encrypted Offline Inventory
-      if (dispensedPins.length === 0) {
+      // Attempt 2: Fallback to Encrypted Offline Inventory for any remaining unfulfilled PINs
+      const remainingNeeded = quantity - dispensedPins.length;
+      if (remainingNeeded > 0) {
         const availablePins = await db
           .select()
           .from(examPins)
@@ -553,14 +589,14 @@ export class EducationService {
               eq(examPins.status, 'AVAILABLE'),
             ),
           )
-          .limit(quantity);
+          .limit(remainingNeeded * 2);
 
-        if (availablePins.length >= quantity) {
-          fulfillmentSource = 'ENCRYPTED_INVENTORY';
-          providerName = 'INTERNAL_MOCK';
-
+        if (availablePins.length > 0) {
           for (const item of availablePins) {
-            await db
+            if (dispensedPins.length >= quantity) break;
+
+            // Atomically claim AVAILABLE PIN so two concurrent requests cannot dispense the same PIN
+            const [claimedPin] = await db
               .update(examPins)
               .set({
                 status: 'DISPENSED',
@@ -568,10 +604,25 @@ export class EducationService {
                 dispensedAt: new Date(),
                 updatedAt: new Date(),
               })
-              .where(eq(examPins.id, item.id));
+              .where(
+                and(
+                  eq(examPins.id, item.id),
+                  eq(examPins.status, 'AVAILABLE'),
+                ),
+              )
+              .returning();
 
-            const decryptedPin = decryptPin(item.pinEncrypted);
-            const decryptedSerial = decryptPin(item.serialEncrypted);
+            if (!claimedPin) {
+              continue;
+            }
+
+            if (dispensedPins.length === 0) {
+              fulfillmentSource = 'ENCRYPTED_INVENTORY';
+              providerName = 'INTERNAL_MOCK';
+            }
+
+            const decryptedPin = decryptPin(claimedPin.pinEncrypted);
+            const decryptedSerial = decryptPin(claimedPin.serialEncrypted);
 
             dispensedPins.push({
               pin: decryptedPin,
@@ -582,17 +633,29 @@ export class EducationService {
         }
       }
 
-      // If still no PIN available, generate live authenticated fallback token
-      if (dispensedPins.length === 0) {
-        const randomDigits = Math.floor(100000000000 + Math.random() * 900000000000).toString();
-        const formattedPin = `${randomDigits.slice(0, 4)}-${randomDigits.slice(4, 8)}-${randomDigits.slice(8, 12)}`;
-        const serial = `${pkg.examBody}-${new Date().getFullYear()}-${Math.floor(10000000 + Math.random() * 90000000)}`;
+      fulfilledCount = dispensedPins.length;
 
-        dispensedPins.push({
-          pin: formattedPin,
-          serialNumber: serial,
-          instructions: pkg.instructions,
-        });
+      // Never fabricate fake PINs: if 0 PINs could be vended/dispensed, abort and refund full wallet debit
+      if (fulfilledCount === 0) {
+        throw new AppError(
+          'Examination PINs are temporarily out of stock. Your wallet has not been charged.',
+          503,
+          'PIN_OUT_OF_STOCK',
+        );
+      }
+
+      // If partial quantity was fulfilled (e.g. quantity > 1 and upstream/inventory ran out mid-batch),
+      // immediately refund the unfulfilled portion so the merchant only pays for delivered PINs.
+      let finalQuantity = quantity;
+      if (fulfilledCount < quantity) {
+        const unfulfilledCount = BigInt(quantity - fulfilledCount);
+        const refundPortionKobo = pkg.baseCostKobo * unfulfilledCount;
+        await walletService.creditWallet(mainWallet.id, refundPortionKobo);
+        finalQuantity = fulfilledCount;
+        baseCostKobo = pkg.baseCostKobo * BigInt(finalQuantity);
+        markupKobo = customMarkup * BigInt(finalQuantity);
+        amountToDebitKobo = baseCostKobo;
+        balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
       }
 
       // 6. Update Transaction to SUCCESSFUL
@@ -600,6 +663,9 @@ export class EducationService {
         .update(serviceTransactions)
         .set({
           status: TransactionStatus.SUCCESSFUL,
+          amount: baseCostKobo + markupKobo,
+          fee: markupKobo,
+          totalAmount: amountToDebitKobo,
           providerName: providerName as any,
           providerReference,
           metadata: {
@@ -607,7 +673,7 @@ export class EducationService {
             packageName: pkg.name,
             examBody: pkg.examBody,
             serviceType: pkg.serviceType,
-            quantity,
+            quantity: finalQuantity,
             candidateId: cleanCandidateId,
             candidateName: input.candidateName || null,
             pins: dispensedPins,
@@ -626,7 +692,7 @@ export class EducationService {
         reference: clientRef,
         type: LedgerEntryType.SERVICE_PAYMENT,
         category: 'EXAM_PIN_PURCHASE',
-        description: `Education PIN vend: ${quantity}x ${pkg.name} for ${cleanCandidateId}`,
+        description: `Education PIN vend: ${finalQuantity}x ${pkg.name} for ${cleanCandidateId}`,
         transactionId: txnRow.id,
         debit: {
           walletId: mainWallet.id,
@@ -652,7 +718,7 @@ export class EducationService {
         candidateId: cleanCandidateId,
         candidateName: input.candidateName,
         pins: dispensedPins,
-        quantity,
+        quantity: finalQuantity,
         baseCostKobo: baseCostKobo.toString(),
         baseCostNaira: koboToNaira(baseCostKobo),
         formattedBaseCost: formatNairaFromKobo(baseCostKobo),

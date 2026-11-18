@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { env } from '@baxato/config';
 import {
   db,
   businesses,
@@ -224,6 +225,9 @@ export class TeamService {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    if (normalizedEmail.endsWith('@baxato.com')) {
+      throw new ForbiddenError('Platform staff emails cannot be invited to merchant workspaces.');
+    }
 
     const [biz] = await db
       .select({ id: businesses.id, name: businesses.name, ownerId: businesses.ownerId })
@@ -246,14 +250,21 @@ export class TeamService {
       throw new ConflictError('This user is already the owner of this business.');
     }
 
-    // 2. Check if user is already an active member
+    // 2. Check if user is already an active member or platform account
     const [existingUser] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, role: users.role })
       .from(users)
       .where(eq(users.email, normalizedEmail))
       .limit(1);
 
     if (existingUser) {
+      if (
+        existingUser.role === UserRole.SUPER_ADMIN ||
+        existingUser.role === UserRole.STAFF ||
+        existingUser.role === UserRole.SUPPORT
+      ) {
+        throw new ForbiddenError('Platform accounts cannot be added as merchant workspace members.');
+      }
       const [existingMembership] = await db
         .select({ id: businessMembers.id })
         .from(businessMembers)
@@ -342,7 +353,7 @@ export class TeamService {
       email: normalizedEmail,
       role,
       expiresAt,
-      rawToken, // Provided so the UI can offer a direct "Copy Invite Link" option
+      ...(env.NODE_ENV !== 'production' ? { rawToken } : {}),
     };
   }
 
@@ -477,7 +488,7 @@ export class TeamService {
 
     return {
       success: true,
-      rawToken,
+      ...(env.NODE_ENV !== 'production' ? { rawToken } : {}),
       expiresAt,
       message: `Invitation resent to ${invitation.email}.`,
     };
@@ -786,12 +797,34 @@ export class TeamService {
     } else {
       // 2. Not logged in: check if user account with invitation email already exists
       const [existingUser] = await db
-        .select({ id: users.id, email: users.email, passwordHash: users.passwordHash })
+        .select({
+          id: users.id,
+          email: users.email,
+          passwordHash: users.passwordHash,
+          status: users.status,
+          role: users.role,
+          twoFactorEnabled: users.twoFactorEnabled,
+        })
         .from(users)
         .where(eq(users.email, validation.email.toLowerCase()))
         .limit(1);
 
       if (existingUser) {
+        if (existingUser.status && existingUser.status !== 'ACTIVE') {
+          throw new ForbiddenError(`Account is ${existingUser.status}. Please contact support.`);
+        }
+        if (
+          existingUser.role === UserRole.SUPER_ADMIN ||
+          existingUser.role === UserRole.STAFF ||
+          existingUser.role === UserRole.SUPPORT
+        ) {
+          throw new ForbiddenError('Platform accounts cannot accept merchant workspace invitations.');
+        }
+        if (existingUser.twoFactorEnabled) {
+          throw new ValidationError(
+            'Two-Factor Authentication is enabled on your account. Please sign in first, then open this invitation link.',
+          );
+        }
         if (!password) {
           throw new ValidationError(
             `An account already exists for ${validation.email}. Please provide your password to accept and join.`,

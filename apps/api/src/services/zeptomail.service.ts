@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { env } from '@baxato/config';
 
 export interface EmailRecipient {
@@ -5,9 +6,28 @@ export interface EmailRecipient {
   name: string;
 }
 
+function escapeHtml(raw: string): string {
+  return String(raw)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeOtpMatch(expected: string, submitted: string): boolean {
+  const cleanSubmitted = submitted.trim();
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const submittedBuf = Buffer.from(cleanSubmitted, 'utf8');
+  if (expectedBuf.length !== submittedBuf.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(expectedBuf, submittedBuf);
+}
+
 export class ZeptoMailService {
   private readonly apiUrl = 'https://api.zeptomail.com/v1.1/email';
-  private otpStore = new Map<string, { code: string; expiresAt: number }>();
+  private otpStore = new Map<string, { code: string; expiresAt: number; attempts: number; sentAt: number }>();
 
   /**
    * Dispatches a transactional email via ZeptoMail API v1.1.
@@ -73,14 +93,15 @@ export class ZeptoMailService {
    */
   public generateOtp(email: string): string {
     const normalized = email.toLowerCase().trim();
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.otpStore.set(normalized, { code, expiresAt });
+    const code = crypto.randomInt(100000, 1000000).toString();
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000;
+    this.otpStore.set(normalized, { code, expiresAt, attempts: 0, sentAt: now });
     return code;
   }
 
   /**
-   * Validates email OTP code.
+   * Validates email OTP code with 5-attempt brute-force lockout and constant-time comparison.
    */
   public verifyOtp(email: string, code: string): { valid: boolean; reason?: string } {
     const normalized = email.toLowerCase().trim();
@@ -92,7 +113,16 @@ export class ZeptoMailService {
       this.otpStore.delete(normalized);
       return { valid: false, reason: 'Verification code has expired. Please request a new one.' };
     }
-    if (record.code !== code.trim()) {
+    if (record.attempts >= 5) {
+      this.otpStore.delete(normalized);
+      return { valid: false, reason: 'Too many incorrect attempts. Please request a new verification code.' };
+    }
+    if (!safeOtpMatch(record.code, code)) {
+      record.attempts += 1;
+      if (record.attempts >= 5) {
+        this.otpStore.delete(normalized);
+        return { valid: false, reason: 'Too many incorrect attempts. Please request a new verification code.' };
+      }
       return { valid: false, reason: 'Invalid verification code.' };
     }
     this.otpStore.delete(normalized);
@@ -110,7 +140,12 @@ export class ZeptoMailService {
    * Dispatches email OTP code.
    */
   public async sendOtp(email: string, name?: string): Promise<{ success: boolean; error?: string }> {
-    const code = this.generateOtp(email);
+    const normalized = email.toLowerCase().trim();
+    const existing = this.otpStore.get(normalized);
+    if (env.NODE_ENV === 'production' && existing && Date.now() - existing.sentAt < 30_000) {
+      return { success: false, error: 'Please wait 30 seconds before requesting another verification code.' };
+    }
+    const code = this.generateOtp(normalized);
     const subject = `${code} is your BAXATO verification code`;
     const recipientName = name || 'Merchant';
     const html = `
@@ -174,7 +209,7 @@ export class ZeptoMailService {
           <tr>
             <td style="padding: 32px; color: #526173; font-size: 15px; line-height: 1.6;">
               <p style="margin-top: 0; font-size: 18px; font-weight: 700; color: #0B1220;">
-                Welcome, ${name}!
+                Welcome, ${escapeHtml(name)}!
               </p>
               <p>
                 Thank you for creating an account on BAXATO. To complete your registration and activate your merchant operations, please verify your email address.
@@ -230,12 +265,18 @@ export class ZeptoMailService {
     name?: string,
   ): Promise<{ success: boolean; error?: string }> {
     const normalized = email.toLowerCase().trim();
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.otpStore.set(`pwd:${normalized}`, { code, expiresAt });
+    const key = `pwd:${normalized}`;
+    const existing = this.otpStore.get(key);
+    if (env.NODE_ENV === 'production' && existing && Date.now() - existing.sentAt < 30_000) {
+      return { success: false, error: 'Please wait 30 seconds before requesting another confirmation code.' };
+    }
+    const code = crypto.randomInt(100000, 1000000).toString();
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000;
+    this.otpStore.set(key, { code, expiresAt, attempts: 0, sentAt: now });
 
     const subject = `${code} is your BAXATO password change confirmation code`;
-    const recipientName = name || 'Merchant';
+    const recipientName = escapeHtml(name || 'Merchant');
     const html = `
 <!DOCTYPE html>
 <html>
@@ -288,7 +329,16 @@ export class ZeptoMailService {
       this.otpStore.delete(key);
       return { valid: false, reason: 'Confirmation code has expired. Please request a new code.' };
     }
-    if (record.code !== code.trim()) {
+    if (record.attempts >= 5) {
+      this.otpStore.delete(key);
+      return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
+    }
+    if (!safeOtpMatch(record.code, code)) {
+      record.attempts += 1;
+      if (record.attempts >= 5) {
+        this.otpStore.delete(key);
+        return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
+      }
       return { valid: false, reason: 'Invalid confirmation code. Please check your email.' };
     }
     this.otpStore.delete(key);
@@ -310,12 +360,18 @@ export class ZeptoMailService {
     name?: string,
   ): Promise<{ success: boolean; error?: string }> {
     const normalized = email.toLowerCase().trim();
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.otpStore.set(`2fa:${normalized}`, { code, expiresAt });
+    const key = `2fa:${normalized}`;
+    const existing = this.otpStore.get(key);
+    if (env.NODE_ENV === 'production' && existing && Date.now() - existing.sentAt < 30_000) {
+      return { success: false, error: 'Please wait 30 seconds before requesting another verification code.' };
+    }
+    const code = crypto.randomInt(100000, 1000000).toString();
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000;
+    this.otpStore.set(key, { code, expiresAt, attempts: 0, sentAt: now });
 
     const subject = `${code} is your BAXATO Two-Factor Authentication verification code`;
-    const recipientName = name || 'Merchant';
+    const recipientName = escapeHtml(name || 'Merchant');
     const html = `
 <!DOCTYPE html>
 <html>
@@ -367,7 +423,16 @@ export class ZeptoMailService {
       this.otpStore.delete(key);
       return { valid: false, reason: 'Verification code has expired. Please request a new code.' };
     }
-    if (record.code !== code.trim()) {
+    if (record.attempts >= 5) {
+      this.otpStore.delete(key);
+      return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
+    }
+    if (!safeOtpMatch(record.code, code)) {
+      record.attempts += 1;
+      if (record.attempts >= 5) {
+        this.otpStore.delete(key);
+        return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
+      }
       return { valid: false, reason: 'Invalid verification code. Please check your email.' };
     }
     this.otpStore.delete(key);
@@ -386,6 +451,9 @@ export class ZeptoMailService {
     expiresAt: Date;
   }): Promise<{ success: boolean; error?: string }> {
     const { toEmail, inviterName, businessName, role, rawToken, expiresAt } = params;
+    const safeInviter = escapeHtml(inviterName);
+    const safeBizName = escapeHtml(businessName);
+    const safeEmail = escapeHtml(toEmail);
     const subject = `${inviterName} invited you to join ${businessName} on Baxato`;
 
     // Dynamically resolve public app base URL from CORS_ORIGINS or configured domain
@@ -445,11 +513,11 @@ export class ZeptoMailService {
           <tr>
             <td style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 40px 36px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
               <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; line-height: 28px; color: #0F172A; letter-spacing: -0.2px;">
-                Join ${businessName} on Baxato
+                Join ${safeBizName} on Baxato
               </h1>
 
               <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 22px; color: #475569;">
-                <strong>${inviterName}</strong> has invited you to join the <strong>${businessName}</strong> workspace on Baxato as a <strong>${formattedRole}</strong>.
+                <strong>${safeInviter}</strong> has invited you to join the <strong>${safeBizName}</strong> workspace on Baxato as a <strong>${escapeHtml(formattedRole)}</strong>.
               </p>
 
               <!-- CTA Button -->
@@ -473,7 +541,7 @@ export class ZeptoMailService {
 
               <!-- Expiry Note -->
               <p style="margin: 0; padding-top: 20px; border-top: 1px solid #F1F5F9; font-size: 12px; line-height: 18px; color: #94A3B8;">
-                This invitation link was sent to <span style="color: #475569;">${toEmail}</span> and will expire on <strong>${expiryFormatted}</strong>. If you did not expect this invitation, you can safely ignore this email.
+                This invitation link was sent to <span style="color: #475569;">${safeEmail}</span> and will expire on <strong>${escapeHtml(expiryFormatted)}</strong>. If you did not expect this invitation, you can safely ignore this email.
               </p>
             </td>
           </tr>

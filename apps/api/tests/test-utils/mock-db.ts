@@ -1079,6 +1079,10 @@ export function createMockDatabase() {
                   if (col === 'id') return inMemoryDb.businesses.filter((b) => b.id === p.val);
                   if (col === 'owner_id' || col === 'ownerid') return inMemoryDb.businesses.filter((b) => b.ownerId === p.val);
                 }
+                if (p.type === 'inArray' && Array.isArray(p.val)) {
+                  const col = getColName(p.col);
+                  if (col === 'id') return inMemoryDb.businesses.filter((b) => (p.val as unknown[]).includes(b.id));
+                }
                 if (p.type === 'and' && Array.isArray(p.conditions)) {
                   const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
                   return inMemoryDb.businesses.filter((b) => {
@@ -1201,6 +1205,12 @@ export function createMockDatabase() {
                   if (col === 'id') return inMemoryDb.serviceTransactions.filter((s) => s.id === p.val);
                   if (col === 'business_id' || col === 'businessid') return inMemoryDb.serviceTransactions.filter((s) => s.businessId === p.val);
                   if (col === 'service_type' || col === 'servicetype') return inMemoryDb.serviceTransactions.filter((s) => s.serviceType === p.val);
+                  if (col === 'status') return inMemoryDb.serviceTransactions.filter((s) => s.status === p.val);
+                }
+                if (p.type === 'inArray' && Array.isArray(p.val)) {
+                  const col = getColName(p.col);
+                  if (col === 'status') return inMemoryDb.serviceTransactions.filter((s) => (p.val as unknown[]).includes(s.status));
+                  if (col === 'id') return inMemoryDb.serviceTransactions.filter((s) => (p.val as unknown[]).includes(s.id));
                 }
                 if (p.type === 'gte') {
                   const col = getColName(p.col);
@@ -1530,6 +1540,22 @@ export function createMockDatabase() {
                   if (col === 'id') {
                     targetTxn = inMemoryDb.serviceTransactions.find((s) => s.id === p.val);
                   }
+                } else if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ type?: string; col: unknown; val: unknown }>;
+                  targetTxn = inMemoryDb.serviceTransactions.find((s) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (c.type === 'inArray' && Array.isArray(c.val)) {
+                        if (col === 'status' && !(c.val as unknown[]).includes(s.status)) return false;
+                        if (col === 'id' && !(c.val as unknown[]).includes(s.id)) return false;
+                        continue;
+                      }
+                      if (col === 'id' && s.id !== c.val) return false;
+                      if (col === 'status' && s.status !== c.val) return false;
+                      if ((col === 'business_id' || col === 'businessid') && s.businessId !== c.val) return false;
+                    }
+                    return true;
+                  });
                 }
               }
               if (targetTxn) {
@@ -1550,6 +1576,17 @@ export function createMockDatabase() {
                   if (col === 'id') {
                     targetPin = inMemoryDb.examPins.find((pin) => pin.id === p.val);
                   }
+                } else if (p.type === 'and' && Array.isArray(p.conditions)) {
+                  const conds = p.conditions as Array<{ type?: string; col: unknown; val: unknown }>;
+                  targetPin = inMemoryDb.examPins.find((pin) => {
+                    for (const c of conds) {
+                      const col = getColName(c.col);
+                      if (col === 'id' && pin.id !== c.val) return false;
+                      if (col === 'status' && pin.status !== c.val) return false;
+                      if ((col === 'exam_body' || col === 'exambody') && pin.examBody !== c.val) return false;
+                    }
+                    return true;
+                  });
                 }
               }
               if (targetPin) {

@@ -219,6 +219,13 @@ describe('Role-Based Access Control (RBAC) & Policy Evaluator', () => {
         async (req, reply) => reply.send(createSuccessResponse({ keys: ['bx_live_key_123'] })),
       );
 
+      // 4. Platform-protected route: KYC review (granted to platform SUPPORT, NOT tenant SUPPORT members)
+      app.get(
+        '/admin/kyc-review',
+        { preHandler: [requirePlatformPermission(Permission.PLATFORM_KYC_REVIEW)] },
+        async (req, reply) => reply.send(createSuccessResponse({ reviewed: true })),
+      );
+
       await app.ready();
     });
 
@@ -277,6 +284,34 @@ describe('Role-Based Access Control (RBAC) & Policy Evaluator', () => {
         url: `/businesses/${targetBizId}/api-keys`,
         headers: { authorization: `Bearer ${outsiderToken}` },
       });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('SECURITY REGRESSION (C-01): Tenant member with SUPPORT workspace role CANNOT escalate to platform /admin/* endpoints', async () => {
+      // outsiderUser has DB users.role === BUSINESS_OWNER, invited to targetBizId as tenant SUPPORT
+      inMemoryDb.businessMembers.push({
+        id: 'mem_tenant_support_escalation_test',
+        businessId: targetBizId,
+        userId: 'usr_outsider_1',
+        role: UserRole.SUPPORT,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const tenantSupportToken = generateToken({
+        id: 'usr_outsider_1',
+        email: 'outsider@baxato.com',
+        role: UserRole.SUPPORT, // Forged/switched workspace claim
+        businessId: targetBizId,
+        kycStatus: KycStatus.VERIFIED,
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/admin/kyc-review',
+        headers: { authorization: `Bearer ${tenantSupportToken}` },
+      });
+
       expect(res.statusCode).toBe(403);
     });
   });

@@ -601,42 +601,51 @@ export class CableService {
     await walletService.debitWallet(mainWallet.id, amountToDebitKobo);
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
-    // 4. Generate references & initialize service transaction row
+    // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('CABLE');
 
-    const [txnRow] = await db
-      .insert(serviceTransactions)
-      .values({
-        businessId: input.businessId,
-        userId: input.userId,
-        serviceType: ServiceType.CABLE_TV,
-        amount: faceAmountKobo,
-        fee: 0n,
-        discount: discountKobo,
-        totalAmount: amountToDebitKobo,
-        status: TransactionStatus.PROCESSING,
-        recipient: cleanSmartcard,
-        providerName: 'MONNIFY' as any,
-        clientReference: clientRef,
-        requestReference,
-        metadata: {
-          operator: bouquet.operator,
-          operatorName: bouquet.operatorName,
-          bouquetId: bouquet.id,
-          bouquetName: bouquet.name,
-          validity: bouquet.validity,
-          customerName: input.customerName || null,
-          customerMobile: input.customerMobile || null,
-          faceAmountKobo: faceAmountKobo.toString(),
-          discountKobo: discountKobo.toString(),
-          amountToDebitKobo: amountToDebitKobo.toString(),
-        },
-      })
-      .returning();
+    let txnRow: typeof serviceTransactions.$inferSelect | undefined;
+    try {
+      [txnRow] = await db
+        .insert(serviceTransactions)
+        .values({
+          businessId: input.businessId,
+          userId: input.userId,
+          serviceType: ServiceType.CABLE_TV,
+          amount: faceAmountKobo,
+          fee: 0n,
+          discount: discountKobo,
+          totalAmount: amountToDebitKobo,
+          status: TransactionStatus.PROCESSING,
+          recipient: cleanSmartcard,
+          providerName: 'MONNIFY' as any,
+          clientReference: clientRef,
+          requestReference,
+          metadata: {
+            operator: bouquet.operator,
+            operatorName: bouquet.operatorName,
+            bouquetId: bouquet.id,
+            bouquetName: bouquet.name,
+            validity: bouquet.validity,
+            customerName: input.customerName || null,
+            customerMobile: input.customerMobile || null,
+            faceAmountKobo: faceAmountKobo.toString(),
+            discountKobo: discountKobo.toString(),
+            amountToDebitKobo: amountToDebitKobo.toString(),
+          },
+        })
+        .returning();
 
-    if (!txnRow) {
-      throw new Error('Failed to create transaction record');
+      if (!txnRow) {
+        throw new Error('Failed to create transaction record');
+      }
+    } catch (insertError) {
+      await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
+      if (input.idempotencyKey) {
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+      }
+      throw insertError;
     }
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)

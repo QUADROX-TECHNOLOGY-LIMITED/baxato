@@ -96,10 +96,13 @@ export const educationRoutes: FastifyPluginAsync = async (fastify) => {
 
       let customMarkupKobo: bigint | undefined;
       if (body.customMarkupKobo !== undefined) {
-        try {
-          customMarkupKobo = BigInt(body.customMarkupKobo);
-        } catch {
-          throw new ValidationError('Invalid customMarkupKobo format.');
+        const rawStr = String(body.customMarkupKobo).trim();
+        if (!/^\d+$/.test(rawStr)) {
+          throw new ValidationError('customMarkupKobo must be a non-negative integer.');
+        }
+        customMarkupKobo = BigInt(rawStr);
+        if (customMarkupKobo > 5000000n) {
+          throw new ValidationError('customMarkupKobo cannot exceed 5,000,000 Kobo (₦50,000).');
         }
       }
 
@@ -185,12 +188,14 @@ export const educationRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('markupKobo is required.');
       }
 
-      let markup: bigint;
-      try {
-        markup = BigInt(body.markupKobo);
-      } catch {
+      const rawStr = String(body.markupKobo).trim();
+      if (rawStr.startsWith('-')) {
+        throw new ValidationError('Markup cannot be negative.');
+      }
+      if (!/^\d+$/.test(rawStr)) {
         throw new ValidationError('Invalid markupKobo format.');
       }
+      const markup = BigInt(rawStr);
 
       educationService.setCustomMarkup(
         request.businessId!,

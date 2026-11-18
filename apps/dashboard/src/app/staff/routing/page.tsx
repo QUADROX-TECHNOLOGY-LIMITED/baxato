@@ -324,7 +324,7 @@ export default function StaffRoutingPage() {
             return (
               <div
                 key={s.type}
-                className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4"
+                className="relative has-[[aria-expanded=true]]:z-30 p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4"
               >
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { env } from '@baxato/config';
 
 export interface OtpRecord {
@@ -35,8 +36,8 @@ export class WhatsAppService {
    */
   public generateOtp(phoneNumber: string): string {
     const normalized = this.normalizePhoneNumber(phoneNumber);
-    // Secure random 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Cryptographically secure 6-digit OTP
+    const code = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     this.otpStore.set(normalized, {
@@ -278,8 +279,19 @@ export class WhatsAppService {
       return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
     }
 
-    if (record.code !== submittedCode) {
+    const cleanSubmitted = submittedCode.trim();
+    const expectedBuf = Buffer.from(record.code, 'utf8');
+    const submittedBuf = Buffer.from(cleanSubmitted, 'utf8');
+    const isMatch =
+      expectedBuf.length === submittedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, submittedBuf);
+
+    if (!isMatch) {
       record.attempts += 1;
+      if (record.attempts >= 5) {
+        this.otpStore.delete(normalized);
+        return { valid: false, reason: 'Too many incorrect attempts. Please request a new code.' };
+      }
       return { valid: false, reason: 'Invalid verification code.' };
     }
 

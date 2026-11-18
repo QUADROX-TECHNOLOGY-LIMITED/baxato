@@ -150,19 +150,15 @@ function resolveEdgeClientContext(getHeader: (name: string) => string | null): {
     }
   };
 
-  // Read Cloudflare/proxy headers locally ONLY — never send Cloudflare-reserved
-  // headers (cf-connecting-ip, true-client-ip) on outbound requests to API_URL.
+  // Read authoritative edge headers ONLY — never trust unauthenticated client-settable x-client-ip
+  // ahead of Cloudflare/reverse-proxy XFF, and never send Cloudflare-reserved headers outbound.
   const cfConnectingIp = normalizeClientIpToken(getHeader('cf-connecting-ip'));
-  const trueClientIp = normalizeClientIpToken(getHeader('true-client-ip'));
   if (cfConnectingIp) candidates.push(cfConnectingIp);
-  if (trueClientIp && !candidates.includes(trueClientIp)) candidates.push(trueClientIp);
-  pushParts(getHeader('x-client-ip'));
   pushParts(getHeader('x-forwarded-for'));
   pushParts(getHeader('x-real-ip'));
 
   const realClientIp =
     cfConnectingIp ||
-    trueClientIp ||
     candidates.find((ip) => !isCloudflareOrPrivateIp(ip)) ||
     candidates.find((ip) => ip !== '127.0.0.1') ||
     candidates[0];
@@ -215,6 +211,24 @@ export async function proxyToBackendApi<T = any>(
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const pathPartOnly = normalizedPath.split('?')[0] || '';
+  if (
+    normalizedPath.startsWith('//') ||
+    pathPartOnly.includes('..') ||
+    /%2e%2e/i.test(pathPartOnly) ||
+    /[\r\n\0]/.test(normalizedPath)
+  ) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        error: {
+          code: 'INVALID_PROXY_PATH',
+          message: 'Malformed request path.',
+        },
+      } as unknown as T,
+    };
+  }
   const targetUrl = `${baseUrl}${normalizedPath}`;
 
   // Forward safe client telemetry (never send Cloudflare-reserved cf-connecting-ip / true-client-ip)
@@ -302,10 +316,10 @@ export async function proxyToBackendApi<T = any>(
     const rawError = err instanceof Error ? err.message : String(err);
     console.error(`[Backend Proxy Network Error] Failed to reach ${targetUrl}:`, rawError);
 
-    let diagnosticMessage = `Unable to connect to BAXATO backend API (${targetUrl}).`;
-    if (rawError.includes('ECONNREFUSED') || rawError.includes('fetch failed')) {
-      diagnosticMessage = `Could not reach BAXATO backend API at ${baseUrl}. Please verify the API container is running and API_URL in Coolify Dashboard environment variables is configured correctly.`;
-    }
+    const isProd = process.env.NODE_ENV === 'production';
+    const diagnosticMessage = isProd
+      ? 'Service is temporarily unavailable. Please try again in a moment.'
+      : `Unable to connect to BAXATO backend API (${targetUrl}).`;
 
     return {
       status: 502,
@@ -314,7 +328,7 @@ export async function proxyToBackendApi<T = any>(
         error: {
           code: 'BACKEND_UNREACHABLE',
           message: diagnosticMessage,
-          details: rawError,
+          ...(isProd ? {} : { details: rawError }),
         },
       } as unknown as T,
     };

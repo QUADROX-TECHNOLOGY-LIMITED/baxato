@@ -171,7 +171,7 @@ export default function StaffLoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: cleanEmail,
-          password: password.trim(),
+          password,
         }),
       });
 

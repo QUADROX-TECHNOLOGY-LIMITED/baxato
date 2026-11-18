@@ -150,8 +150,8 @@ export class TwoFactorService {
     const hashedCodes: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const part1 = Math.floor(1000 + Math.random() * 9000);
-      const part2 = Math.floor(1000 + Math.random() * 9000);
+      const part1 = crypto.randomInt(1000, 10000);
+      const part2 = crypto.randomInt(1000, 10000);
       const code = `${part1}-${part2}`;
       codes.push(code);
 

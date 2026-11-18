@@ -37,6 +37,12 @@ export class IdempotencyService {
       .limit(1);
 
     if (existing) {
+      if (existing.requestHash && existing.requestHash !== requestHash) {
+        throw new IdempotencyConflictError(
+          'Idempotency key has already been used with different request parameters.',
+        );
+      }
+
       if (existing.responseStatus !== null && existing.responseStatus !== undefined) {
         return {
           isCompleted: true,
@@ -52,6 +58,22 @@ export class IdempotencyService {
           'A transaction with this idempotency key is currently being processed. Please wait for completion.',
         );
       }
+
+      // Expired incomplete lock: atomically refresh lock window instead of duplicate INSERT
+      const refreshedUntil = new Date(Date.now() + 60 * 1000);
+      await db
+        .update(idempotencyKeys)
+        .set({
+          lockedUntil: refreshedUntil,
+        })
+        .where(
+          and(
+            eq(idempotencyKeys.key, trimmedKey),
+            eq(idempotencyKeys.businessId, businessId),
+          ),
+        );
+
+      return { isCompleted: false };
     }
 
     const lockedUntil = new Date(Date.now() + 60 * 1000); // 60s in-flight lock

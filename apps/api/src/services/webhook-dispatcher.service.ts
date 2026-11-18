@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns';
+import net from 'node:net';
+import { env } from '@baxato/config';
 import {
   generateEntityId,
   NotFoundError,
@@ -30,6 +33,98 @@ export const RETRY_DELAYS_MS = [
 ];
 
 export const MAX_WEBHOOK_ATTEMPTS = 5;
+
+function isPrivateOrReservedIp(ipRaw: string): boolean {
+  const ip = ipRaw.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!ip) return true;
+
+  // Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 or ::ffff:7f00:1)
+  if (ip.startsWith('::ffff:')) {
+    const tail = ip.slice(7);
+    if (net.isIPv4(tail)) {
+      return isPrivateOrReservedIp(tail);
+    }
+    return true;
+  }
+
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    const [a = 0, b = 0] = parts;
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true; // Cloud metadata / link-local
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    if (a >= 224) return true; // Multicast & broadcast
+    return false;
+  }
+
+  if (net.isIPv6(ip)) {
+    if (ip === '::' || ip === '::1') return true;
+    if (ip.startsWith('fc') || ip.startsWith('fd')) return true; // Unique local fc00::/7
+    if (ip.startsWith('fe8') || ip.startsWith('fe9') || ip.startsWith('fea') || ip.startsWith('feb')) {
+      return true; // Link-local fe80::/10
+    }
+    return false;
+  }
+
+  return true;
+}
+
+export async function assertSafeWebhookUrl(urlString: string, checkDns = true): Promise<string> {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString.trim());
+  } catch {
+    throw new ValidationError('Invalid webhook URL format.');
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new ValidationError('Webhook URL must use HTTPS.');
+  }
+
+  if (env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    throw new ValidationError('Production webhook URLs must use HTTPS.');
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new ValidationError('Webhook URL must not include embedded credentials.');
+  }
+
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    !hostname ||
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    hostname === 'api' ||
+    hostname === 'postgres' ||
+    hostname === 'redis' ||
+    hostname === 'dashboard' ||
+    !hostname.includes('.')
+  ) {
+    throw new ValidationError('Webhook URL cannot target internal, loopback, or private hosts.');
+  }
+
+  if (net.isIP(hostname) > 0 && isPrivateOrReservedIp(hostname)) {
+    throw new ValidationError('Webhook URL cannot target private, loopback, or metadata IP addresses.');
+  }
+
+  if (checkDns && env.NODE_ENV !== 'test' && net.isIP(hostname) === 0) {
+    let records: Array<{ address: string }>;
+    try {
+      records = await dns.promises.lookup(hostname, { all: true });
+    } catch {
+      throw new ValidationError('Webhook hostname could not be resolved.');
+    }
+    if (!records.length || records.some((r) => isPrivateOrReservedIp(r.address))) {
+      throw new ValidationError('Webhook URL resolved to a restricted private or loopback IP address.');
+    }
+  }
+
+  return parsed.toString();
+}
 
 export class WebhookDispatcherService {
   /**
@@ -136,7 +231,7 @@ export class WebhookDispatcherService {
       webhookSecretPrefix: biz.webhookSecret ? `${biz.webhookSecret.slice(0, 12)}...` : null,
       hasSecret: Boolean(biz.webhookSecret),
       webhookTestUrl: biz.webhookTestUrl ?? null,
-      webhookTestSecret: biz.webhookTestSecret ?? null,
+      webhookTestSecret: biz.webhookTestSecret ? `${biz.webhookTestSecret.slice(0, 12)}...` : null,
       hasTestSecret: Boolean(biz.webhookTestSecret),
       updatedAt: biz.updatedAt ?? null,
     };
@@ -182,8 +277,18 @@ export class WebhookDispatcherService {
       finalTestSecret = newTestSecret;
     }
 
-    const updatedUrl = input.webhookUrl !== undefined ? input.webhookUrl || null : biz.webhookUrl;
-    const updatedTestUrl = input.webhookTestUrl !== undefined ? input.webhookTestUrl || null : biz.webhookTestUrl;
+    const updatedUrl =
+      input.webhookUrl !== undefined
+        ? input.webhookUrl
+          ? await assertSafeWebhookUrl(input.webhookUrl)
+          : null
+        : biz.webhookUrl;
+    const updatedTestUrl =
+      input.webhookTestUrl !== undefined
+        ? input.webhookTestUrl
+          ? await assertSafeWebhookUrl(input.webhookTestUrl)
+          : null
+        : biz.webhookTestUrl;
 
     const [updated] = await db
       .update(businesses)
@@ -207,7 +312,7 @@ export class WebhookDispatcherService {
         webhookSecretPrefix: updated.webhookSecret ? `${updated.webhookSecret.slice(0, 12)}...` : null,
         hasSecret: Boolean(updated.webhookSecret),
         webhookTestUrl: updated.webhookTestUrl,
-        webhookTestSecret: updated.webhookTestSecret,
+        webhookTestSecret: updated.webhookTestSecret ? `${updated.webhookTestSecret.slice(0, 12)}...` : null,
         hasTestSecret: Boolean(updated.webhookTestSecret),
         updatedAt: updated.updatedAt,
       },
@@ -301,8 +406,10 @@ export class WebhookDispatcherService {
     let isSuccess = false;
 
     try {
+      await assertSafeWebhookUrl(url);
       const response = await fetch(url, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'BAXATO-Webhook-Dispatcher/1.0',
@@ -424,8 +531,10 @@ export class WebhookDispatcherService {
     const startTime = Date.now();
 
     try {
+      await assertSafeWebhookUrl(targetUrl);
       const response = await fetch(targetUrl, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': `BAXATO-Webhook-Dispatcher/1.0 (${environment === 'TEST' ? 'Sandbox' : 'Production'}-Ping)`,

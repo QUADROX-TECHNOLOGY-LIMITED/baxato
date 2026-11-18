@@ -17,7 +17,7 @@ export const ledgerRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('Wallet ID required');
       }
 
-      const statement = await ledgerService.getWalletStatement(walletId);
+      const statement = await ledgerService.getWalletStatement(walletId, 50, request.businessId);
       return reply.status(200).send(createSuccessResponse(statement, request.id));
     },
   );
@@ -35,7 +35,7 @@ export const ledgerRoutes: FastifyPluginAsync = async (fastify) => {
         throw new ValidationError('Wallet ID required');
       }
 
-      const audit = await ledgerService.verifyWalletLedgerAudit(walletId);
+      const audit = await ledgerService.verifyWalletLedgerAudit(walletId, request.businessId);
       return reply.status(200).send(createSuccessResponse(audit, request.id));
     },
   );

@@ -19,6 +19,7 @@ import {
   ValidationError,
   ConflictError,
   AuthenticationError,
+  ForbiddenError,
   UserRole,
   WalletType,
   KycStatus,
@@ -32,6 +33,12 @@ import { twoFactorService } from '../services/two-factor.service.js';
 import { generateToken, authenticate } from '../plugins/auth.plugin.js';
 import { auditService } from '../services/audit.service.js';
 import { extractClientIp, extractUserAgent } from '../utils/request-meta.js';
+
+// Server-side pending TOTP enrollment secrets (prevents client-supplied secret spoofing)
+const pendingTotpEnrollments = new Map<
+  string,
+  { secret: string; hashedBackupCodes: string[]; expiresAt: number }
+>();
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -166,15 +173,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // 4. Dispatch Email Verification via ZeptoMail ONLY if not already verified
+    // Mint a dedicated 24h EMAIL_VERIFY token (NEVER place a session JWT in an email link)
     if (!newUser.isEmailVerified) {
       try {
-        const emailVerificationToken = generateToken({
-          id: newUser.id,
-          email: newUser.email,
-          role: newUser.role as UserRole,
-          businessId: newBusiness?.id,
-          kycStatus: newUser.kycStatus as KycStatus,
-        });
+        const emailVerificationToken = jwt.sign(
+          { userId: newUser.id, email: newUser.email, purpose: 'EMAIL_VERIFY' },
+          env.JWT_SECRET,
+          { expiresIn: '24h', algorithm: 'HS256' },
+        );
         await zeptoMailService.sendVerificationEmail(
           newUser.email,
           `${newUser.firstName} ${newUser.lastName}`,
@@ -408,21 +414,16 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
 
   /**
-   * Helper to verify passwords with resilience against copy-paste whitespace and mobile capitalization
+   * Single constant-cost bcrypt password check (prevents 4x CPU amplification and case-flip weakening)
    */
-  const verifyPasswordMatch = async (inputPassword: string, hash: string): Promise<boolean> => {
-    if (!inputPassword || !hash) return false;
-    // 1. Direct match
-    if (await bcrypt.compare(inputPassword, hash)) return true;
-    // 2. Trimmed match (handles trailing/leading spaces from copy-paste)
-    const trimmed = inputPassword.trim();
-    if (trimmed !== inputPassword && (await bcrypt.compare(trimmed, hash))) return true;
-    // 3. First-letter case flip (handles mobile/desktop auto-capitalization like Admin@123456 vs admin@123456)
-    const capFirst = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-    if (capFirst !== trimmed && (await bcrypt.compare(capFirst, hash))) return true;
-    const lowerFirst = trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
-    if (lowerFirst !== trimmed && (await bcrypt.compare(lowerFirst, hash))) return true;
-    return false;
+  const DUMMY_BCRYPT_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+  const verifyPasswordMatch = async (inputPassword: string, hash?: string | null): Promise<boolean> => {
+    if (!inputPassword) return false;
+    if (!hash) {
+      await bcrypt.compare(inputPassword, DUMMY_BCRYPT_HASH);
+      return false;
+    }
+    return bcrypt.compare(inputPassword, hash);
   };
 
   /**
@@ -928,7 +929,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     const { tempToken, method } = parseResult.data;
     let decoded: any;
     try {
-      decoded = jwt.verify(tempToken, env.JWT_SECRET);
+      decoded = jwt.verify(tempToken, env.JWT_SECRET, { algorithms: ['HS256'] });
       if (decoded.purpose !== 'STAFF_2FA_SETUP' && decoded.purpose !== 'ADMIN_2FA_SETUP') throw new Error();
     } catch {
       throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
@@ -940,15 +941,24 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.id, decoded.userId))
       .limit(1);
 
-    if (!user) {
-      throw new AuthenticationError('User not found.');
+    if (!user || user.status !== 'ACTIVE') {
+      throw new AuthenticationError('User account not found or inactive.');
+    }
+
+    if (user.twoFactorEnabled) {
+      throw new ConflictError('Two-Factor Authentication is already enrolled on this account. Please sign in normally.');
     }
 
     if (method === 'TOTP') {
       const secret = twoFactorService.generateSecret();
       const otpAuthUri = twoFactorService.generateOtpAuthUri(user.email, secret, 'BAXATO-STAFF');
       const qrCodeDataUrl = await twoFactorService.generateQrCodeDataUrl(otpAuthUri);
-      const { codes } = twoFactorService.generateBackupRecoveryCodes();
+      const { codes, hashedCodes } = twoFactorService.generateBackupRecoveryCodes();
+      pendingTotpEnrollments.set(`staff:${user.id}`, {
+        secret,
+        hashedBackupCodes: hashedCodes,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
 
       return reply.status(200).send(
         createSuccessResponse(
@@ -997,7 +1007,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     const { tempToken, method, code, secret, backupCodes } = parseResult.data;
     let decoded: any;
     try {
-      decoded = jwt.verify(tempToken, env.JWT_SECRET);
+      decoded = jwt.verify(tempToken, env.JWT_SECRET, { algorithms: ['HS256'] });
       if (decoded.purpose !== 'STAFF_2FA_SETUP' && decoded.purpose !== 'ADMIN_2FA_SETUP') throw new Error();
     } catch {
       throw new AuthenticationError('Invalid or expired setup session. Please sign in again.');
@@ -1009,27 +1019,41 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.id, decoded.userId))
       .limit(1);
 
-    if (!user) {
-      throw new AuthenticationError('User not found.');
+    if (!user || user.status !== 'ACTIVE') {
+      throw new AuthenticationError('User account not found or inactive.');
+    }
+
+    if (user.twoFactorEnabled) {
+      throw new ConflictError('Two-Factor Authentication is already enrolled on this account. Please sign in normally.');
     }
 
     if (method === 'TOTP') {
-      if (!secret) throw new ValidationError('Authenticator secret is required.');
-      const is2FaValid = twoFactorService.verifyTotp(secret, code);
+      const pending = pendingTotpEnrollments.get(`staff:${user.id}`);
+      const effectiveSecret =
+        pending && pending.expiresAt > Date.now() ? pending.secret : secret;
+      if (!effectiveSecret) throw new ValidationError('Authenticator setup expired. Please restart setup.');
+      if (pending && secret && secret !== pending.secret) {
+        throw new ValidationError('Authenticator secret mismatch. Please scan the latest QR code.');
+      }
+      const is2FaValid = twoFactorService.verifyTotp(effectiveSecret, code);
       if (!is2FaValid) {
         throw new ValidationError('Invalid authenticator code. Check your app and try again.');
       }
 
-      const hashedCodes = Array.isArray(backupCodes)
-        ? backupCodes.map((c) => crypto.createHash('sha256').update(c).digest('hex'))
-        : [];
+      const hashedCodes =
+        pending && pending.expiresAt > Date.now()
+          ? pending.hashedBackupCodes
+          : Array.isArray(backupCodes)
+            ? backupCodes.map((c) => crypto.createHash('sha256').update(c).digest('hex'))
+            : [];
+      pendingTotpEnrollments.delete(`staff:${user.id}`);
 
       await db
         .update(users)
         .set({
           twoFactorEnabled: true,
           twoFactorMethod: 'TOTP',
-          twoFactorSecret: secret,
+          twoFactorSecret: effectiveSecret,
           twoFactorBackupCodes: hashedCodes,
           updatedAt: new Date(),
         })
@@ -1456,7 +1480,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       const secret = twoFactorService.generateSecret();
       const otpAuthUri = twoFactorService.generateOtpAuthUri(user.email, secret, 'BAXATO');
       const qrCodeDataUrl = await twoFactorService.generateQrCodeDataUrl(otpAuthUri);
-      const { codes } = twoFactorService.generateBackupRecoveryCodes();
+      const { codes, hashedCodes } = twoFactorService.generateBackupRecoveryCodes();
+      pendingTotpEnrollments.set(`user:${user.id}`, {
+        secret,
+        hashedBackupCodes: hashedCodes,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
 
       return reply.status(200).send(
         createSuccessResponse(
@@ -1492,8 +1521,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { secret, token, backupCodes } = parseResult.data;
+      const pending = pendingTotpEnrollments.get(`user:${userId}`);
+      if (pending && pending.expiresAt > Date.now() && secret !== pending.secret) {
+        throw new ValidationError('Authenticator secret mismatch. Please scan the latest QR code.');
+      }
+      const effectiveSecret = pending && pending.expiresAt > Date.now() ? pending.secret : secret;
 
-      const isValid = twoFactorService.verifyTotp(secret, token);
+      const isValid = twoFactorService.verifyTotp(effectiveSecret, token);
       if (!isValid) {
         throw new ValidationError('Invalid authenticator code. Please check your authenticator app and try again.');
       }
@@ -1509,7 +1543,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let hashedList: string[] = [];
-      if (backupCodes && Array.isArray(backupCodes) && backupCodes.length > 0) {
+      if (pending && pending.expiresAt > Date.now()) {
+        hashedList = pending.hashedBackupCodes;
+      } else if (backupCodes && Array.isArray(backupCodes) && backupCodes.length > 0) {
         hashedList = backupCodes.map((code) =>
           crypto.createHash('sha256').update(code.trim()).digest('hex'),
         );
@@ -1517,13 +1553,14 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         const generated = twoFactorService.generateBackupRecoveryCodes();
         hashedList = generated.hashedCodes;
       }
+      pendingTotpEnrollments.delete(`user:${userId}`);
 
       await db
         .update(users)
         .set({
           twoFactorEnabled: true,
           twoFactorMethod: 'TOTP',
-          twoFactorSecret: secret,
+          twoFactorSecret: effectiveSecret,
           twoFactorBackupCodes: hashedList,
           updatedAt: new Date(),
         })
@@ -1579,6 +1616,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!user || !user.passwordHash) {
         throw new AuthenticationError('User account not found');
+      }
+
+      if (user.role === UserRole.STAFF || user.role === UserRole.SUPER_ADMIN) {
+        throw new ForbiddenError(
+          'Two-Factor Authentication is mandatory for platform staff and cannot be disabled.',
+        );
       }
 
       const isMatch = await bcrypt.compare(parseResult.data.password, user.passwordHash);

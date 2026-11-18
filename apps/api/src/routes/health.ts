@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createSuccessResponse } from '@baxato/common';
 import { env } from '@baxato/config';
 import { runMigrations } from '@baxato/database';
+import { requirePlatformAdmin } from '../plugins/auth.plugin.js';
 
 export const healthRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/health', async (request, reply) => {
@@ -29,19 +30,30 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send(createSuccessResponse({ alive: true }, request.id));
   });
 
-  fastify.get('/health/migrate', async (request, reply) => {
-    try {
-      const migrated = await runMigrations();
-      return reply.status(200).send(
-        createSuccessResponse({ migrated, status: 'MIGRATIONS_APPLIED' }, request.id),
-      );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      request.log.error({ err }, 'Failed to execute migrations via /health/migrate');
-      return reply.status(500).send({
-        success: false,
-        error: { code: 'MIGRATION_ERROR', message },
-      });
-    }
-  });
+  fastify.post(
+    '/health/migrate',
+    { preHandler: [requirePlatformAdmin] },
+    async (request, reply) => {
+      try {
+        const migrated = await runMigrations();
+        return reply.status(200).send(
+          createSuccessResponse({ migrated, status: 'MIGRATIONS_APPLIED' }, request.id),
+        );
+      } catch (err: unknown) {
+        request.log.error({ err }, 'Failed to execute migrations via /health/migrate');
+        return reply.status(500).send({
+          success: false,
+          error: {
+            code: 'MIGRATION_ERROR',
+            message:
+              env.NODE_ENV === 'production'
+                ? 'Database migration failed.'
+                : err instanceof Error
+                  ? err.message
+                  : String(err),
+          },
+        });
+      }
+    },
+  );
 };

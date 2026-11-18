@@ -16,6 +16,7 @@ import { apiKeyService } from '../services/api-key.service.js';
 declare module 'fastify' {
   interface FastifyRequest {
     user?: AuthSessionUser;
+    platformRole?: UserRole;
     businessId?: string;
     apiKey?: ApiKeyContext;
     isApiKeyAuth?: boolean;
@@ -24,19 +25,37 @@ declare module 'fastify' {
 }
 
 export function generateToken(payload: AuthSessionUser): string {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ ...payload, purpose: 'SESSION' }, env.JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: '7d',
+  });
 }
 
 export function verifyToken(token: string): AuthSessionUser {
+  let decoded: Record<string, unknown>;
   try {
-    return jwt.verify(token, env.JWT_SECRET) as AuthSessionUser;
+    decoded = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as Record<string, unknown>;
   } catch {
     throw new AuthenticationError('Invalid or expired authentication session token');
   }
+
+  // Reject temporary setup/verification tokens (e.g. STAFF_2FA_SETUP, ADMIN_2FA_SETUP, EMAIL_VERIFY)
+  if (decoded.purpose && decoded.purpose !== 'SESSION') {
+    throw new AuthenticationError('Temporary verification token cannot be used as a session token');
+  }
+
+  if (!decoded || typeof decoded.id !== 'string' || !decoded.id.trim()) {
+    throw new AuthenticationError('Malformed authentication token payload');
+  }
+
+  return decoded as unknown as AuthSessionUser;
 }
 
 export const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorateRequest('user', undefined);
+  fastify.decorateRequest('platformRole', undefined);
   fastify.decorateRequest('businessId', undefined);
   fastify.decorateRequest('apiKey', undefined);
   fastify.decorateRequest('isApiKeyAuth', false);
@@ -46,7 +65,7 @@ export const authPlugin: FastifyPluginAsync = async (fastify) => {
 /**
  * Hook to authenticate request using an API Key (x-api-key or Bearer bx_...)
  */
-export async function authenticateApiKey(request: FastifyRequest, reply: FastifyReply) {
+export async function authenticateApiKey(request: FastifyRequest, _reply: FastifyReply) {
   let rawKey = request.headers['x-api-key'] as string | undefined;
 
   if (!rawKey && request.headers.authorization?.startsWith('Bearer bx_')) {
@@ -62,6 +81,21 @@ export async function authenticateApiKey(request: FastifyRequest, reply: Fastify
     throw new AuthenticationError('Invalid, expired, or revoked API key.');
   }
 
+  // Verify target business exists and is active, and resolve ownerId so FK constraints hold
+  const [biz] = await db
+    .select({
+      id: businesses.id,
+      ownerId: businesses.ownerId,
+      status: businesses.status,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, result.businessId))
+    .limit(1);
+
+  if (!biz || (biz.status && biz.status !== 'ACTIVE')) {
+    throw new ForbiddenError('Business workspace associated with this API key is suspended or inactive.');
+  }
+
   request.apiKey = {
     id: result.apiKey.id,
     name: result.apiKey.name,
@@ -71,10 +105,11 @@ export async function authenticateApiKey(request: FastifyRequest, reply: Fastify
   request.businessId = result.businessId;
   request.isApiKeyAuth = true;
   request.apiKeyEnvironment = result.environment;
+  request.platformRole = undefined;
 
-  // Bind a synthetic developer user so that tenant RBAC permission guards permit execution
+  // Bind real ownerId so service_transactions.user_id foreign key never fails after wallet debit
   request.user = {
-    id: result.apiKey.id,
+    id: biz.ownerId || result.apiKey.id,
     email: `${result.apiKey.keyPrefix}@apikey.baxato.internal`,
     role: UserRole.DEVELOPER,
     businessId: result.businessId,
@@ -86,7 +121,6 @@ export async function authenticateApiKey(request: FastifyRequest, reply: Fastify
  * Hybrid hook: Authenticates request via either Developer API Key or user JWT Bearer token
  */
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
-  // Check if API key authentication is provided
   if (request.headers['x-api-key'] || request.headers.authorization?.startsWith('Bearer bx_')) {
     return authenticateApiKey(request, reply);
   }
@@ -99,7 +133,6 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   const token = authHeader.slice(7).trim();
   const sessionUser = verifyToken(token);
 
-  // Verify user still exists and is active in DB
   const [dbUser] = await db
     .select({
       id: users.id,
@@ -116,21 +149,24 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     throw new AuthenticationError('User account is inactive, suspended, or not found.');
   }
 
-  // Support explicit x-business-id header override with strict authorization check
+  // Platform role comes strictly from users.role in DB — never from tenant business_members
+  const dbPlatformRole = dbUser.role as UserRole;
+  request.platformRole = dbPlatformRole;
+
   const headerBizId = (request.headers['x-business-id'] as string | undefined)?.trim();
   const requestedBizId = headerBizId || sessionUser.businessId;
 
   let activeBizId: string | undefined;
-  let activeRole: UserRole = dbUser.role as UserRole;
+  let activeRole: UserRole = dbPlatformRole;
 
   if (requestedBizId) {
     const [biz] = await db
-      .select({ id: businesses.id, ownerId: businesses.ownerId })
+      .select({ id: businesses.id, ownerId: businesses.ownerId, status: businesses.status })
       .from(businesses)
       .where(eq(businesses.id, requestedBizId))
       .limit(1);
 
-    if (biz) {
+    if (biz && (!biz.status || biz.status === 'ACTIVE')) {
       if (biz.ownerId === dbUser.id) {
         activeBizId = biz.id;
         activeRole = UserRole.BUSINESS_OWNER;
@@ -148,15 +184,14 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     }
   }
 
-  // Fallback to primary owned business or first membership if no valid active business found
   if (!activeBizId) {
     const [ownedBiz] = await db
-      .select({ id: businesses.id })
+      .select({ id: businesses.id, status: businesses.status })
       .from(businesses)
       .where(eq(businesses.ownerId, dbUser.id))
       .limit(1);
 
-    if (ownedBiz) {
+    if (ownedBiz && (!ownedBiz.status || ownedBiz.status === 'ACTIVE')) {
       activeBizId = ownedBiz.id;
       activeRole = UserRole.BUSINESS_OWNER;
     } else {
@@ -172,13 +207,15 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     }
   }
 
+  const isTruePlatformRole =
+    dbPlatformRole === UserRole.SUPER_ADMIN ||
+    dbPlatformRole === UserRole.STAFF ||
+    dbPlatformRole === UserRole.SUPPORT;
+
   request.user = {
     id: dbUser.id,
     email: dbUser.email,
-    role:
-      dbUser.role === UserRole.SUPER_ADMIN || dbUser.role === UserRole.STAFF
-        ? (dbUser.role as UserRole)
-        : activeRole,
+    role: isTruePlatformRole ? dbPlatformRole : activeRole,
     businessId: activeBizId,
     kycStatus: dbUser.kycStatus as KycStatus,
   };
@@ -186,22 +223,22 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 }
 
 /**
- * Guard: Platform Owner ONLY (SUPER_ADMIN)
+ * Guard: Platform Owner ONLY (SUPER_ADMIN from users.role)
  */
 export async function requirePlatformAdmin(request: FastifyRequest, reply: FastifyReply) {
   await authenticate(request, reply);
-  if (request.user?.role !== UserRole.SUPER_ADMIN) {
+  if (request.isApiKeyAuth || request.platformRole !== UserRole.SUPER_ADMIN) {
     throw new ForbiddenError('Platform Owner (Super Admin) permission required.');
   }
 }
 
 /**
- * Guard: Platform Staff & Support (STAFF / SUPPORT / SUPER_ADMIN)
+ * Guard: Platform Staff & Support (strictly from users.role, never tenant memberships)
  */
 export async function requirePlatformStaff(request: FastifyRequest, reply: FastifyReply) {
   await authenticate(request, reply);
   const allowed = [UserRole.SUPER_ADMIN, UserRole.STAFF, UserRole.SUPPORT];
-  if (!request.user || !allowed.includes(request.user.role)) {
+  if (request.isApiKeyAuth || !request.platformRole || !allowed.includes(request.platformRole)) {
     throw new ForbiddenError('Platform Operator or Admin permission required.');
   }
 }
@@ -211,6 +248,9 @@ export async function requirePlatformStaff(request: FastifyRequest, reply: Fasti
  */
 export async function requireBusinessOwner(request: FastifyRequest, reply: FastifyReply) {
   await authenticate(request, reply);
+  if (request.isApiKeyAuth) {
+    throw new ForbiddenError('Business Merchant Owner permission required.');
+  }
   const allowed = [UserRole.SUPER_ADMIN, UserRole.BUSINESS_OWNER];
   if (!request.user || !allowed.includes(request.user.role)) {
     throw new ForbiddenError('Business Merchant Owner permission required.');

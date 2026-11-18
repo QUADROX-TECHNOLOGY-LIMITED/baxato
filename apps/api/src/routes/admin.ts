@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import {
   createSuccessResponse,
@@ -6,6 +7,10 @@ import {
   ServiceType,
   TransactionStatus,
   ProviderName,
+  Permission,
+  hasPermission,
+  WalletType,
+  LedgerEntryType,
   koboToNaira,
   formatNairaFromKobo,
   type ApiPagination,
@@ -30,11 +35,14 @@ import {
   inArray,
 } from '@baxato/database';
 import { requirePlatformStaff, requirePlatformAdmin } from '../plugins/auth.plugin.js';
+import { requirePlatformPermission } from '../plugins/rbac.plugin.js';
 import {
   providerRouterService,
   ProviderRoutingStrategy,
 } from '../services/providers/index.js';
 import { auditService } from '../services/audit.service.js';
+import { walletService } from '../services/wallet.service.js';
+import { ledgerService } from '../services/ledger.service.js';
 import {
   serviceControlsService,
   type UpdateSystemSettingsInput,
@@ -82,31 +90,71 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .from(users)
       .where(eq(users.kycStatus, 'VERIFIED'));
 
+    const [merchantUserCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.role, UserRole.BUSINESS_OWNER));
+
     // 3. Provider health & routing table
     const providerHealth = await providerRouterService.getAllProviderHealth().catch(() => []);
     const routingConfig = providerRouterService.getRoutingConfig();
+
+    const canReadFinancials =
+      request.platformRole === UserRole.SUPER_ADMIN ||
+      (request.platformRole
+        ? hasPermission(request.platformRole, Permission.PLATFORM_FINANCIAL_READ)
+        : false);
 
     const totalTx = Number(txStats?.totalCount || 0);
     const successTx = Number(txStats?.successCount || 0);
     const successRate = totalTx > 0 ? Number(((successTx / totalTx) * 100).toFixed(2)) : 0;
     const todayRevenueNaira = koboToNaira(BigInt(txStats?.successFees || '0'));
 
-    // 4. Platform Solvency & Treasury Balance Sheet
-    const [walletLiabilities] = await db
-      .select({
-        totalLiabilitiesKobo: sql<string>`coalesce(sum(${wallets.balance}), 0)`,
-        walletsCount: sql<number>`count(*)`,
-      })
-      .from(wallets);
+    // 4. Platform Solvency & Treasury Balance Sheet (Super Admin Only — never exposed to Staff/Support)
+    let treasuryPayload: Record<string, unknown> | undefined;
+    if (canReadFinancials) {
+      const [walletLiabilities] = await db
+        .select({
+          totalLiabilitiesKobo: sql<string>`coalesce(sum(${wallets.balance}), 0)`,
+          walletsCount: sql<number>`count(*)`,
+        })
+        .from(wallets);
 
-    const [allTimeStats] = await db
-      .select({
-        allTimeCount: sql<number>`count(*)`,
-        allTimeSuccessCount: sql<number>`count(*) filter (where ${serviceTransactions.status} = 'SUCCESSFUL')`,
-        allTimeVolumeKobo: sql<string>`coalesce(sum(${serviceTransactions.amount}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
-        allTimeFeesKobo: sql<string>`coalesce(sum(${serviceTransactions.fee}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
-      })
-      .from(serviceTransactions);
+      const [allTimeStats] = await db
+        .select({
+          allTimeCount: sql<number>`count(*)`,
+          allTimeSuccessCount: sql<number>`count(*) filter (where ${serviceTransactions.status} = 'SUCCESSFUL')`,
+          allTimeVolumeKobo: sql<string>`coalesce(sum(${serviceTransactions.amount}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
+          allTimeFeesKobo: sql<string>`coalesce(sum(${serviceTransactions.fee}) filter (where ${serviceTransactions.status} = 'SUCCESSFUL'), 0)`,
+        })
+        .from(serviceTransactions);
+
+      const liabilitiesKobo = BigInt(walletLiabilities?.totalLiabilitiesKobo || '0');
+      const liabilitiesNaira = koboToNaira(liabilitiesKobo);
+      const liveReportedFloats = providerHealth
+        .map((p: any) => Number(p?.health?.balanceNaira ?? p?.balanceNaira ?? NaN))
+        .filter((v: number) => Number.isFinite(v) && v >= 0);
+      const totalProviderFloatNaira =
+        liveReportedFloats.length > 0
+          ? liveReportedFloats.reduce((acc: number, n: number) => acc + n, 0)
+          : null;
+      const netSolvencyMarginNaira =
+        totalProviderFloatNaira !== null ? totalProviderFloatNaira - liabilitiesNaira : null;
+      const allTimeGtvNaira = koboToNaira(BigInt(allTimeStats?.allTimeVolumeKobo || '0'));
+      const allTimeRevenueNaira = koboToNaira(BigInt(allTimeStats?.allTimeFeesKobo || '0'));
+
+      treasuryPayload = {
+        merchantWalletLiabilitiesNaira: liabilitiesNaira,
+        merchantWalletsCount: Number(walletLiabilities?.walletsCount || 0),
+        totalProviderFloatNaira,
+        netSolvencyMarginNaira,
+        isSolvent: netSolvencyMarginNaira !== null ? netSolvencyMarginNaira >= 0 : null,
+        allTimeGtvNaira,
+        allTimeRevenueNaira,
+        allTimeSuccessCount: Number(allTimeStats?.allTimeSuccessCount || 0),
+        allTimeCount: Number(allTimeStats?.allTimeCount || 0),
+      };
+    }
 
     // 5. Service Breakdown Today
     const serviceBreakdown = await db
@@ -120,25 +168,64 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .where(gte(serviceTransactions.createdAt, todayStart))
       .groupBy(serviceTransactions.serviceType);
 
-    // 6. Recent Platform Transactions
-    const recentTxns = await db
-      .select({
-        id: serviceTransactions.id,
-        reference: serviceTransactions.requestReference,
-        clientReference: serviceTransactions.clientReference,
-        serviceType: serviceTransactions.serviceType,
-        amountKobo: serviceTransactions.amount,
-        status: serviceTransactions.status,
-        recipient: serviceTransactions.recipient,
-        createdAt: serviceTransactions.createdAt,
-        businessName: businesses.name,
-      })
+    // 6. Operational Exceptions Queue (PENDING, PROCESSING & FAILED transactions requiring triage)
+    const attentionRows = await db
+      .select()
       .from(serviceTransactions)
-      .leftJoin(businesses, eq(serviceTransactions.businessId, businesses.id))
+      .where(
+        inArray(serviceTransactions.status, [
+          TransactionStatus.PENDING,
+          TransactionStatus.PROCESSING,
+          TransactionStatus.FAILED,
+        ]),
+      )
       .orderBy(desc(serviceTransactions.createdAt))
-      .limit(8);
+      .limit(12);
 
-    // 7. Real Hourly Throughput for Today
+    const attentionBizIds = Array.from(
+      new Set(attentionRows.map((r) => r.businessId).filter(Boolean)),
+    );
+    const attentionBizMap = new Map<string, string>();
+    if (attentionBizIds.length > 0) {
+      const bizRows = await db
+        .select({ id: businesses.id, name: businesses.name })
+        .from(businesses)
+        .where(inArray(businesses.id, attentionBizIds));
+      for (const b of bizRows) {
+        attentionBizMap.set(b.id, b.name);
+      }
+    }
+
+    const sortedAttentionRows = [...attentionRows]
+      .sort((a, b) => {
+        const aPending = a.status === TransactionStatus.PENDING || a.status === TransactionStatus.PROCESSING ? 0 : 1;
+        const bPending = b.status === TransactionStatus.PENDING || b.status === TransactionStatus.PROCESSING ? 0 : 1;
+        if (aPending !== bPending) return aPending - bPending;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      })
+      .slice(0, 10);
+
+    // 7. Recent Platform Transactions (retained for Super Admin overview)
+    const recentTxns = canReadFinancials
+      ? await db
+          .select({
+            id: serviceTransactions.id,
+            reference: serviceTransactions.requestReference,
+            clientReference: serviceTransactions.clientReference,
+            serviceType: serviceTransactions.serviceType,
+            amountKobo: serviceTransactions.amount,
+            status: serviceTransactions.status,
+            recipient: serviceTransactions.recipient,
+            createdAt: serviceTransactions.createdAt,
+            businessName: businesses.name,
+          })
+          .from(serviceTransactions)
+          .leftJoin(businesses, eq(serviceTransactions.businessId, businesses.id))
+          .orderBy(desc(serviceTransactions.createdAt))
+          .limit(8)
+      : [];
+
+    // 8. Real Hourly Throughput for Today
     const todayTransactionsForHourly = await db
       .select({
         createdAt: serviceTransactions.createdAt,
@@ -159,73 +246,104 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       const bucket = Math.floor(hour / 4) * 4;
       const key = `${String(bucket).padStart(2, '0')}:00`;
       if (hourlyMap[key]) {
-        hourlyMap[key].volumeNaira += koboToNaira(BigInt(tx.amount || '0'));
+        if (canReadFinancials) {
+          hourlyMap[key].volumeNaira += koboToNaira(BigInt(tx.amount || '0'));
+        }
         hourlyMap[key].count += 1;
       }
     }
 
     const hourlyThroughput = hourlyWindows.map((hw) => hourlyMap[hw]);
-
-    const liabilitiesKobo = BigInt(walletLiabilities?.totalLiabilitiesKobo || '0');
-    const liabilitiesNaira = koboToNaira(liabilitiesKobo);
-    const monnifyFloatNaira = 2500000;
-    const totalProviderFloatNaira = monnifyFloatNaira;
-    const netSolvencyMarginNaira = totalProviderFloatNaira - liabilitiesNaira;
-    const allTimeGtvNaira = koboToNaira(BigInt(allTimeStats?.allTimeVolumeKobo || '0'));
-    const allTimeRevenueNaira = koboToNaira(BigInt(allTimeStats?.allTimeFeesKobo || '0'));
+    const totalMerchantUsers = Number(merchantUserCount?.count || 0);
+    const verifiedUsersCount = Number(verifiedCount?.count || 0);
+    const pendingKycUsers = Math.max(0, totalMerchantUsers - verifiedUsersCount);
 
     return reply.status(200).send(
       createSuccessResponse(
         {
           today: {
             totalTransactions: totalTx,
-            totalVolumeKobo: String(txStats?.totalVolume || '0'),
-            totalVolumeNaira: koboToNaira(BigInt(txStats?.totalVolume || 0)),
+            ...(canReadFinancials
+              ? {
+                  totalVolumeKobo: String(txStats?.totalVolume || '0'),
+                  totalVolumeNaira: koboToNaira(BigInt(txStats?.totalVolume || 0)),
+                  successVolumeKobo: String(txStats?.successVolume || '0'),
+                  successVolumeNaira: koboToNaira(BigInt(txStats?.successVolume || 0)),
+                  todayRevenueNaira,
+                }
+              : {}),
             successTransactions: successTx,
-            successVolumeKobo: String(txStats?.successVolume || '0'),
-            successVolumeNaira: koboToNaira(BigInt(txStats?.successVolume || 0)),
-            todayRevenueNaira,
             failedTransactions: Number(txStats?.failedCount || 0),
             pendingTransactions: Number(txStats?.pendingCount || 0),
             successRatePercent: successRate,
           },
           hourlyThroughput,
-          treasury: {
-            merchantWalletLiabilitiesNaira: liabilitiesNaira,
-            merchantWalletsCount: Number(walletLiabilities?.walletsCount || 0),
-            monnifyFloatNaira,
-            totalProviderFloatNaira,
-            netSolvencyMarginNaira,
-            isSolvent: netSolvencyMarginNaira >= 0,
-            allTimeGtvNaira,
-            allTimeRevenueNaira,
-            allTimeSuccessCount: Number(allTimeStats?.allTimeSuccessCount || 0),
-            allTimeCount: Number(allTimeStats?.allTimeCount || 0),
-          },
+          ...(treasuryPayload ? { treasury: treasuryPayload } : {}),
           merchants: {
             totalBusinesses: Number(bizCount?.count || 0),
-            verifiedUsers: Number(verifiedCount?.count || 0),
+            verifiedUsers: verifiedUsersCount,
+            pendingKycUsers,
           },
           providers: {
-            health: providerHealth,
+            health: providerHealth.map((p: any) => ({
+              providerName: p.providerName,
+              health: {
+                isHealthy: Boolean(p.health?.isHealthy),
+                latencyMs: p.health?.latencyMs ?? 0,
+                message: p.health?.message || '',
+                ...(canReadFinancials && p.health?.balanceNaira !== undefined
+                  ? { balanceNaira: p.health.balanceNaira }
+                  : {}),
+              },
+              circuitBreaker: p.circuitBreaker,
+            })),
             routing: routingConfig,
           },
           serviceBreakdown: serviceBreakdown.map((s) => ({
             serviceType: s.serviceType,
             count: Number(s.count || 0),
-            volumeNaira: koboToNaira(BigInt(s.volumeKobo || '0')),
-            feesNaira: koboToNaira(BigInt(s.feesKobo || '0')),
+            ...(canReadFinancials
+              ? {
+                  volumeNaira: koboToNaira(BigInt(s.volumeKobo || '0')),
+                  feesNaira: koboToNaira(BigInt(s.feesKobo || '0')),
+                }
+              : {}),
           })),
-          recentTransactions: recentTxns.map((t) => ({
+          attentionTransactions: sortedAttentionRows.map((t) => ({
             id: t.id,
-            reference: t.reference || t.clientReference || t.id,
+            reference: t.requestReference || t.clientReference || t.id,
+            requestReference: t.requestReference,
+            clientReference: t.clientReference,
+            providerReference: t.providerReference,
             serviceType: t.serviceType,
-            amountNaira: koboToNaira(BigInt(t.amountKobo || '0')),
+            amountNaira: koboToNaira(BigInt(t.amount || 0n)),
+            formattedAmount: formatNairaFromKobo(BigInt(t.amount || 0n)),
             status: t.status,
             recipient: t.recipient,
-            createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt || new Date().toISOString()),
-            businessName: t.businessName || 'Direct Merchant',
+            errorMessage: t.errorMessage || null,
+            createdAt:
+              t.createdAt instanceof Date
+                ? t.createdAt.toISOString()
+                : String(t.createdAt || new Date().toISOString()),
+            businessName: attentionBizMap.get(t.businessId) || 'Merchant',
           })),
+          ...(canReadFinancials
+            ? {
+                recentTransactions: recentTxns.map((t) => ({
+                  id: t.id,
+                  reference: t.reference || t.clientReference || t.id,
+                  serviceType: t.serviceType,
+                  amountNaira: koboToNaira(BigInt(t.amountKobo || '0')),
+                  status: t.status,
+                  recipient: t.recipient,
+                  createdAt:
+                    t.createdAt instanceof Date
+                      ? t.createdAt.toISOString()
+                      : String(t.createdAt || new Date().toISOString()),
+                  businessName: t.businessName || 'Direct Merchant',
+                })),
+              }
+            : {}),
         },
         request.id,
       ),
@@ -458,117 +576,248 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * POST /admin/transactions/:id/requery
-   * Re-queries live status from active upstream provider to sync settlement status.
+   * Re-queries live status from active upstream provider to sync settlement status safely.
    */
-  fastify.post('/transactions/:id/requery', async (request, reply) => {
-    const { id } = request.params as { id: string };
+  fastify.post(
+    '/transactions/:id/requery',
+    { preHandler: [requirePlatformPermission(Permission.PLATFORM_SERVICES_MANAGE)] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
 
-    const [tx] = await db
-      .select()
-      .from(serviceTransactions)
-      .where(eq(serviceTransactions.id, id))
-      .limit(1);
+      const [tx] = await db
+        .select()
+        .from(serviceTransactions)
+        .where(eq(serviceTransactions.id, id))
+        .limit(1);
 
-    if (!tx) {
-      throw new NotFoundError(`Transaction '${id}'`);
-    }
-
-    const body =
-      (request.body as { customReference?: string; providerReference?: string } | undefined) ||
-      {};
-    const refToQuery = body.customReference || tx.requestReference || tx.clientReference || tx.id;
-    const providerRef = body.providerReference || tx.providerReference || undefined;
-    const provider = tx.providerName as ProviderName;
-
-    const requeryResult = await providerRouterService.requeryTransaction(
-      provider,
-      refToQuery,
-      providerRef,
-    );
-
-    let updatedStatus = tx.status;
-    let syncMessage = '';
-
-    if (tx.status === TransactionStatus.SUCCESSFUL) {
-      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
-        syncMessage = 'Confirmed: Upstream gateway verifies transaction is SUCCESSFUL.';
-      } else {
-        syncMessage = `Preserved: Local state is SUCCESSFUL. Upstream returned: ${requeryResult.responseMessage || 'Inconclusive'}.`;
+      if (!tx) {
+        throw new NotFoundError(`Transaction '${id}'`);
       }
-      if (requeryResult.providerReference && !tx.providerReference) {
-        await db
-          .update(serviceTransactions)
-          .set({
-            providerReference: requeryResult.providerReference,
-            updatedAt: new Date(),
-          })
-          .where(eq(serviceTransactions.id, id));
-      }
-    } else {
-      if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
-        updatedStatus = TransactionStatus.SUCCESSFUL;
-        syncMessage = 'Updated: Upstream gateway confirmed transaction is SUCCESSFUL.';
+
+      // Strictly query the immutable stored references (never accept client-controlled reference overrides)
+      const refToQuery = tx.requestReference || tx.clientReference || tx.id;
+      const providerRef = tx.providerReference || undefined;
+      const provider = tx.providerName as ProviderName;
+
+      const requeryResult = await providerRouterService.requeryTransaction(
+        provider,
+        refToQuery,
+        providerRef,
+      );
+
+      let updatedStatus = tx.status;
+      let syncMessage = '';
+
+      if (tx.status === TransactionStatus.SUCCESSFUL) {
+        if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+          syncMessage = 'Confirmed: Gateway verifies transaction is SUCCESSFUL.';
+        } else {
+          syncMessage = `Preserved: Local state is SUCCESSFUL. Gateway returned: ${requeryResult.responseMessage || 'Inconclusive'}.`;
+        }
+        if (requeryResult.providerReference && !tx.providerReference) {
+          await db
+            .update(serviceTransactions)
+            .set({
+              providerReference: requeryResult.providerReference,
+              updatedAt: new Date(),
+            })
+            .where(eq(serviceTransactions.id, id));
+        }
       } else if (
-        requeryResult.status === TransactionStatus.FAILED &&
-        requeryResult.responseCode !== 'UNKNOWN' &&
-        requeryResult.responseCode !== '20010' &&
-        requeryResult.responseCode !== '99'
+        tx.status === TransactionStatus.FAILED ||
+        tx.status === TransactionStatus.REVERSED
       ) {
-        updatedStatus = TransactionStatus.FAILED;
-        syncMessage = `Updated: Upstream gateway confirmed transaction is FAILED (${requeryResult.responseMessage}).`;
-      } else if (requeryResult.status === TransactionStatus.PENDING || requeryResult.responseCode === '99') {
-        syncMessage = `Inconclusive: Upstream returned response code ${requeryResult.responseCode} (${requeryResult.responseMessage}). Transaction remains ${tx.status}.`;
+        // CRITICAL FINANCIAL INVARIANT: FAILED/REVERSED transactions have ALREADY been refunded to the merchant wallet.
+        // Never silently flip a refunded transaction back to SUCCESSFUL without funds!
+        if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+          syncMessage =
+            'Alert: Gateway reports SUCCESSFUL, but this transaction was already refunded to the merchant wallet. Status preserved as FAILED — escalate to Super Admin for manual ledger reconciliation.';
+          await auditService.log({
+            userId: request.user?.id,
+            businessId: tx.businessId,
+            action: 'STAFF_REQUERY_REFUNDED_CONFLICT',
+            resourceType: 'TRANSACTION',
+            resourceId: id,
+            changes: {
+              localStatus: tx.status,
+              gatewayStatus: requeryResult.status,
+              providerResponseCode: requeryResult.responseCode,
+            },
+          });
+        } else if (requeryResult.status === TransactionStatus.FAILED) {
+          syncMessage = `Confirmed: Gateway confirms transaction is FAILED (${requeryResult.responseMessage || requeryResult.responseCode}).`;
+        } else {
+          syncMessage = `Preserved: Local state is ${tx.status}. Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}).`;
+        }
       } else {
-        syncMessage = `Unchanged: Upstream response code ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+        // In-flight PENDING / PROCESSING transaction
+        const isConfirmedFailed =
+          requeryResult.status === TransactionStatus.FAILED &&
+          requeryResult.responseCode !== 'UNKNOWN' &&
+          requeryResult.responseCode !== 'NETWORK_ERROR' &&
+          requeryResult.responseCode !== '20010' &&
+          requeryResult.responseCode !== '99' &&
+          requeryResult.responseCode !== '099';
+
+        if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
+          const meta = { ...((tx.metadata as Record<string, unknown>) || {}) };
+          if (requeryResult.token) meta.token = requeryResult.token;
+          if (requeryResult.units) meta.units = requeryResult.units;
+          if (requeryResult.tariff) meta.tariff = requeryResult.tariff;
+          if (requeryResult.feeder) meta.feeder = requeryResult.feeder;
+
+          const [claimed] = await db
+            .update(serviceTransactions)
+            .set({
+              status: TransactionStatus.SUCCESSFUL,
+              providerReference: requeryResult.providerReference || tx.providerReference,
+              metadata: meta,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(serviceTransactions.id, id),
+                inArray(serviceTransactions.status, [
+                  TransactionStatus.PENDING,
+                  TransactionStatus.PROCESSING,
+                ]),
+              ),
+            )
+            .returning();
+
+          if (claimed) {
+            updatedStatus = TransactionStatus.SUCCESSFUL;
+            syncMessage = 'Updated: Gateway confirmed transaction is SUCCESSFUL.';
+
+            try {
+              const mainWallet = await walletService.getBusinessWallet(tx.businessId, WalletType.MAIN);
+              await ledgerService.recordDoubleEntry({
+                businessId: tx.businessId,
+                reference: tx.clientReference || tx.requestReference || tx.id,
+                type: LedgerEntryType.SERVICE_PAYMENT,
+                category: `${tx.serviceType}_PURCHASE`,
+                description: `${tx.serviceType} confirmed via requery: ₦${koboToNaira(tx.amount)} to ${tx.recipient}`,
+                transactionId: tx.id,
+                debit: {
+                  walletId: mainWallet.id,
+                  amountKobo: tx.totalAmount,
+                  balanceBeforeKobo: BigInt(mainWallet.balanceKobo),
+                  balanceAfterKobo: BigInt(mainWallet.balanceKobo),
+                },
+                credit: {
+                  walletId: mainWallet.id,
+                  amountKobo: tx.totalAmount,
+                  balanceBeforeKobo: 0n,
+                  balanceAfterKobo: tx.totalAmount,
+                },
+              });
+            } catch {
+              // Non-blocking if ledger entry already exists
+            }
+
+            await auditService.log({
+              userId: request.user?.id,
+              businessId: tx.businessId,
+              action: 'STAFF_TRANSACTION_REQUERY_SYNC',
+              resourceType: 'TRANSACTION',
+              resourceId: id,
+              changes: {
+                previousStatus: tx.status,
+                newStatus: updatedStatus,
+                providerResponseCode: requeryResult.responseCode,
+              },
+            });
+          } else {
+            const [latest] = await db
+              .select()
+              .from(serviceTransactions)
+              .where(eq(serviceTransactions.id, id))
+              .limit(1);
+            updatedStatus = latest?.status || tx.status;
+            syncMessage = `Transaction already settled as ${updatedStatus}.`;
+          }
+        } else if (isConfirmedFailed) {
+          // Atomically transition PENDING/PROCESSING -> FAILED and refund merchant MAIN wallet once
+          const [claimed] = await db
+            .update(serviceTransactions)
+            .set({
+              status: TransactionStatus.FAILED,
+              providerReference: requeryResult.providerReference || tx.providerReference,
+              errorMessage: requeryResult.responseMessage || tx.errorMessage,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(serviceTransactions.id, id),
+                inArray(serviceTransactions.status, [
+                  TransactionStatus.PENDING,
+                  TransactionStatus.PROCESSING,
+                ]),
+              ),
+            )
+            .returning();
+
+          if (claimed) {
+            const mainWallet = await walletService.getBusinessWallet(tx.businessId, WalletType.MAIN);
+            await walletService.creditWallet(mainWallet.id, tx.totalAmount);
+            updatedStatus = TransactionStatus.FAILED;
+            syncMessage = `Updated: Gateway confirmed FAILED (${requeryResult.responseMessage}). Merchant wallet refunded ${formatNairaFromKobo(tx.totalAmount)}.`;
+
+            await auditService.log({
+              userId: request.user?.id,
+              businessId: tx.businessId,
+              action: 'STAFF_TRANSACTION_REQUERY_REFUNDED',
+              resourceType: 'TRANSACTION',
+              resourceId: id,
+              changes: {
+                previousStatus: tx.status,
+                newStatus: updatedStatus,
+                refundedKobo: tx.totalAmount.toString(),
+                providerResponseCode: requeryResult.responseCode,
+              },
+            });
+          } else {
+            const [latest] = await db
+              .select()
+              .from(serviceTransactions)
+              .where(eq(serviceTransactions.id, id))
+              .limit(1);
+            updatedStatus = latest?.status || tx.status;
+            syncMessage = `Transaction already settled as ${updatedStatus}.`;
+          }
+        } else if (
+          requeryResult.status === TransactionStatus.PENDING ||
+          requeryResult.status === TransactionStatus.PROCESSING ||
+          requeryResult.responseCode === '99' ||
+          requeryResult.responseCode === '099'
+        ) {
+          syncMessage = `Inconclusive: Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+        } else {
+          syncMessage = `Unchanged: Gateway returned ${requeryResult.responseCode} (${requeryResult.responseMessage}). Status remains ${tx.status}.`;
+        }
       }
 
-      if (updatedStatus !== tx.status || requeryResult.providerReference) {
-        await db
-          .update(serviceTransactions)
-          .set({
-            status: updatedStatus,
+      return reply.status(200).send(
+        createSuccessResponse(
+          {
+            transactionId: id,
+            currentStatus: updatedStatus,
+            message: syncMessage,
+            syncMessage,
+            queriedReference: refToQuery,
             providerReference: requeryResult.providerReference || tx.providerReference,
-            errorMessage: requeryResult.status === TransactionStatus.FAILED ? requeryResult.responseMessage : tx.errorMessage,
-            updatedAt: new Date(),
-          })
-          .where(eq(serviceTransactions.id, id));
-
-        await auditService.log({
-          userId: request.user?.id,
-          businessId: tx.businessId,
-          action: 'STAFF_TRANSACTION_REQUERY_SYNC',
-          resourceType: 'TRANSACTION',
-          resourceId: id,
-          changes: {
-            previousStatus: tx.status,
-            newStatus: updatedStatus,
             providerResponseCode: requeryResult.responseCode,
             providerMessage: requeryResult.responseMessage,
+            providerResult: {
+              ...requeryResult,
+              amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,
+            },
           },
-        });
-      }
-    }
-
-    return reply.status(200).send(
-      createSuccessResponse(
-        {
-          transactionId: id,
-          currentStatus: updatedStatus,
-          message: syncMessage,
-          syncMessage,
-          queriedReference: refToQuery,
-          providerReference: requeryResult.providerReference || tx.providerReference,
-          providerResponseCode: requeryResult.responseCode,
-          providerMessage: requeryResult.responseMessage,
-          providerResult: {
-            ...requeryResult,
-            amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,
-          },
-        },
-        request.id,
-      ),
-    );
-  });
+          request.id,
+        ),
+      );
+    },
+  );
 
   /**
    * GET /admin/merchants
@@ -1096,7 +1345,10 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
    * PATCH /admin/providers/routing
    * Staff-authorized failover switch: update routing strategy or failover rules.
    */
-  fastify.patch('/providers/routing', async (request, reply) => {
+  fastify.patch(
+    '/providers/routing',
+    { preHandler: [requirePlatformPermission(Permission.PLATFORM_PROVIDERS_MANAGE)] },
+    async (request, reply) => {
     const body = request.body as {
       serviceType?: ServiceType;
       strategy?: ProviderRoutingStrategy;
@@ -1222,7 +1474,8 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('An account with this email address already exists.');
     }
 
-    const initialPassword = body.password || 'StaffTempPass@2026';
+    const initialPassword =
+      body.password || `${crypto.randomBytes(12).toString('base64url')}A1!`;
     const passwordHash = await bcrypt.hash(initialPassword, 10);
 
     const [newStaff] = await db
@@ -1392,6 +1645,12 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(businesses.id, id))
       .returning();
 
+    const {
+      webhookSecret: _stripWhSecret,
+      webhookTestSecret: _stripWhTestSecret,
+      ...safeUpdated
+    } = updated || ({} as NonNullable<typeof updated>);
+
     await auditService.log({
       userId: request.user?.id,
       businessId: id,
@@ -1401,7 +1660,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       changes: { previousStatus: biz.status, newStatus: body.status },
     });
 
-    return reply.status(200).send(createSuccessResponse(updated, request.id));
+    return reply.status(200).send(createSuccessResponse(safeUpdated, request.id));
   });
 
   /**

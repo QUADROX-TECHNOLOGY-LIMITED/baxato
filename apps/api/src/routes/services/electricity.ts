@@ -62,7 +62,10 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const amountKobo = body.amount ? BigInt(Math.round(body.amount * 100)) : undefined;
+      const amountKobo =
+        typeof body.amount === 'number' && Number.isFinite(body.amount) && body.amount > 0
+          ? BigInt(Math.round(body.amount * 100))
+          : undefined;
 
       const result = await electricityService.validateMeter({
         disco: upperDisco as DiscoCode,
@@ -123,9 +126,13 @@ export const electricityRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let parsedAmountKobo: bigint;
-      if (body.amountKobo) {
-        parsedAmountKobo = BigInt(body.amountKobo);
-      } else if (typeof body.amount === 'number') {
+      if (body.amountKobo !== undefined && body.amountKobo !== null && String(body.amountKobo).trim() !== '') {
+        const rawStr = String(body.amountKobo).trim();
+        if (!/^\d+$/.test(rawStr)) {
+          throw new ValidationError('amountKobo must be a positive integer.');
+        }
+        parsedAmountKobo = BigInt(rawStr);
+      } else if (typeof body.amount === 'number' && Number.isFinite(body.amount) && body.amount > 0) {
         parsedAmountKobo = BigInt(Math.round(body.amount * 100));
       } else {
         throw new ValidationError('Electricity purchase amount is required.');

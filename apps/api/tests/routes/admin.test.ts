@@ -182,7 +182,7 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it('returns 200 OK when accessed by Staff', async () => {
+    it('returns 200 OK when accessed by Staff without leaking treasury or revenue balance sheets', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/admin/overview',
@@ -196,9 +196,12 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
       expect(body.data).toHaveProperty('today');
       expect(body.data).toHaveProperty('merchants');
       expect(body.data).toHaveProperty('providers');
+      expect(body.data).toHaveProperty('attentionTransactions');
+      expect(body.data.treasury).toBeUndefined();
+      expect(body.data.today.todayRevenueNaira).toBeUndefined();
     });
 
-    it('returns 200 OK when accessed by Super Admin', async () => {
+    it('returns 200 OK when accessed by Super Admin (including treasury sheet)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/admin/overview',
@@ -207,6 +210,8 @@ describe('Staff Administration Endpoints (/admin/*)', () => {
         },
       });
       expect(res.statusCode).toBe(200);
+      const body = res.json<ApiResponse<any>>();
+      expect(body.data.treasury).toBeDefined();
     });
   });
 

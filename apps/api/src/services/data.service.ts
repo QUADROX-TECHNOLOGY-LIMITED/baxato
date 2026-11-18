@@ -352,43 +352,52 @@ export class DataService {
     await walletService.debitWallet(mainWallet.id, amountToDebitKobo);
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
-    // 4. Generate references & initialize service transaction row
+    // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateNumericReference('2411', 12);
     const clientRef = input.clientReference || generateTransactionReference('DATA');
 
-    const [txnRow] = await db
-      .insert(serviceTransactions)
-      .values({
-        businessId: input.businessId,
-        userId: input.userId,
-        serviceType: ServiceType.DATA,
-        amount: faceAmountKobo,
-        fee: 0n,
-        discount: discountKobo,
-        totalAmount: amountToDebitKobo,
-        status: TransactionStatus.PROCESSING,
-        recipient: normalizedPhone,
-        providerName: primaryProvider as any,
-        clientReference: clientRef,
-        requestReference,
-        metadata: {
-          planId: plan.id,
-          planName: plan.name,
-          dataAllowance: plan.dataAllowance,
-          dataType: plan.dataType,
-          category: plan.category,
-          validity: plan.validity,
-          network: plan.network,
-          networkName: plan.networkName,
-          faceAmountKobo: faceAmountKobo.toString(),
-          discountKobo: discountKobo.toString(),
-          amountToDebitKobo: amountToDebitKobo.toString(),
-        },
-      })
-      .returning();
+    let txnRow: typeof serviceTransactions.$inferSelect | undefined;
+    try {
+      [txnRow] = await db
+        .insert(serviceTransactions)
+        .values({
+          businessId: input.businessId,
+          userId: input.userId,
+          serviceType: ServiceType.DATA,
+          amount: faceAmountKobo,
+          fee: 0n,
+          discount: discountKobo,
+          totalAmount: amountToDebitKobo,
+          status: TransactionStatus.PROCESSING,
+          recipient: normalizedPhone,
+          providerName: primaryProvider as any,
+          clientReference: clientRef,
+          requestReference,
+          metadata: {
+            planId: plan.id,
+            planName: plan.name,
+            dataAllowance: plan.dataAllowance,
+            dataType: plan.dataType,
+            category: plan.category,
+            validity: plan.validity,
+            network: plan.network,
+            networkName: plan.networkName,
+            faceAmountKobo: faceAmountKobo.toString(),
+            discountKobo: discountKobo.toString(),
+            amountToDebitKobo: amountToDebitKobo.toString(),
+          },
+        })
+        .returning();
 
-    if (!txnRow) {
-      throw new Error('Failed to create transaction record');
+      if (!txnRow) {
+        throw new Error('Failed to create transaction record');
+      }
+    } catch (insertError) {
+      await walletService.creditWallet(mainWallet.id, amountToDebitKobo);
+      if (input.idempotencyKey) {
+        await idempotencyService.releaseLock(input.idempotencyKey, input.businessId);
+      }
+      throw insertError;
     }
 
     // 5. Dispatch to Multi-Provider Router (with circuit breaker & failover)
