@@ -33,12 +33,6 @@
   }
 }
 
-@media (max-width: 1023px) {
-  html:has(.staff-mobile-dock) {
-    scroll-padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
-  }
-}
-
 .dark {
   scrollbar-width: thin;
   scrollbar-color: #334155 transparent;

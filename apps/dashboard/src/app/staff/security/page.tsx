@@ -15,7 +15,6 @@ import {
   Copy,
   Check,
   X,
-  RefreshCw,
 } from 'lucide-react';
 import BaxatoLoader from '@/components/BaxatoLoader';
 import ModalDialog from '@/components/ModalDialog';
@@ -656,7 +655,7 @@ export default function StaffSecurityPage() {
                       <span>Authenticator App (TOTP)</span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Time-based 6-digit codes from Google Authenticator, Authy, or 1Password.
+                      Time-based 6-digit codes from your authenticator app.
                     </p>
                   </div>
                   <button
@@ -759,21 +758,10 @@ export default function StaffSecurityPage() {
 
               {/* Recent Audit Activity */}
               <section className="rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-                <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                     Recent Account Activity
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => void loadSessionsAndAudit()}
-                    className="min-h-9 px-2.5 rounded-lg text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1.5"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 ${isLoadingSessions ? 'animate-spin' : ''}`}
-                      aria-hidden="true"
-                    />
-                    <span>Refresh</span>
-                  </button>
                 </div>
 
                 {!securityData?.auditLogs || securityData.auditLogs.length === 0 ? (

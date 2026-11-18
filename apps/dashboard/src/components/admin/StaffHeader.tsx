@@ -55,7 +55,7 @@ export default function StaffHeader({
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-white/95 dark:bg-[#070D18]/95 backdrop-blur border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 pt-[env(safe-area-inset-top,0px)] transition-colors duration-150">
+    <header className="sticky top-0 z-30 w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 pt-[env(safe-area-inset-top,0px)] transition-colors duration-150">
       <div className="h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile drawer trigger & breadcrumb */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">

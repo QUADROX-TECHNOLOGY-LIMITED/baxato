@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import StaffSidebar, { STAFF_NAV_ITEMS } from '@/components/admin/StaffSidebar';
+import StaffSidebar from '@/components/admin/StaffSidebar';
 import StaffHeader from '@/components/admin/StaffHeader';
 import BaxatoLoader from '@/components/BaxatoLoader';
 import {
@@ -89,39 +88,10 @@ export default function StaffLayout({
           onRefresh={handleGlobalRefresh}
         />
 
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-24 lg:pb-10 space-y-6">
+        <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] space-y-6">
           {children}
         </main>
       </div>
-
-      {/* Thumb-friendly Mobile Quick Dock */}
-      <nav
-        aria-label="Mobile quick navigation"
-        className="staff-mobile-dock lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#070D18]/95 backdrop-blur border-t border-slate-200/80 dark:border-slate-800/80 px-1 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom,0px))]"
-      >
-        <ul className="grid grid-cols-5 gap-0.5 max-w-md mx-auto">
-          {STAFF_NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`min-h-11 flex flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] font-medium transition-colors ${
-                    isActive
-                      ? 'text-[#126BEB] dark:text-[#38BDF8] font-semibold'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                  <span className="truncate max-w-full">{item.shortLabel}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </div>
   );
 }
