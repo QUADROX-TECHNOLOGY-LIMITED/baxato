@@ -62,6 +62,7 @@ export default function ThemeSynchronizer() {
     };
 
     window.addEventListener('focus', handleFocusSync);
+    window.addEventListener('pageshow', handleFocusSync);
     document.addEventListener('visibilitychange', handleResumeSync);
     window.addEventListener('storage', handleStorageChange);
 
@@ -70,6 +71,7 @@ export default function ThemeSynchronizer() {
       observer.disconnect();
       mediaQuery.removeEventListener('change', handleMediaChange);
       window.removeEventListener('focus', handleFocusSync);
+      window.removeEventListener('pageshow', handleFocusSync);
       document.removeEventListener('visibilitychange', handleResumeSync);
       window.removeEventListener('storage', handleStorageChange);
     };

@@ -62,7 +62,7 @@ export default function StaffFilterSelect<T extends string = string>({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
-        className={`w-full h-11 sm:h-10 px-3.5 rounded-lg border text-sm sm:text-xs font-medium text-left flex items-center justify-between gap-2 transition-colors outline-none ${
+        className={`w-full h-11 px-3.5 rounded-lg border text-sm font-medium text-left flex items-center justify-between gap-2 transition-colors outline-none ${
           disabled
             ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-400'
             : isOpen
@@ -101,7 +101,7 @@ export default function StaffFilterSelect<T extends string = string>({
                     onChange(opt.value);
                     setIsOpen(false);
                   }}
-                  className={`w-full min-h-10 sm:min-h-9 px-3.5 py-2 text-sm sm:text-xs flex items-center justify-between gap-2 text-left transition-colors ${
+                  className={`w-full min-h-11 sm:min-h-10 px-3.5 py-2 text-sm flex items-center justify-between gap-2 text-left transition-colors ${
                     isSelected
                       ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
                       : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60'

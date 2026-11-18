@@ -239,13 +239,12 @@ export default function StaffTransactionsPage() {
         const syncMsg =
           data.data?.syncMessage ||
           data.data?.message ||
-          `Gateway returned status: ${currentStatus}`;
-        const detailLine = [
-          data.data?.providerResponseCode ? `Code: ${data.data.providerResponseCode}` : '',
-          data.data?.providerMessage || '',
-        ]
-          .filter(Boolean)
-          .join(' — ');
+          `Status: ${currentStatus}`;
+        const rawProviderMsg = String(data.data?.providerMessage || '');
+        const shouldShowDetail =
+          Boolean(rawProviderMsg) &&
+          !/not\s*found|invalid\s*request/i.test(rawProviderMsg) &&
+          !syncMsg.includes(rawProviderMsg);
 
         const feedbackType =
           currentStatus === 'SUCCESSFUL'
@@ -257,22 +256,23 @@ export default function StaffTransactionsPage() {
         setRequeryResult({
           type: feedbackType,
           message: syncMsg,
-          detail: detailLine || undefined,
+          detail: shouldShowDetail ? rawProviderMsg : undefined,
         });
 
-        setSelectedTx((prev: any) =>
-          prev
-            ? {
-                ...prev,
-                status: currentStatus || prev.status,
-                providerReference: data.data?.providerReference || prev.providerReference,
-                errorMessage:
-                  currentStatus === 'FAILED'
-                    ? data.data?.providerMessage || prev.errorMessage
-                    : prev.errorMessage,
-              }
-            : null,
-        );
+        setSelectedTx((prev: any) => {
+          if (!prev) return null;
+          const transitionedToFailed =
+            prev.status !== 'FAILED' && currentStatus === 'FAILED';
+          return {
+            ...prev,
+            status: currentStatus || prev.status,
+            providerReference: data.data?.providerReference || prev.providerReference,
+            errorMessage:
+              transitionedToFailed && rawProviderMsg
+                ? rawProviderMsg
+                : prev.errorMessage,
+          };
+        });
 
         void loadTransactions();
       } else {
@@ -326,7 +326,7 @@ export default function StaffTransactionsPage() {
               placeholder="Reference, phone, meter, or smartcard..."
               value={txSearch}
               onChange={(e) => setTxSearch(e.target.value)}
-              className="w-full h-11 sm:h-10 pl-10 pr-3.5 text-sm sm:text-xs rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
+              className="w-full h-11 pl-10 pr-3.5 text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
             />
           </div>
 
@@ -355,7 +355,7 @@ export default function StaffTransactionsPage() {
           <div className="col-span-2 sm:col-span-2 flex gap-2">
             <button
               type="submit"
-              className="flex-1 h-11 sm:h-10 px-4 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
+              className="flex-1 h-11 px-4 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
             >
               Search
             </button>
@@ -363,7 +363,7 @@ export default function StaffTransactionsPage() {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="h-11 sm:h-10 px-3 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+                className="h-11 px-3.5 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
               >
                 Reset
               </button>
@@ -510,63 +510,63 @@ export default function StaffTransactionsPage() {
               aria-label="Platform transactions table"
               className="overflow-auto max-h-[68dvh] focus:outline-none"
             >
-              <table className="w-full text-left border-collapse text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-medium">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">
                   <tr>
-                    <th className="py-3 px-4">Service</th>
-                    <th className="py-3 px-4">Recipient</th>
-                    <th className="py-3 px-4">Merchant</th>
-                    <th className="py-3 px-4">Reference</th>
-                    <th className="py-3 px-4">Provider</th>
-                    <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3.5 px-4">Service</th>
+                    <th className="py-3.5 px-4">Recipient</th>
+                    <th className="py-3.5 px-4">Merchant</th>
+                    <th className="py-3.5 px-4">Reference</th>
+                    <th className="py-3.5 px-4">Provider</th>
+                    <th className="py-3.5 px-4">Amount</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4">Date</th>
+                    <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
                   {transactions.map((tx) => {
                     const refText =
-                      tx.providerReference || tx.requestReference || tx.clientReference || tx.id;
+                      tx.requestReference || tx.providerReference || tx.clientReference || tx.id;
                     return (
                       <tr
                         key={tx.id}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"
                       >
-                        <td className="py-3 px-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
+                        <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                           {SERVICE_DISPLAY[tx.serviceType] || tx.serviceType}
                         </td>
-                        <td className="py-3 px-4 text-slate-800 dark:text-slate-200">
+                        <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200">
                           {tx.recipient}
                         </td>
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-900 dark:text-white truncate max-w-[150px]">
+                        <td className="py-3.5 px-4">
+                          <div className="font-medium text-slate-900 dark:text-white truncate max-w-[170px]">
                             {tx.businessName || 'Business'}
                           </div>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3.5 px-4">
                           <button
                             type="button"
                             onClick={() => copyToClipboard(refText, `row-${tx.id}`)}
                             title="Copy reference"
-                            className="inline-flex items-center gap-1.5 font-mono text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                            className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                           >
-                            <span className="truncate max-w-[140px]">{refText}</span>
+                            <span className="truncate max-w-[165px]">{refText}</span>
                             {copiedId === `row-${tx.id}` ? (
-                              <Check className="w-3 h-3 text-emerald-500 shrink-0" aria-hidden="true" />
+                              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" aria-hidden="true" />
                             ) : (
-                              <Copy className="w-3 h-3 opacity-60 shrink-0" aria-hidden="true" />
+                              <Copy className="w-3.5 h-3.5 opacity-60 shrink-0" aria-hidden="true" />
                             )}
                           </button>
                         </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium">
+                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-medium text-xs">
                           {tx.providerName}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white tabular-nums">
+                        <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white tabular-nums">
                           {tx.formattedAmount}
                         </td>
-                        <td className="py-3 px-4">{renderStatusPill(tx.status)}</td>
-                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-3.5 px-4">{renderStatusPill(tx.status)}</td>
+                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">
                           {new Date(tx.createdAt).toLocaleDateString('en-NG', {
                             day: 'numeric',
                             month: 'short',
@@ -574,22 +574,22 @@ export default function StaffTransactionsPage() {
                             minute: '2-digit',
                           })}
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => {
                                 setSelectedReceiptTx(tx);
                                 setIsReceiptOpen(true);
                               }}
-                              className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors"
+                              className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors"
                             >
                               Receipt
                             </button>
                             <button
                               type="button"
                               onClick={() => handleOpenInspect(tx)}
-                              className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium text-slate-900 dark:text-white transition-colors"
+                              className="h-9 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-white transition-colors"
                             >
                               View
                             </button>

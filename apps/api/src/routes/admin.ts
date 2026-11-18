@@ -555,12 +555,15 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
       const rawProviderMsg = String(requeryResult.responseMessage || '');
       const isNotFoundOnProvider = /not\s*found|invalid\s*request/i.test(rawProviderMsg);
+      const cleanProviderMessage = isNotFoundOnProvider ? undefined : rawProviderMsg || undefined;
 
       if (tx.status === TransactionStatus.SUCCESSFUL) {
         if (requeryResult.status === TransactionStatus.SUCCESSFUL) {
           syncMessage = 'Confirmed successful on gateway.';
         } else {
-          syncMessage = `Local status remains Successful (${rawProviderMsg || 'no change reported'}).`;
+          syncMessage = cleanProviderMessage
+            ? `Status remains Successful (${cleanProviderMessage}).`
+            : 'Status remains Successful.';
         }
         if (requeryResult.providerReference && !tx.providerReference) {
           await db
@@ -592,15 +595,17 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
               providerResponseCode: requeryResult.responseCode,
             },
           });
-        } else if (isNotFoundOnProvider && !tx.providerReference) {
+        } else if (isNotFoundOnProvider) {
           syncMessage =
-            'Not found on gateway — this request failed before processing and the merchant wallet was already refunded.';
+            'No gateway record exists for this failed request. Wallet was already refunded.';
         } else if (requeryResult.status === TransactionStatus.FAILED) {
-          syncMessage = `Confirmed failed on gateway (${rawProviderMsg || requeryResult.responseCode}).`;
+          syncMessage = cleanProviderMessage
+            ? `Confirmed failed on gateway (${cleanProviderMessage}).`
+            : 'Confirmed failed on gateway.';
         } else {
-          syncMessage = isNotFoundOnProvider
-            ? 'Reference not found on gateway. Local status remains Failed (wallet already refunded).'
-            : `Status remains Failed (${rawProviderMsg || requeryResult.responseCode}).`;
+          syncMessage = cleanProviderMessage
+            ? `Status remains Failed (${cleanProviderMessage}).`
+            : 'Status remains Failed (wallet already refunded).';
         }
       } else {
         // In-flight PENDING / PROCESSING transaction
@@ -761,8 +766,8 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
             syncMessage,
             queriedReference: refToQuery,
             providerReference: requeryResult.providerReference || tx.providerReference,
-            providerResponseCode: requeryResult.responseCode,
-            providerMessage: requeryResult.responseMessage,
+            providerResponseCode: isNotFoundOnProvider ? undefined : requeryResult.responseCode,
+            providerMessage: cleanProviderMessage,
             providerResult: {
               ...requeryResult,
               amountKobo: requeryResult.amountKobo ? requeryResult.amountKobo.toString() : undefined,

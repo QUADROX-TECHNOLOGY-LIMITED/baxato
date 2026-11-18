@@ -168,16 +168,16 @@ export default function StaffOverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Link
           href="/staff/transactions?status=PENDING"
-          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-1.5 block"
+          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-2 block"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
               Pending
             </span>
             <Clock className="w-4 h-4 text-amber-500 shrink-0" aria-hidden="true" />
           </div>
           <div
-            className={`text-xl sm:text-2xl font-semibold tabular-nums ${
+            className={`text-2xl lg:text-3xl font-semibold tabular-nums ${
               pendingTx > 0
                 ? 'text-amber-600 dark:text-amber-400'
                 : 'text-slate-900 dark:text-white'
@@ -185,23 +185,23 @@ export default function StaffOverviewPage() {
           >
             {pendingTx}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             {pendingTx === 0 ? 'None waiting' : 'View pending'}
           </div>
         </Link>
 
         <Link
           href="/staff/transactions?status=FAILED"
-          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-1.5 block"
+          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-2 block"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
               Failed Today
             </span>
             <XCircle className="w-4 h-4 text-rose-500 shrink-0" aria-hidden="true" />
           </div>
           <div
-            className={`text-xl sm:text-2xl font-semibold tabular-nums ${
+            className={`text-2xl lg:text-3xl font-semibold tabular-nums ${
               failedTx > 0
                 ? 'text-rose-600 dark:text-rose-400'
                 : 'text-slate-900 dark:text-white'
@@ -209,23 +209,23 @@ export default function StaffOverviewPage() {
           >
             {failedTx}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             {totalTx === 0 ? '0 requests today' : `${successRate}% ok (${successTx}/${totalTx})`}
           </div>
         </Link>
 
         <Link
           href="/staff/routing"
-          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-1.5 block"
+          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-2 block"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
               Gateways
             </span>
             <Server className="w-4 h-4 text-[#126BEB] dark:text-[#38BDF8] shrink-0" aria-hidden="true" />
           </div>
           <div
-            className={`text-xl sm:text-2xl font-semibold tabular-nums ${
+            className={`text-2xl lg:text-3xl font-semibold tabular-nums ${
               offlineGateways.length > 0
                 ? 'text-rose-600 dark:text-rose-400'
                 : 'text-emerald-600 dark:text-emerald-400'
@@ -237,54 +237,54 @@ export default function StaffOverviewPage() {
                 ? `${offlineGateways.length} Offline`
                 : 'Online'}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             {totalGateways === 0 ? '—' : `${onlineGateways} of ${totalGateways} online`}
           </div>
         </Link>
 
         <Link
           href="/staff/merchants"
-          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-1.5 block"
+          className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors space-y-2 block"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
               Merchants
             </span>
             <UserCheck className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" aria-hidden="true" />
           </div>
-          <div className="text-xl sm:text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+          <div className="text-2xl lg:text-3xl font-semibold tabular-nums text-slate-900 dark:text-white">
             {totalBusinesses}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             {verifiedUsers} verified · {pendingKycUsers} unverified
           </div>
         </Link>
       </div>
 
       {/* Today's Requests by Service (Moved Up) */}
-      <section className="rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-3.5">
+      <section className="rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white [text-wrap:balance]">
+          <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white [text-wrap:balance]">
             Today&apos;s Requests by Service
           </h2>
-          <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+          <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 tabular-nums">
             {totalTx} total
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {SERVICE_ORDER.map((svc) => {
             const count = breakdownMap.get(svc) ?? 0;
             return (
               <Link
                 key={svc}
                 href={`/staff/transactions?serviceType=${svc}`}
-                className="min-h-16 px-3.5 py-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex flex-col justify-between"
+                className="min-h-20 px-4 py-3.5 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex flex-col justify-between"
               >
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
                   {SERVICE_LABELS[svc]}
                 </span>
-                <span className="text-lg font-semibold tabular-nums text-slate-900 dark:text-white mt-1">
+                <span className="text-xl sm:text-2xl font-semibold tabular-nums text-slate-900 dark:text-white mt-1.5">
                   {count}
                 </span>
               </Link>
@@ -294,33 +294,33 @@ export default function StaffOverviewPage() {
       </section>
 
       {/* Active Service Routing Snapshot */}
-      <section className="rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-3.5">
+      <section className="rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white [text-wrap:balance]">
+          <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white [text-wrap:balance]">
             Active Routing
           </h2>
           <Link
             href="/staff/routing"
-            className="text-xs font-medium text-[#126BEB] dark:text-[#38BDF8] hover:underline inline-flex items-center gap-1 min-h-11 sm:min-h-8 px-1"
+            className="text-xs sm:text-sm font-medium text-[#126BEB] dark:text-[#38BDF8] hover:underline inline-flex items-center gap-1 min-h-11 sm:min-h-9 px-1"
           >
             <span>Manage</span>
-            <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+            <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {SERVICE_ORDER.map((svc) => {
             const rawStrategy = routingMap.get(svc) || 'MONNIFY_ONLY';
             return (
               <Link
                 key={svc}
                 href="/staff/routing"
-                className="min-h-14 px-3.5 py-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex items-center sm:flex-col sm:items-start justify-between gap-2"
+                className="min-h-16 px-4 py-3.5 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex items-center sm:flex-col sm:items-start justify-between gap-2"
               >
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
                   {SERVICE_LABELS[svc]}
                 </span>
-                <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
                   {STRATEGY_LABELS[rawStrategy] || rawStrategy}
                 </span>
               </Link>

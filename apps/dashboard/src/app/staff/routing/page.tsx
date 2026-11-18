@@ -235,14 +235,13 @@ export default function StaffRoutingPage() {
 
       {/* Gateways */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+        <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
           Gateways
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {providerStatuses.map((p: any) => {
             const isHealthy = Boolean(p.health?.isHealthy);
-            const latency = Number(p.health?.latencyMs || 0);
             const displayName = PROVIDER_DISPLAY_NAMES[p.providerName] || p.providerName;
 
             return (
@@ -250,21 +249,12 @@ export default function StaffRoutingPage() {
                 key={p.providerName}
                 className="p-4 sm:p-5 rounded-xl bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3"
               >
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {displayName}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                    {isHealthy
-                      ? latency > 0
-                        ? `Response time: ${latency} ms`
-                        : 'Connected'
-                      : 'Connection unavailable'}
-                  </p>
-                </div>
+                <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                  {displayName}
+                </h3>
 
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border shrink-0 ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border shrink-0 ${
                     isHealthy
                       ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/60'
                       : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/60'
@@ -284,7 +274,7 @@ export default function StaffRoutingPage() {
 
       {/* Service Routing */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+        <h2 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
           Service Routing
         </h2>
 
@@ -303,16 +293,16 @@ export default function StaffRoutingPage() {
               >
                 <div className="space-y-3.5">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
                       <Icon className="w-4 h-4 text-slate-700 dark:text-slate-200" aria-hidden="true" />
                     </div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
                       {s.name}
                     </h3>
                   </div>
 
                   <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400 block">
+                    <span className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 block">
                       Gateway
                     </span>
                     <StaffFilterSelect
@@ -333,9 +323,9 @@ export default function StaffRoutingPage() {
                   type="button"
                   disabled={isSaving || !isDirty}
                   onClick={() => void handleSave(s.type)}
-                  className="w-full h-11 sm:h-10 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
+                  className="w-full h-11 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
                 >
-                  {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+                  {isSaving && <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />}
                   <span>Save</span>
                 </button>
               </div>

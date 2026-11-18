@@ -602,6 +602,7 @@ export class MonnifyProvider implements ProviderAdapter {
       customerMobileNumber: request.customerMobile || request.customerId,
       billerCode,
       productCode,
+      reference: request.requestReference,
       vendReference: request.requestReference,
       paymentReference: request.requestReference,
     };
@@ -644,23 +645,36 @@ export class MonnifyProvider implements ProviderAdapter {
     };
 
     const vendStatus = data?.responseBody?.vendStatus?.toUpperCase();
+    const isExplicitFailed = Boolean(
+      vendStatus === 'FAILED' || vendStatus === 'REVERSED' || vendStatus === 'CANCELLED',
+    );
     const isProcessing = Boolean(
       data?.requestSuccessful &&
+        !isExplicitFailed &&
         (vendStatus === 'PENDING' ||
           vendStatus === 'PROCESSING' ||
-          vendStatus === 'IN_PROGRESS'),
+          vendStatus === 'IN_PROGRESS' ||
+          vendStatus === 'INITIATED'),
     );
     const isSuccess = Boolean(
       data?.requestSuccessful &&
-        (vendStatus === 'SUCCESS' ||
-          data?.responseCode === '0' ||
-          data?.responseCode === '00'),
+        !isExplicitFailed &&
+        !isProcessing &&
+        (vendStatus
+          ? vendStatus === 'SUCCESS' || vendStatus === 'SUCCESSFUL' || vendStatus === 'COMPLETED'
+          : data?.responseCode === '0' || data?.responseCode === '00'),
     );
     const status = isProcessing
       ? TransactionStatus.PROCESSING
       : isSuccess
         ? TransactionStatus.SUCCESSFUL
         : TransactionStatus.FAILED;
+
+    const effectiveResponseCode =
+      status === TransactionStatus.FAILED &&
+      (data?.responseCode === '0' || data?.responseCode === '00')
+        ? 'VEND_FAILED'
+        : data?.responseCode || 'UNKNOWN';
 
     return {
       status,
@@ -669,7 +683,7 @@ export class MonnifyProvider implements ProviderAdapter {
         data?.responseBody?.vendReference || data?.responseBody?.transactionReference,
       requestReference: request.requestReference,
       amountKobo: request.amountKobo,
-      responseCode: data?.responseCode || 'UNKNOWN',
+      responseCode: effectiveResponseCode,
       responseMessage:
         data?.responseBody?.description ||
         data?.responseMessage ||
@@ -691,8 +705,8 @@ export class MonnifyProvider implements ProviderAdapter {
 
   /**
    * Re-query transaction status using official Monnify Bills Payment API:
-   * GET /api/v1/vas/bills-payment/requery?vendReference=...
-   * Queries vendReference (merchant requestReference / providerReference), with ?reference= fallback.
+   * GET /api/v1/vas/bills-payment/requery?reference=...
+   * Monnify strictly requires the `reference` query parameter matching `vendReference`.
    */
   public async requeryTransaction(
     requestReference: string,
@@ -716,17 +730,9 @@ export class MonnifyProvider implements ProviderAdapter {
       };
     };
 
-    const candidateQueries: string[] = [];
-    if (requestReference) {
-      candidateQueries.push(`vendReference=${encodeURIComponent(requestReference)}`);
-    }
-    if (providerReference && providerReference !== requestReference) {
-      candidateQueries.push(`vendReference=${encodeURIComponent(providerReference)}`);
-    }
-    const refFallback = providerReference || requestReference;
-    if (refFallback) {
-      candidateQueries.push(`reference=${encodeURIComponent(refFallback)}`);
-    }
+    const candidateRefs = Array.from(
+      new Set([providerReference, requestReference].filter((r): r is string => Boolean(r && r.trim()))),
+    );
 
     let data: MonnifyRequeryResponse = {
       requestSuccessful: false,
@@ -734,9 +740,9 @@ export class MonnifyProvider implements ProviderAdapter {
       responseCode: 'UNKNOWN',
     };
 
-    for (const qs of candidateQueries) {
+    for (const ref of candidateRefs) {
       const res = await fetch(
-        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?${qs}`,
+        `${this.config.baseUrl}/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(ref)}`,
         {
           method: 'GET',
           headers: {
@@ -758,17 +764,18 @@ export class MonnifyProvider implements ProviderAdapter {
       }
     }
 
+    const vendStatus = data?.responseBody?.vendStatus?.toUpperCase();
+    const isExplicitFailed = Boolean(
+      vendStatus === 'FAILED' || vendStatus === 'REVERSED' || vendStatus === 'CANCELLED',
+    );
     const isSuccess = Boolean(
       data?.requestSuccessful &&
-        (data?.responseBody?.vendStatus === 'SUCCESS' ||
-          data?.responseBody?.paymentStatus === 'PAID' ||
-          data?.responseCode === '0' ||
-          data?.responseCode === '00'),
-    );
-
-    const isExplicitFailed = Boolean(
-      data?.responseBody?.vendStatus === 'FAILED' ||
-      data?.responseBody?.vendStatus === 'REVERSED',
+        !isExplicitFailed &&
+        (vendStatus
+          ? vendStatus === 'SUCCESS' || vendStatus === 'SUCCESSFUL' || vendStatus === 'COMPLETED'
+          : data?.responseBody?.paymentStatus === 'PAID' ||
+            data?.responseCode === '0' ||
+            data?.responseCode === '00'),
     );
 
     const status = isSuccess
@@ -776,6 +783,11 @@ export class MonnifyProvider implements ProviderAdapter {
       : isExplicitFailed
         ? TransactionStatus.FAILED
         : TransactionStatus.PENDING;
+
+    const effectiveResponseCode =
+      isExplicitFailed && (data?.responseCode === '0' || data?.responseCode === '00')
+        ? 'VEND_FAILED'
+        : data?.responseCode || 'UNKNOWN';
 
     return {
       status,
@@ -786,7 +798,7 @@ export class MonnifyProvider implements ProviderAdapter {
       amountKobo: data?.responseBody?.amount
         ? BigInt(Math.round(data.responseBody.amount * 100))
         : undefined,
-      responseCode: data?.responseCode || 'UNKNOWN',
+      responseCode: effectiveResponseCode,
       responseMessage:
         data?.responseBody?.description ||
         data?.responseMessage ||

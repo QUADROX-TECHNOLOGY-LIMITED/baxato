@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
+  generateBaxatoReference,
   generateNumericReference,
   generateTransactionReference,
   generateEntityId,
 } from '../../src/utils/reference.js';
 
 describe('Reference Generation Utilities', () => {
+  it('generates a branded BX-YYYYMMDD-XXXXXXXXXX reference', () => {
+    const fixedDate = new Date('2026-11-18T09:00:00Z');
+    const ref1 = generateBaxatoReference(fixedDate);
+    const ref2 = generateBaxatoReference(fixedDate);
+    expect(ref1).toMatch(/^BX-20261118-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/);
+    expect(ref1).not.toBe(ref2);
+  });
   it('generates a 20-digit numeric reference starting with prefix 2411', () => {
     const ref = generateNumericReference('2411');
     expect(ref).toHaveLength(20);

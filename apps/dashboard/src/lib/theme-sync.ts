@@ -23,36 +23,12 @@ export interface ApplyThemeOptions {
   silent?: boolean;
 }
 
-function replaceThemeColorMetas(isDark: boolean, mode: ThemeMode): void {
+function replaceThemeColorMetas(isDark: boolean): void {
   if (typeof document === 'undefined' || !document.head) return;
 
   const oldMetas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
   for (const el of oldMetas) {
     el.remove();
-  }
-
-  if (mode === 'system') {
-    const lightMeta = document.createElement('meta');
-    lightMeta.name = 'theme-color';
-    lightMeta.media = '(prefers-color-scheme: light)';
-    lightMeta.content = THEME_LIGHT_BG;
-    lightMeta.dataset.baxatoThemeColor = 'system-light';
-
-    const darkMeta = document.createElement('meta');
-    darkMeta.name = 'theme-color';
-    darkMeta.media = '(prefers-color-scheme: dark)';
-    darkMeta.content = THEME_DARK_BG;
-    darkMeta.dataset.baxatoThemeColor = 'system-dark';
-
-    // Append the currently active scheme meta first so WebKit/Blink immediately resolve it on insertion
-    if (isDark) {
-      document.head.appendChild(darkMeta);
-      document.head.appendChild(lightMeta);
-    } else {
-      document.head.appendChild(lightMeta);
-      document.head.appendChild(darkMeta);
-    }
-    return;
   }
 
   const singleMeta = document.createElement('meta');
@@ -111,7 +87,7 @@ export function applyThemeChrome(
   }
 
   if (signatureChanged || options.forceMetaRefresh) {
-    replaceThemeColorMetas(isDark, stored);
+    replaceThemeColorMetas(isDark);
   }
 
   if (typeof window !== 'undefined' && !options.silent && signatureChanged) {

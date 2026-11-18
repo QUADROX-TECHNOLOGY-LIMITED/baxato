@@ -2,7 +2,7 @@
  * BAXATO Universal Printable Receipt Engine
  *
  * Implements isolated, zero-blank-page printing for all transaction receipts,
- * electricity tokens, cable TV recharges, exam PINs, and backoffice staff slips.
+ * electricity tokens, cable TV recharges, and exam PINs.
  *
  * Uses an isolated, offscreen iframe to ensure complete independence from
  * Next.js App Router DOM, modal overlays, fixed backdrops, and dark mode styles.
@@ -67,7 +67,12 @@ const BASE_RECEIPT_STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
+  }
+  .brand-logo {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
   }
   .brand-title span.accent {
     color: #126beb;
@@ -213,6 +218,19 @@ const BASE_RECEIPT_STYLES = `
   }
 `;
 
+function renderBrandHeaderHtml(subtitle: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const logoHtml = origin
+    ? `<img src="${escapeHtml(origin)}/baxato-mark.svg" alt="BAXATO" class="brand-logo" />`
+    : '';
+  return `<div class="brand-header">
+      <div class="brand-title">
+        ${logoHtml}<span>BAXATO</span>
+      </div>
+      <div class="brand-subtitle">${escapeHtml(subtitle)}</div>
+    </div>`;
+}
+
 /**
  * Universal iframe print trigger.
  * Injects HTML into an isolated hidden iframe, triggers print, and cleans up.
@@ -293,12 +311,7 @@ export function printTransactionReceipt(receipt: {
 </head>
 <body>
   <div class="receipt-card">
-    <div class="brand-header">
-      <div class="brand-title">
-        BAX<span class="accent">ATO</span>
-      </div>
-      <div class="brand-subtitle">Transaction Receipt</div>
-    </div>
+    ${renderBrandHeaderHtml('Transaction Receipt')}
 
     <div class="status-badge-container">
       <span class="status-badge ${statusClass}">${escapeHtml(receipt.status)}</span>
@@ -439,12 +452,7 @@ export function printElectricityReceipt(receipt: {
 </head>
 <body>
   <div class="receipt-card">
-    <div class="brand-header">
-      <div class="brand-title">
-        BAX<span class="accent">ATO</span>
-      </div>
-      <div class="brand-subtitle">Electricity Value Delivery Slip</div>
-    </div>
+    ${renderBrandHeaderHtml('Electricity Receipt')}
 
     <div class="status-badge-container">
       <span class="status-badge ${statusClass}">${escapeHtml(receipt.status)}</span>
@@ -590,12 +598,7 @@ export function printCableReceipt(receipt: {
 </head>
 <body>
   <div class="receipt-card">
-    <div class="brand-header">
-      <div class="brand-title">
-        BAX<span class="accent">ATO</span>
-      </div>
-      <div class="brand-subtitle">Cable TV Subscription Receipt</div>
-    </div>
+    ${renderBrandHeaderHtml('Cable TV Receipt')}
 
     <div class="status-badge-container">
       <span class="status-badge ${statusClass}">${escapeHtml(receipt.status)}</span>
@@ -728,12 +731,7 @@ export function printExamPinReceipt(receipt: {
 </head>
 <body>
   <div class="receipt-card">
-    <div class="brand-header">
-      <div class="brand-title">
-        BAX<span class="accent">ATO</span>
-      </div>
-      <div class="brand-subtitle">Educational Exam PIN Voucher</div>
-    </div>
+    ${renderBrandHeaderHtml('Exam PIN Receipt')}
 
     <div class="status-badge-container">
       <span class="status-badge ${statusClass}">${escapeHtml(receipt.status)}</span>
@@ -802,7 +800,7 @@ export function printExamPinReceipt(receipt: {
 }
 
 /**
- * 5. Print Staff / Admin Backoffice Receipt
+ * 5. Print Transaction Receipt (from Staff Transactions view)
  */
 export function printStaffReceipt(tx: any) {
   const meta = tx.metadata || {};
@@ -811,6 +809,18 @@ export function printStaffReceipt(tx: any) {
   const tokenFormatted = rawToken
     ? rawToken.replace(/\D/g, '').match(/.{1,4}/g)?.join(' - ') || rawToken
     : null;
+
+  const SERVICE_CATEGORY_LABELS: Record<string, string> = {
+    AIRTIME: 'Airtime',
+    DATA: 'Data Bundle',
+    ELECTRICITY: 'Electricity',
+    CABLE_TV: 'Cable TV',
+    CABLE: 'Cable TV',
+    EXAM_PIN: 'Exam PIN',
+    EDUCATION: 'Exam PIN',
+  };
+  const serviceCategoryLabel =
+    SERVICE_CATEGORY_LABELS[tx.serviceType] || String(tx.serviceType || 'Service').replace(/_/g, ' ');
 
   const formattedDate = new Date(tx.createdAt).toLocaleDateString('en-NG', {
     day: '2-digit',
@@ -824,22 +834,19 @@ export function printStaffReceipt(tx: any) {
   const isSuccess = tx.status === 'SUCCESSFUL';
   const isFailed = tx.status === 'FAILED' || tx.status === 'REVERSED';
   const statusClass = isSuccess ? 'status-success' : isFailed ? 'status-failed' : 'status-processing';
+  const refValue = tx.requestReference || tx.clientReference || tx.reference || tx.id;
+  const customerName = meta.customerName || meta.name || tx.userName;
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Staff Audit Slip - ${escapeHtml(tx.id || tx.clientReference)}</title>
+  <title>BAXATO Receipt - ${escapeHtml(refValue)}</title>
   <style>${BASE_RECEIPT_STYLES}</style>
 </head>
 <body>
   <div class="receipt-card">
-    <div class="brand-header">
-      <div class="brand-title">
-        BAX<span class="accent">ATO</span>
-      </div>
-      <div class="brand-subtitle">Platform Operations Audit Slip</div>
-    </div>
+    ${renderBrandHeaderHtml('Transaction Receipt')}
 
     <div class="status-badge-container">
       <span class="status-badge ${statusClass}">${escapeHtml(tx.status)}</span>
@@ -848,7 +855,7 @@ export function printStaffReceipt(tx: any) {
     ${
       tokenFormatted && isElectricity
         ? `<div class="token-box">
-      <div class="token-label">&#9889; STS Token</div>
+      <div class="token-label">&#9889; Electricity Token</div>
       <div class="token-code">${escapeHtml(tokenFormatted)}</div>
       <div class="token-meta">
         ${meta.units || tx.units ? `<strong>Units:</strong> ${escapeHtml(meta.units || tx.units)} kWh &nbsp;|&nbsp; ` : ''}
@@ -857,49 +864,64 @@ export function printStaffReceipt(tx: any) {
     </div>`
         : `<div class="amount-hero">
       <div class="amount-val">${formatNaira(tx.amountNaira || tx.amount)}</div>
-      <div class="amount-label">${escapeHtml(tx.serviceType)} Transaction</div>
+      <div class="amount-label">${escapeHtml(serviceCategoryLabel)}</div>
     </div>`
     }
 
     <table class="data-table">
       <tr>
-        <td class="label">Transaction ID</td>
-        <td class="value value-mono" style="font-size: 11px;">${escapeHtml(tx.id)}</td>
-      </tr>
-      <tr>
-        <td class="label">Reference / Order</td>
-        <td class="value value-mono" style="font-size: 11px;">${escapeHtml(tx.clientReference || tx.reference || 'N/A')}</td>
-      </tr>
-      <tr>
-        <td class="label">Merchant Business</td>
-        <td class="value">${escapeHtml(tx.businessName || 'Merchant Terminal')}</td>
-      </tr>
-      <tr>
         <td class="label">Service Category</td>
-        <td class="value">${escapeHtml(tx.serviceType)}</td>
+        <td class="value">${escapeHtml(serviceCategoryLabel)}</td>
       </tr>
       <tr>
-        <td class="label">Provider Route</td>
-        <td class="value">${escapeHtml(tx.provider || meta.provider || 'PRIMARY')}</td>
-      </tr>
-      <tr>
-        <td class="label">Recipient / Target</td>
+        <td class="label">Recipient</td>
         <td class="value value-mono">${escapeHtml(tx.recipient)}</td>
+      </tr>
+      ${
+        meta.network
+          ? `<tr>
+        <td class="label">Network</td>
+        <td class="value">${escapeHtml(meta.network)}</td>
+      </tr>`
+          : ''
+      }
+      ${
+        meta.planName || meta.capacity || meta.bouquet
+          ? `<tr>
+        <td class="label">Package</td>
+        <td class="value">${escapeHtml(meta.planName || meta.capacity || meta.bouquet)}</td>
+      </tr>`
+          : ''
+      }
+      ${
+        customerName
+          ? `<tr>
+        <td class="label">Customer</td>
+        <td class="value">${escapeHtml(customerName)}</td>
+      </tr>`
+          : ''
+      }
+      <tr>
+        <td class="label">Merchant</td>
+        <td class="value">${escapeHtml(tx.businessName || 'BAXATO Merchant')}</td>
+      </tr>
+      <tr>
+        <td class="label">Reference</td>
+        <td class="value value-mono" style="font-size: 11px;">${escapeHtml(refValue)}</td>
       </tr>
       <tr class="total-row">
         <td class="label">Amount</td>
         <td class="value value-mono">${formatNaira(tx.amountNaira || tx.amount)}</td>
       </tr>
       <tr>
-        <td class="label">Timestamp</td>
+        <td class="label">Date</td>
         <td class="value">${escapeHtml(formattedDate)}</td>
       </tr>
     </table>
 
     <div class="receipt-footer">
-      <div class="bold">Baxato Backoffice Operations Verification</div>
-      <div>Confidential Operational Record &bull; quadrox.tech</div>
-      <div style="margin-top: 6px; font-size: 9px;">Printed by Staff on: ${new Date().toLocaleString('en-NG')}</div>
+      <div class="bold">BAXATO</div>
+      <div>support@baxato.com</div>
     </div>
   </div>
 </body>

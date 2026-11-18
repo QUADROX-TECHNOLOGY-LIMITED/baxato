@@ -6,7 +6,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateNumericReference,
+  generateBaxatoReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -816,7 +816,7 @@ export class ElectricityService {
     const balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
-    const requestReference = generateNumericReference('2411', 12);
+    const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('ELEC');
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;

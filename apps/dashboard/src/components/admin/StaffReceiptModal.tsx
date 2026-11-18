@@ -41,6 +41,17 @@ export default function StaffReceiptModal({
     return clean.match(/.{1,4}/g)?.join(' - ') || rawToken;
   };
 
+  const SERVICE_CATEGORY_LABELS: Record<string, string> = {
+    AIRTIME: 'Airtime',
+    DATA: 'Data Bundle',
+    ELECTRICITY: 'Electricity',
+    CABLE_TV: 'Cable TV',
+    CABLE: 'Cable TV',
+    EXAM_PIN: 'Exam PIN',
+    EDUCATION: 'Exam PIN',
+  };
+  const serviceCategoryLabel =
+    SERVICE_CATEGORY_LABELS[tx.serviceType] || (tx.serviceType || '').replace(/_/g, ' ');
   const meta = tx.metadata || {};
   const isElectricity = tx.serviceType === 'ELECTRICITY';
   const isAirtime = tx.serviceType === 'AIRTIME';
@@ -148,7 +159,7 @@ export default function StaffReceiptModal({
           </div>
 
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
-            {(tx.serviceType || '').replace(/_/g, ' ')}
+            {serviceCategoryLabel}
           </span>
         </div>
 
@@ -177,7 +188,14 @@ export default function StaffReceiptModal({
           </div>
         )}
 
-        <dl className="space-y-2.5 text-xs border-t border-b border-dashed border-slate-300 dark:border-slate-700 py-3.5">
+        <dl className="space-y-2.5 text-xs sm:text-sm border-t border-b border-dashed border-slate-300 dark:border-slate-700 py-3.5">
+          <div className="flex justify-between items-center gap-3">
+            <dt className="text-slate-500 dark:text-slate-400 shrink-0">Service Category</dt>
+            <dd className="font-semibold text-slate-900 dark:text-white text-right">
+              {serviceCategoryLabel}
+            </dd>
+          </div>
+
           <div className="flex justify-between items-center gap-3">
             <dt className="text-slate-500 dark:text-slate-400 shrink-0">Recipient</dt>
             <dd className="font-semibold font-mono text-slate-900 dark:text-white text-right truncate">
@@ -312,28 +330,17 @@ export default function StaffReceiptModal({
             </dd>
           </div>
 
-          {tx.providerReference && (
-            <div className="flex justify-between items-center gap-3">
-              <dt className="text-slate-500 dark:text-slate-400 shrink-0">Gateway Ref</dt>
-              <dd className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate text-right">
-                {tx.providerReference}
-              </dd>
-            </div>
-          )}
-
           <div className="flex justify-between items-center gap-3">
             <dt className="text-slate-500 dark:text-slate-400 shrink-0">Date</dt>
-            <dd className="text-slate-600 dark:text-slate-400 text-[11px] text-right">
+            <dd className="text-slate-600 dark:text-slate-400 text-xs text-right">
               {formattedDate}
             </dd>
           </div>
         </dl>
 
-        <div className="text-center pt-1 text-[11px] text-slate-400 space-y-0.5">
-          <p className="font-medium text-slate-600 dark:text-slate-400">
-            BAXATO Operations Record
-          </p>
-          <p className="text-[10px]">support@baxato.com</p>
+        <div className="text-center pt-1 text-xs text-slate-400 space-y-0.5">
+          <p className="font-semibold text-slate-600 dark:text-slate-400">BAXATO</p>
+          <p className="text-[11px]">support@baxato.com</p>
         </div>
       </div>
 
@@ -342,14 +349,14 @@ export default function StaffReceiptModal({
         <button
           type="button"
           onClick={onClose}
-          className="h-11 px-4 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="h-11 px-4 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         >
           Close
         </button>
         <button
           type="button"
           onClick={handlePrint}
-          className="h-11 px-5 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2"
+          className="h-11 px-5 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors flex items-center justify-center gap-2"
         >
           <Printer className="w-4 h-4" aria-hidden="true" />
           <span>Print Receipt</span>

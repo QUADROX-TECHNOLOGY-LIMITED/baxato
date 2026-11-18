@@ -7,7 +7,7 @@ import {
   LedgerDirection,
   LedgerEntryType,
   WalletType,
-  generateNumericReference,
+  generateBaxatoReference,
   generateTransactionReference,
   ValidationError,
   NotFoundError,
@@ -484,7 +484,7 @@ export class EducationService {
     let balanceAfterKobo = balanceBeforeKobo - amountToDebitKobo;
 
     // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
-    const requestReference = generateNumericReference('2411', 12);
+    const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('EPN');
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;
@@ -541,7 +541,7 @@ export class EducationService {
       // Attempt 1: Live Provider Vending (exact quantity loop)
       try {
         for (let i = 0; i < quantity; i++) {
-          const subRef = i === 0 ? requestReference : `${requestReference}${i}`;
+          const subRef = i === 0 ? requestReference : `${requestReference}-${i + 1}`;
           const vendResult = await this.router.vendService(
             {
               serviceType: ServiceType.EXAM_PIN,

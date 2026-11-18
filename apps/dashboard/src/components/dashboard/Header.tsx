@@ -114,7 +114,7 @@ export default function Header({
   const isOwnerOrAdmin = activeRole === 'BUSINESS_OWNER' || activeRole === 'BUSINESS_ADMIN';
 
   return (
-    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-2.5 sm:px-6 lg:px-8 py-2 sm:py-3 transition-colors duration-150`}>
+    <header className={`${sticky ? 'sticky top-0 z-30' : 'relative z-10'} w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-2.5 sm:px-6 lg:px-8 py-2 sm:py-3`}>
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left Side: Mobile Menu Button & Business Switcher */}
         <div className="flex items-center gap-1.5 sm:gap-3 flex-1 min-w-0">

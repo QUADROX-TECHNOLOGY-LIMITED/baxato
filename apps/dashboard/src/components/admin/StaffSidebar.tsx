@@ -107,6 +107,12 @@ export default function StaffSidebar({
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') return;
 
+    const prevBodyOverflow = document.body.style.overflow;
+    if (window.innerWidth < 1024) {
+      document.body.style.overflow = 'hidden';
+      applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true, silent: true });
+    }
+
     let raf1 = 0;
     let raf2 = 0;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -136,16 +142,30 @@ export default function StaffSidebar({
       settleTimer = setTimeout(refreshMobileDrawerLayer, 200);
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleThemeChange();
+      }
+    };
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     mediaQuery.addEventListener('change', handleThemeChange);
     window.addEventListener('baxato:theme-changed', handleThemeChange);
+    window.addEventListener('focus', handleThemeChange);
+    window.addEventListener('pageshow', handleThemeChange);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
+      document.body.style.overflow = prevBodyOverflow;
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
       if (settleTimer) clearTimeout(settleTimer);
       mediaQuery.removeEventListener('change', handleThemeChange);
       window.removeEventListener('baxato:theme-changed', handleThemeChange);
+      window.removeEventListener('focus', handleThemeChange);
+      window.removeEventListener('pageshow', handleThemeChange);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true, silent: true });
     };
   }, [isOpen]);
 
@@ -203,7 +223,7 @@ export default function StaffSidebar({
                 BAXATO
               </span>
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
-                Operations Console
+                Staff Dashboard
               </span>
             </div>
           </Link>

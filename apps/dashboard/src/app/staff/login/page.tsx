@@ -344,13 +344,13 @@ export default function StaffLoginPage() {
                 ? 'Two-Factor Verification'
                 : 'Set Up Two-Factor Security'}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {step === 'credentials'
-              ? 'BAXATO Operations Console'
-              : step === '2fa_verify'
+          {step !== 'credentials' && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {step === '2fa_verify'
                 ? twoFactorPrompt
                 : 'Choose a verification method for your staff account.'}
-          </p>
+            </p>
+          )}
         </div>
 
         {isSessionExpired && !errorMessage && (

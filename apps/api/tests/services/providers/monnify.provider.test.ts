@@ -188,10 +188,10 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
       });
     global.fetch = mockFetch;
 
-    const requery = await provider.requeryTransaction('REF_001');
+    const requery = await provider.requeryTransaction('BX-20261118-REF001');
     expect(requery.status).toBe(TransactionStatus.SUCCESSFUL);
     expect(requery.amountKobo).toBe(50000n);
-    expect(mockFetch.mock.calls[1]?.[0]).toContain('vendReference=REF_001');
+    expect(mockFetch.mock.calls[1]?.[0]).toContain('reference=BX-20261118-REF001');
 
     // Health probe
     const health = await provider.getHealth();
@@ -199,7 +199,7 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
     expect(health.isHealthy).toBe(true);
   });
 
-  it('sends vendReference and vendAmount in Monnify /vas/bills-payment/vend payload', async () => {
+  it('sends reference, vendReference, and vendAmount in Monnify /vas/bills-payment/vend payload', async () => {
     const mockFetch = vi
       .fn()
       .mockResolvedValueOnce({
@@ -218,7 +218,7 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
           responseMessage: 'success',
           responseCode: '0',
           responseBody: {
-            vendReference: '241199887766',
+            vendReference: 'BX-20261118-99887766',
             vendStatus: 'SUCCESS',
           },
         }),
@@ -230,11 +230,53 @@ describe('MonnifyProvider (VAS & Bills Payment)', () => {
       paymentCode: 'MTN',
       customerId: '08031234567',
       amountKobo: 25000n,
-      requestReference: '241199887766',
+      requestReference: 'BX-20261118-99887766',
     });
 
     const vendBody = JSON.parse(mockFetch.mock.calls[1]?.[1]?.body as string);
-    expect(vendBody.vendReference).toBe('241199887766');
+    expect(vendBody.reference).toBe('BX-20261118-99887766');
+    expect(vendBody.vendReference).toBe('BX-20261118-99887766');
     expect(vendBody.vendAmount).toBe(250);
+  });
+
+  it('treats vendStatus=FAILED as FAILED even when Monnify returns responseCode=0', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          requestSuccessful: true,
+          responseMessage: 'success',
+          responseCode: '0',
+          responseBody: { accessToken: 'mon_token', expiresIn: 3600 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          requestSuccessful: true,
+          responseMessage: 'success',
+          responseCode: '0',
+          responseBody: {
+            vendReference: 'BX-20261118-FAIL01',
+            transactionReference: 'MFBP261118100152f70a',
+            vendStatus: 'FAILED',
+            description: 'purchase was failed from service provider.',
+          },
+        }),
+      });
+    global.fetch = mockFetch;
+
+    const vendRes = await provider.vendService({
+      serviceType: ServiceType.AIRTIME,
+      paymentCode: 'MTN',
+      customerId: '08030000000',
+      amountKobo: 10000n,
+      requestReference: 'BX-20261118-FAIL01',
+    });
+
+    expect(vendRes.status).toBe(TransactionStatus.FAILED);
+    expect(vendRes.responseCode).toBe('VEND_FAILED');
+    expect(vendRes.providerReference).toBe('BX-20261118-FAIL01');
   });
 });

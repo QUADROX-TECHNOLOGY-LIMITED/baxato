@@ -123,6 +123,12 @@ export default function Sidebar({
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') return;
 
+    const prevBodyOverflow = document.body.style.overflow;
+    if (window.innerWidth < 1024) {
+      document.body.style.overflow = 'hidden';
+      applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true, silent: true });
+    }
+
     let raf1 = 0;
     let raf2 = 0;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -152,16 +158,30 @@ export default function Sidebar({
       settleTimer = setTimeout(refreshMobileDrawerLayer, 200);
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleSystemOrThemeChange();
+      }
+    };
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     mediaQuery.addEventListener('change', handleSystemOrThemeChange);
     window.addEventListener('baxato:theme-changed', handleSystemOrThemeChange);
+    window.addEventListener('focus', handleSystemOrThemeChange);
+    window.addEventListener('pageshow', handleSystemOrThemeChange);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
+      document.body.style.overflow = prevBodyOverflow;
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
       if (settleTimer) clearTimeout(settleTimer);
       mediaQuery.removeEventListener('change', handleSystemOrThemeChange);
       window.removeEventListener('baxato:theme-changed', handleSystemOrThemeChange);
+      window.removeEventListener('focus', handleSystemOrThemeChange);
+      window.removeEventListener('pageshow', handleSystemOrThemeChange);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      applyThemeChrome(resolveIsDark(), undefined, { forceMetaRefresh: true, silent: true });
     };
   }, [isOpen]);
 

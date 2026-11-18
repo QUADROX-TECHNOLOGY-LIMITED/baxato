@@ -55,7 +55,7 @@ export default function StaffHeader({
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 pt-[env(safe-area-inset-top,0px)] transition-colors duration-150">
+    <header className="relative z-10 w-full bg-white dark:bg-[#070D18] border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 lg:px-8 pt-[env(safe-area-inset-top,0px)]">
       <div className="h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile drawer trigger & breadcrumb */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -69,7 +69,7 @@ export default function StaffHeader({
             <Menu className="w-5 h-5" aria-hidden="true" />
           </button>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-sm sm:text-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-sm">
             <span className="hidden sm:inline font-medium text-slate-500 dark:text-slate-400">
               Staff
             </span>
@@ -88,11 +88,11 @@ export default function StaffHeader({
             type="button"
             onClick={onRefresh}
             disabled={isRefreshing}
-            aria-label="Refresh operational data"
-            className="min-h-10 sm:min-h-9 px-2.5 sm:px-3 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            aria-label="Refresh"
+            className="min-h-11 sm:min-h-10 px-3 sm:px-3.5 rounded-lg text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#126BEB] dark:text-[#38BDF8]' : ''}`}
+              className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#126BEB] dark:text-[#38BDF8]' : ''}`}
               aria-hidden="true"
             />
             <span className="hidden sm:inline">Refresh</span>
@@ -100,16 +100,16 @@ export default function StaffHeader({
 
           <ThemeToggle />
 
-          <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+          <div className="hidden sm:flex items-center gap-2.5 pl-2.5 border-l border-slate-200 dark:border-slate-800">
             <div className="w-8 h-8 rounded-full bg-[#126BEB] text-white font-semibold flex items-center justify-center text-xs shrink-0">
               {initials}
             </div>
             <div className="hidden md:flex flex-col text-left">
-              <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight max-w-[140px] truncate">
+              <span className="text-sm font-semibold text-slate-900 dark:text-white leading-tight max-w-[160px] truncate">
                 {staffName || 'Staff User'}
               </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                {ROLE_TITLES[userRole] || 'Platform Staff'}
+              <span className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
+                {ROLE_TITLES[userRole] || 'Staff'}
               </span>
             </div>
           </div>

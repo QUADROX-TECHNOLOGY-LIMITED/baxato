@@ -69,7 +69,7 @@ export default function StaffLayout({
   }
 
   return (
-    <div className="min-h-[100dvh] bg-white dark:bg-[#070D18] text-slate-900 dark:text-white transition-colors duration-150">
+    <div className="min-h-[100dvh] bg-white dark:bg-[#070D18] text-slate-900 dark:text-white">
       <StaffSidebar
         userRole={userRole}
         staffName={staffName}
@@ -88,7 +88,7 @@ export default function StaffLayout({
           onRefresh={handleGlobalRefresh}
         />
 
-        <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] space-y-6">
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] space-y-6 lg:space-y-7">
           {children}
         </main>
       </div>

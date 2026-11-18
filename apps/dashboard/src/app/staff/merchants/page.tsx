@@ -247,7 +247,7 @@ export default function StaffMerchantsPage() {
           role="tab"
           aria-selected={activeTab === 'merchants'}
           onClick={() => setActiveTab('merchants')}
-          className={`flex-1 sm:flex-initial h-9 px-4 rounded-lg text-xs font-semibold transition-colors ${
+          className={`flex-1 sm:flex-initial h-10 px-5 rounded-lg text-sm font-semibold transition-colors ${
             activeTab === 'merchants'
               ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -260,7 +260,7 @@ export default function StaffMerchantsPage() {
           role="tab"
           aria-selected={activeTab === 'kyc'}
           onClick={() => setActiveTab('kyc')}
-          className={`flex-1 sm:flex-initial h-9 px-4 rounded-lg text-xs font-semibold transition-colors ${
+          className={`flex-1 sm:flex-initial h-10 px-5 rounded-lg text-sm font-semibold transition-colors ${
             activeTab === 'kyc'
               ? 'bg-white dark:bg-[#126BEB] text-slate-900 dark:text-white shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -289,7 +289,7 @@ export default function StaffMerchantsPage() {
                   placeholder="Business name, owner, email, phone, or NIN..."
                   value={merchantSearch}
                   onChange={(e) => setMerchantSearch(e.target.value)}
-                  className="w-full h-11 sm:h-10 pl-10 pr-3.5 text-sm sm:text-xs rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
+                  className="w-full h-11 pl-10 pr-3.5 text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
                 />
               </div>
 
@@ -307,7 +307,7 @@ export default function StaffMerchantsPage() {
               <div className="sm:col-span-2 flex gap-2">
                 <button
                   type="submit"
-                  className="flex-1 h-11 sm:h-10 px-4 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
+                  className="flex-1 h-11 px-4 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
                 >
                   Search
                 </button>
@@ -320,7 +320,7 @@ export default function StaffMerchantsPage() {
                       setMerchantPage(1);
                       void loadMerchants('');
                     }}
-                    className="h-11 sm:h-10 px-3 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+                    className="h-11 px-3.5 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
                   >
                     Reset
                   </button>
@@ -412,16 +412,16 @@ export default function StaffMerchantsPage() {
                   aria-label="Merchants directory table"
                   className="overflow-auto max-h-[68dvh] focus:outline-none"
                 >
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-medium">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">
                       <tr>
-                        <th className="py-3 px-4">Owner</th>
-                        <th className="py-3 px-4">Primary Business</th>
-                        <th className="py-3 px-4">Contact</th>
-                        <th className="py-3 px-4">KYC Status</th>
-                        <th className="py-3 px-4">Wallet Balance</th>
-                        <th className="py-3 px-4">Registered</th>
-                        <th className="py-3 px-4 text-right">Action</th>
+                        <th className="py-3.5 px-4">Owner</th>
+                        <th className="py-3.5 px-4">Primary Business</th>
+                        <th className="py-3.5 px-4">Contact</th>
+                        <th className="py-3.5 px-4">KYC Status</th>
+                        <th className="py-3.5 px-4">Wallet Balance</th>
+                        <th className="py-3.5 px-4">Registered</th>
+                        <th className="py-3.5 px-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
@@ -435,46 +435,46 @@ export default function StaffMerchantsPage() {
                             key={m.id}
                             className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"
                           >
-                            <td className="py-3 px-4">
+                            <td className="py-3.5 px-4">
                               <div className="font-medium text-slate-900 dark:text-white">
                                 {fullName}
                               </div>
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
                                 {m.ownerBusinesses?.length || 1} business
                                 {(m.ownerBusinesses?.length || 1) === 1 ? '' : 'es'}
                               </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <div className="font-medium text-slate-900 dark:text-white truncate max-w-[180px]">
+                            <td className="py-3.5 px-4">
+                              <div className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
                                 {primaryBiz?.name || m.name || 'N/A'}
                               </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <div className="text-slate-800 dark:text-slate-200 truncate max-w-[190px]">
+                            <td className="py-3.5 px-4">
+                              <div className="text-slate-800 dark:text-slate-200 truncate max-w-[210px]">
                                 {m.ownerEmail}
                               </div>
                               {m.ownerPhone && (
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
                                   {m.ownerPhone}
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-4">{renderStatusDot(m.kycStatus)}</td>
-                            <td className="py-3 px-4 font-semibold tabular-nums text-slate-900 dark:text-white">
+                            <td className="py-3.5 px-4">{renderStatusDot(m.kycStatus)}</td>
+                            <td className="py-3.5 px-4 font-semibold tabular-nums text-slate-900 dark:text-white">
                               {m.wallets?.formattedMain || '₦0.00'}
                             </td>
-                            <td className="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">
                               {new Date(m.createdAt).toLocaleDateString('en-NG', {
                                 day: 'numeric',
                                 month: 'short',
                                 year: 'numeric',
                               })}
                             </td>
-                            <td className="py-3 px-4 text-right">
+                            <td className="py-3.5 px-4 text-right">
                               <button
                                 type="button"
                                 onClick={() => setSelectedMerchant(m)}
-                                className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium text-slate-900 dark:text-white transition-colors"
+                                className="h-9 px-3.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs sm:text-sm font-medium text-slate-900 dark:text-white transition-colors"
                               >
                                 View
                               </button>
@@ -561,7 +561,7 @@ export default function StaffMerchantsPage() {
                   placeholder="Search verification attempts by NIN..."
                   value={kycSearch}
                   onChange={(e) => setKycSearch(e.target.value)}
-                  className="w-full h-11 sm:h-10 pl-10 pr-3.5 text-sm sm:text-xs rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
+                  className="w-full h-11 pl-10 pr-3.5 text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
                 />
               </div>
 
@@ -579,7 +579,7 @@ export default function StaffMerchantsPage() {
               <div className="sm:col-span-2 flex gap-2">
                 <button
                   type="submit"
-                  className="flex-1 h-11 sm:h-10 px-4 rounded-lg text-xs font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
+                  className="flex-1 h-11 px-4 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
                 >
                   Search
                 </button>
@@ -655,16 +655,16 @@ export default function StaffMerchantsPage() {
                   aria-label="KYC verification records table"
                   className="overflow-auto max-h-[68dvh] focus:outline-none"
                 >
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-medium">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">
                       <tr>
-                        <th className="py-3 px-4">Applicant</th>
-                        <th className="py-3 px-4">NIN</th>
-                        <th className="py-3 px-4">DOB</th>
-                        <th className="py-3 px-4">Match</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Notes</th>
-                        <th className="py-3 px-4 text-right">Date</th>
+                        <th className="py-3.5 px-4">Applicant</th>
+                        <th className="py-3.5 px-4">NIN</th>
+                        <th className="py-3.5 px-4">DOB</th>
+                        <th className="py-3.5 px-4">Match</th>
+                        <th className="py-3.5 px-4">Status</th>
+                        <th className="py-3.5 px-4">Notes</th>
+                        <th className="py-3.5 px-4 text-right">Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
