@@ -440,26 +440,30 @@ export class DataService {
           })
           .where(eq(serviceTransactions.id, txnRow.id));
 
-        await ledgerService.recordDoubleEntry({
-          businessId: input.businessId,
-          reference: clientRef,
-          type: LedgerEntryType.SERVICE_PAYMENT,
-          category: 'DATA_PURCHASE',
-          description: `Data bundle purchase (Processing): ${plan.name} (${plan.dataAllowance}) to ${normalizedPhone}`,
-          transactionId: txnRow.id,
-          debit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo,
-            balanceAfterKobo,
-          },
-          credit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo: 0n,
-            balanceAfterKobo: amountToDebitKobo,
-          },
-        });
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'DATA_PURCHASE',
+            description: `Data bundle purchase (Processing): ${plan.name} (${plan.dataAllowance}) to ${normalizedPhone}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((err) => {
+            console.error('[DataService] Processing ledger recording warning:', err);
+          });
 
         const processingReceipt = this.buildReceipt({
           transactionId: txnRow.id,
@@ -508,26 +512,30 @@ export class DataService {
         .where(eq(serviceTransactions.id, txnRow.id));
 
       // 7. Post balanced Zero-Sum Financial Ledger entry
-      await ledgerService.recordDoubleEntry({
-        businessId: input.businessId,
-        reference: clientRef,
-        type: LedgerEntryType.SERVICE_PAYMENT,
-        category: 'DATA_PURCHASE',
-        description: `Data bundle purchase: ${plan.name} (${plan.dataAllowance}) to ${normalizedPhone}`,
-        transactionId: txnRow.id,
-        debit: {
-          walletId: mainWallet.id,
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo,
-          balanceAfterKobo,
-        },
-        credit: {
-          walletId: mainWallet.id, // Platform clearing balance
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo: 0n,
-          balanceAfterKobo: amountToDebitKobo,
-        },
-      });
+      await ledgerService
+        .recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'DATA_PURCHASE',
+          description: `Data bundle purchase: ${plan.name} (${plan.dataAllowance}) to ${normalizedPhone}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing balance
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        })
+        .catch((err) => {
+          console.error('[DataService] Ledger recording warning:', err);
+        });
 
       const receipt = this.buildReceipt({
         transactionId: txnRow.id,

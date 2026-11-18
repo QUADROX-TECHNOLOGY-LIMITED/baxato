@@ -89,6 +89,11 @@ export interface TransactionStatusResult {
   units?: string;
   tariff?: string;
   feeder?: string;
+  pinData?: {
+    pin: string;
+    serialNumber?: string;
+    instructions?: string;
+  };
   rawResponse?: Record<string, unknown>;
 }
 

@@ -30,12 +30,14 @@ import {
   or,
   desc,
   gte,
+  lte,
   ilike,
   sql,
   inArray,
 } from '@baxato/database';
 import { requirePlatformStaff, requirePlatformAdmin } from '../plugins/auth.plugin.js';
 import { requirePlatformPermission } from '../plugins/rbac.plugin.js';
+import { parseZonedDateRange } from '../utils/date-range.js';
 import {
   providerRouterService,
   ProviderRoutingStrategy,
@@ -96,6 +98,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(users.role, UserRole.BUSINESS_OWNER));
 
     // 3. Provider health & routing table
+    await providerRouterService.hydratePersistedRouting();
     const providerHealth = await providerRouterService.getAllProviderHealth().catch(() => []);
     const routingConfig = providerRouterService.getRoutingConfig();
 
@@ -307,6 +310,8 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       serviceType?: string;
       status?: string;
       businessId?: string;
+      startDate?: string;
+      endDate?: string;
     };
 
     const page = Math.max(1, parseInt(query.page || '1', 10));
@@ -324,7 +329,25 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (query.status && query.status !== 'ALL') {
-      conditions.push(eq(serviceTransactions.status, query.status as TransactionStatus));
+      const normalizedStatus = query.status.trim().toUpperCase();
+      if (normalizedStatus === TransactionStatus.PENDING) {
+        conditions.push(
+          or(
+            eq(serviceTransactions.status, TransactionStatus.PENDING),
+            eq(serviceTransactions.status, TransactionStatus.PROCESSING),
+          ),
+        );
+      } else {
+        conditions.push(eq(serviceTransactions.status, normalizedStatus as TransactionStatus));
+      }
+    }
+
+    const { start, end } = parseZonedDateRange(query.startDate, query.endDate);
+    if (start) {
+      conditions.push(gte(serviceTransactions.createdAt, start));
+    }
+    if (end) {
+      conditions.push(lte(serviceTransactions.createdAt, end));
     }
 
     if (query.search && query.search.trim()) {
@@ -1284,6 +1307,7 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
    * Live provider connectivity, circuit breaker metrics, and routing table.
    */
   fastify.get('/providers/health', async (request, reply) => {
+    await providerRouterService.hydratePersistedRouting();
     const providerStatuses = await providerRouterService.getAllProviderHealth();
     const routingTable = providerRouterService.getRoutingConfig();
 
@@ -1330,12 +1354,23 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
 
+    await providerRouterService.hydratePersistedRouting();
     const previousConfigs = providerRouterService.getRoutingConfig(body.serviceType);
     const updated = providerRouterService.updateRoutingConfig(
       body.serviceType,
       body.strategy,
       body.allowFailover ?? true,
     );
+
+    // Persist active routing strategy in PostgreSQL system_settings across restarts/deploys
+    await serviceControlsService
+      .updateSettings(
+        { serviceRouting: { [body.serviceType]: body.strategy } },
+        request.user?.id,
+      )
+      .catch((err) => {
+        console.error('[AdminRoutes] Failed to persist service routing setting:', err);
+      });
 
     // Audit the routing update executed by Staff
     await auditService.log({

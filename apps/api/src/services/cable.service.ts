@@ -604,6 +604,10 @@ export class CableService {
     // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('CABLE');
+    const initialRoute =
+      typeof this.router.resolveDynamicRouting === 'function'
+        ? await this.router.resolveDynamicRouting(ServiceType.CABLE_TV)
+        : { primaryName: 'MONNIFY' };
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;
     try {
@@ -619,7 +623,7 @@ export class CableService {
           totalAmount: amountToDebitKobo,
           status: TransactionStatus.PROCESSING,
           recipient: cleanSmartcard,
-          providerName: 'MONNIFY' as any,
+          providerName: initialRoute.primaryName as any,
           clientReference: clientRef,
           requestReference,
           metadata: {
@@ -689,26 +693,30 @@ export class CableService {
           })
           .where(eq(serviceTransactions.id, txnRow.id));
 
-        await ledgerService.recordDoubleEntry({
-          businessId: input.businessId,
-          reference: clientRef,
-          type: LedgerEntryType.SERVICE_PAYMENT,
-          category: 'CABLE_TV_PURCHASE',
-          description: `Cable TV subscription (Processing): ${bouquet.name} on ${bouquet.operatorName} to smartcard ${cleanSmartcard}`,
-          transactionId: txnRow.id,
-          debit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo,
-            balanceAfterKobo,
-          },
-          credit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo: 0n,
-            balanceAfterKobo: amountToDebitKobo,
-          },
-        });
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'CABLE_TV_PURCHASE',
+            description: `Cable TV subscription (Processing): ${bouquet.name} on ${bouquet.operatorName} to smartcard ${cleanSmartcard}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((err) => {
+            console.error('[CableService] Processing ledger recording warning:', err);
+          });
 
         const receipt: CableReceiptDto = {
           transactionId: txnRow.id,
@@ -763,26 +771,30 @@ export class CableService {
         .where(eq(serviceTransactions.id, txnRow.id));
 
       // 7. Post balanced Zero-Sum Financial Ledger entry
-      await ledgerService.recordDoubleEntry({
-        businessId: input.businessId,
-        reference: clientRef,
-        type: LedgerEntryType.SERVICE_PAYMENT,
-        category: 'CABLE_TV_PURCHASE',
-        description: `Cable TV subscription: ${bouquet.name} on ${bouquet.operatorName} to smartcard ${cleanSmartcard}`,
-        transactionId: txnRow.id,
-        debit: {
-          walletId: mainWallet.id,
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo,
-          balanceAfterKobo,
-        },
-        credit: {
-          walletId: mainWallet.id, // Platform clearing balance
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo: 0n,
-          balanceAfterKobo: amountToDebitKobo,
-        },
-      });
+      await ledgerService
+        .recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'CABLE_TV_PURCHASE',
+          description: `Cable TV subscription: ${bouquet.name} on ${bouquet.operatorName} to smartcard ${cleanSmartcard}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing balance
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        })
+        .catch((err) => {
+          console.error('[CableService] Ledger recording warning after successful vend:', err);
+        });
 
       const receipt: CableReceiptDto = {
         transactionId: txnRow.id,

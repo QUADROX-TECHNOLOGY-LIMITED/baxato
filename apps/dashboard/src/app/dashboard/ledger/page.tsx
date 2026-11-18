@@ -20,6 +20,7 @@ import {
   Layers,
   X,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
@@ -145,6 +146,8 @@ function LedgerContent() {
   const [selectedService, setSelectedService] = useState<string>(initialService);
   const [selectedChannel, setSelectedChannel] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [startDate, setStartDate] = useState<string>(() => searchParams.get('startDate') || '');
+  const [endDate, setEndDate] = useState<string>(() => searchParams.get('endDate') || '');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [openDropdown, setOpenDropdown] = useState<'service' | 'channel' | 'status' | null>(null);
@@ -159,6 +162,11 @@ function LedgerContent() {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const hasLoadedOnceRef = useRef<boolean>(false);
   const [selectedTransaction, setSelectedTransaction] = useState<UnifiedTransaction | null>(null);
+  const [checkingTxId, setCheckingTxId] = useState<string | null>(null);
+  const [statusFeedback, setStatusFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
@@ -212,10 +220,20 @@ function LedgerContent() {
     if (selectedService && selectedService !== 'ALL') params.set('serviceType', selectedService);
     if (selectedChannel && selectedChannel !== 'ALL') params.set('channel', selectedChannel);
     if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
     if (searchQuery.trim()) params.set('search', searchQuery.trim());
     params.set('limit', customLimit.toString());
     params.set('offset', customOffset.toString());
     return params;
+  };
+
+  const getActiveBizHeaders = (authToken: string): Record<string, string> => {
+    const activeBiz = getStoredBusiness();
+    return {
+      Authorization: `Bearer ${authToken}`,
+      ...(activeBiz?.id ? { 'x-business-id': activeBiz.id } : {}),
+    };
   };
 
   // Load Transactions
@@ -236,7 +254,7 @@ function LedgerContent() {
       const params = buildFilterParams(limit, offset);
 
       const res = await fetch(`/api/transactions?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: getActiveBizHeaders(authToken),
       });
       const data = await res.json().catch(() => null);
 
@@ -267,7 +285,100 @@ function LedgerContent() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [selectedService, selectedChannel, selectedStatus, debouncedSearch, page]);
+  }, [selectedService, selectedChannel, selectedStatus, startDate, endDate, debouncedSearch, page]);
+
+  const handleCheckStatus = async (txId: string, silentIfUnchanged = false) => {
+    if (!txId || checkingTxId) return;
+    try {
+      setCheckingTxId(txId);
+      if (!silentIfUnchanged) {
+        setStatusFeedback(null);
+      }
+      const authToken = getStoredAuthToken();
+      if (!authToken) {
+        clearSessionAndRedirect('expired');
+        return;
+      }
+
+      const res = await fetch(`/api/transactions/${encodeURIComponent(txId)}/check-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getActiveBizHeaders(authToken),
+        },
+      });
+      const json = await res.json().catch(() => null);
+
+      if (res.ok && json?.success && json?.data) {
+        const updatedTx: UnifiedTransaction | undefined = json.data.transaction;
+        const nextStatus: UnifiedTransaction['status'] =
+          json.data.status || updatedTx?.status || 'PROCESSING';
+
+        if (updatedTx) {
+          setTransactions((prev) =>
+            prev.map((item) => (item.id === txId ? { ...item, ...updatedTx } : item)),
+          );
+          setSelectedTransaction((prev) =>
+            prev && prev.id === txId ? { ...prev, ...updatedTx } : prev,
+          );
+        }
+
+        if (json.data.refunded || json.data.updated) {
+          window.dispatchEvent(new Event('bx_wallet_updated'));
+        }
+
+        if (nextStatus === 'SUCCESSFUL') {
+          setStatusFeedback({
+            type: 'success',
+            message: json.data.message || 'Transaction delivered.',
+          });
+        } else if (nextStatus === 'FAILED' || nextStatus === 'REVERSED') {
+          setStatusFeedback({
+            type: 'error',
+            message: json.data.message || 'Transaction failed and wallet was refunded.',
+          });
+        } else if (!silentIfUnchanged) {
+          setStatusFeedback({
+            type: 'warning',
+            message: json.data.message || 'Still processing. Check again shortly.',
+          });
+        }
+      } else if (!silentIfUnchanged) {
+        setStatusFeedback({
+          type: 'error',
+          message: json?.error?.message || 'Unable to check status right now.',
+        });
+      }
+    } catch {
+      if (!silentIfUnchanged) {
+        setStatusFeedback({
+          type: 'error',
+          message: 'Network error checking status.',
+        });
+      }
+    } finally {
+      setCheckingTxId(null);
+    }
+  };
+
+  const handleOpenTransactionModal = (tx: UnifiedTransaction) => {
+    setSelectedTransaction(tx);
+    setStatusFeedback(null);
+    if (tx.status === 'PROCESSING' || tx.status === 'PENDING') {
+      void handleCheckStatus(tx.id, true);
+    }
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setSelectedService('ALL');
+    setSelectedChannel('ALL');
+    setSelectedStatus('ALL');
+    setStartDate('');
+    setEndDate('');
+    setPage(1);
+  };
 
   const copyToClipboard = (text: string, key: string = text) => {
     if (!text || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -285,7 +396,7 @@ function LedgerContent() {
       const params = buildFilterParams(1000, 0);
 
       const res = await fetch(`/api/transactions?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: getActiveBizHeaders(authToken),
       });
       const data = await res.json().catch(() => null);
 
@@ -395,7 +506,9 @@ function LedgerContent() {
     Boolean(searchQuery.trim()) ||
     selectedService !== 'ALL' ||
     selectedChannel !== 'ALL' ||
-    selectedStatus !== 'ALL';
+    selectedStatus !== 'ALL' ||
+    Boolean(startDate) ||
+    Boolean(endDate);
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#070D18]">
@@ -460,147 +573,201 @@ function LedgerContent() {
           {/* Compact Filter Row */}
           <div
             ref={filterBarRef}
-            className="grid grid-cols-2 sm:grid-cols-12 gap-2.5"
+            className="space-y-2.5"
           >
-            {/* Search Input */}
-            <div className="col-span-2 sm:col-span-5 relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search reference or recipient..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 text-xs rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/20 focus:border-[#126BEB]"
-              />
-            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-12 gap-2.5">
+              {/* Search Input */}
+              <div className="col-span-2 sm:col-span-5 relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  aria-label="Search transactions"
+                  placeholder="Search reference or recipient..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-11 pl-10 pr-3 text-xs sm:text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#126BEB]/20 focus:border-[#126BEB]"
+                />
+              </div>
 
-            {/* Service Selector */}
-            <div className="col-span-1 sm:col-span-3 relative">
-              <button
-                type="button"
-                onClick={() => setOpenDropdown(openDropdown === 'service' ? null : 'service')}
-                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-              >
-                <span className="flex items-center gap-1.5 truncate">
-                  <activeServiceObj.icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                  <span className="truncate">{activeServiceObj.label}</span>
-                </span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
+              {/* Service Selector */}
+              <div className="col-span-1 sm:col-span-3 relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(openDropdown === 'service' ? null : 'service')}
+                  className="w-full h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <activeServiceObj.icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate">{activeServiceObj.label}</span>
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
 
-              {openDropdown === 'service' && (
-                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
-                  {SERVICE_OPTIONS.map((opt) => {
-                    const Icon = opt.icon;
-                    const isSelected = selectedService === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          setSelectedService(opt.value);
-                          setOpenDropdown(null);
-                          setPage(1);
-                        }}
-                        className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                {openDropdown === 'service' && (
+                  <div className="absolute z-30 left-0 right-0 top-12 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+                    {SERVICE_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const isSelected = selectedService === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setSelectedService(opt.value);
+                            setOpenDropdown(null);
+                            setPage(1);
+                          }}
+                          className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <Icon className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                            <span className="truncate">{opt.label}</span>
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Channel Selector (Dashboard vs API) */}
+              <div className="col-span-1 sm:col-span-2 relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(openDropdown === 'channel' ? null : 'channel')}
+                  className="w-full h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <span className="truncate">{activeChannelObj.label}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+
+                {openDropdown === 'channel' && (
+                  <div className="absolute z-30 left-0 right-0 top-12 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+                    {CHANNEL_OPTIONS.map((opt) => {
+                      const isSelected = selectedChannel === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setSelectedChannel(opt.value);
+                            setOpenDropdown(null);
+                            setPage(1);
+                          }}
+                          className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
                           <span className="truncate">{opt.label}</span>
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Selector */}
+              <div className="col-span-2 sm:col-span-2 relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
+                  className="w-full h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${activeStatusObj.dotColor}`} />
+                    <span className="truncate">{activeStatusObj.label}</span>
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+
+                {openDropdown === 'status' && (
+                  <div className="absolute z-30 left-0 right-0 top-12 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+                    {STATUS_OPTIONS.map((opt) => {
+                      const isSelected = selectedStatus === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStatus(opt.value);
+                            setOpenDropdown(null);
+                            setPage(1);
+                          }}
+                          className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotColor}`} />
+                            <span className="truncate">{opt.label}</span>
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Channel Selector (Dashboard vs API) */}
-            <div className="col-span-1 sm:col-span-2 relative">
-              <button
-                type="button"
-                onClick={() => setOpenDropdown(openDropdown === 'channel' ? null : 'channel')}
-                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-              >
-                <span className="truncate">{activeChannelObj.label}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
+            {/* Date Range Row */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5">
+              <label className="flex items-center gap-2 h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 sm:w-52">
+                <span className="text-[11px] font-medium text-slate-400 shrink-0">From</span>
+                <input
+                  type="date"
+                  aria-label="From date"
+                  value={startDate}
+                  max={endDate || undefined}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setStartDate(next);
+                    if (next && endDate && next > endDate) {
+                      setEndDate(next);
+                    }
+                    setPage(1);
+                  }}
+                  className="w-full min-w-0 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </label>
 
-              {openDropdown === 'channel' && (
-                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
-                  {CHANNEL_OPTIONS.map((opt) => {
-                    const isSelected = selectedChannel === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          setSelectedChannel(opt.value);
-                          setOpenDropdown(null);
-                          setPage(1);
-                        }}
-                        className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <span className="truncate">{opt.label}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              <label className="flex items-center gap-2 h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus-within:border-[#126BEB] focus-within:ring-2 focus-within:ring-[#126BEB]/20 sm:w-52">
+                <span className="text-[11px] font-medium text-slate-400 shrink-0">To</span>
+                <input
+                  type="date"
+                  aria-label="To date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEndDate(next);
+                    if (next && startDate && next < startDate) {
+                      setStartDate(next);
+                    }
+                    setPage(1);
+                  }}
+                  className="w-full min-w-0 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </label>
 
-            {/* Status Selector */}
-            <div className="col-span-2 sm:col-span-2 relative">
-              <button
-                type="button"
-                onClick={() => setOpenDropdown(openDropdown === 'status' ? null : 'status')}
-                className="w-full h-10 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-100 flex items-center justify-between gap-2 font-medium cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-              >
-                <span className="flex items-center gap-2 truncate">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${activeStatusObj.dotColor}`} />
-                  <span className="truncate">{activeStatusObj.label}</span>
-                </span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
-
-              {openDropdown === 'status' && (
-                <div className="absolute z-30 left-0 right-0 top-11 bg-white dark:bg-[#0B1528] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
-                  {STATUS_OPTIONS.map((opt) => {
-                    const isSelected = selectedStatus === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          setSelectedStatus(opt.value);
-                          setOpenDropdown(null);
-                          setPage(1);
-                        }}
-                        className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-slate-100 dark:bg-slate-800 text-[#126BEB] dark:text-[#38BDF8] font-semibold'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotColor}`} />
-                          <span className="truncate">{opt.label}</span>
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="col-span-2 sm:col-span-1 h-11 px-3.5 rounded-lg text-xs sm:text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Reset
+                </button>
               )}
             </div>
           </div>
@@ -730,13 +897,32 @@ function LedgerContent() {
                           </td>
 
                           <td className="py-3 px-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedTransaction(tx)}
-                              className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                            >
-                              View
-                            </button>
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              {(tx.status === 'PROCESSING' || tx.status === 'PENDING') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTransaction(tx);
+                                    setStatusFeedback(null);
+                                    void handleCheckStatus(tx.id);
+                                  }}
+                                  disabled={checkingTxId === tx.id}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/70 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-medium text-amber-800 dark:text-amber-300 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  <RefreshCw
+                                    className={`w-3 h-3 ${checkingTxId === tx.id ? 'animate-spin' : ''}`}
+                                  />
+                                  <span>Check Status</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenTransactionModal(tx)}
+                                className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                              >
+                                View
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -836,6 +1022,43 @@ function LedgerContent() {
                   </span>
                 </div>
               </div>
+
+              {/* In-flight Status Check Banner */}
+              {(selectedTransaction.status === 'PROCESSING' ||
+                selectedTransaction.status === 'PENDING') && (
+                <div className="px-3.5 py-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/35 border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-amber-800 dark:text-amber-300">
+                    Order is processing. Wallet remains debited unless it fails.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleCheckStatus(selectedTransaction.id)}
+                    disabled={checkingTxId === selectedTransaction.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-200/80 dark:bg-amber-900/70 hover:bg-amber-200 dark:hover:bg-amber-800 text-amber-950 dark:text-amber-100 text-xs font-semibold shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${
+                        checkingTxId === selectedTransaction.id ? 'animate-spin' : ''
+                      }`}
+                    />
+                    <span>Check Status</span>
+                  </button>
+                </div>
+              )}
+
+              {statusFeedback && (
+                <div
+                  className={`px-3.5 py-2.5 rounded-xl border text-xs font-medium ${
+                    statusFeedback.type === 'success'
+                      ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                      : statusFeedback.type === 'error'
+                        ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'
+                        : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {statusFeedback.message}
+                </div>
+              )}
 
               {/* Clean Key-Value List */}
               <dl className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">

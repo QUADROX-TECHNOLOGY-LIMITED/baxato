@@ -1218,14 +1218,31 @@ export function createMockDatabase() {
                     return inMemoryDb.serviceTransactions.filter((s) => s.createdAt >= (p.val as Date));
                   }
                 }
+                if (p.type === 'lte') {
+                  const col = getColName(p.col);
+                  if (col === 'created_at' || col === 'createdat') {
+                    return inMemoryDb.serviceTransactions.filter((s) => s.createdAt <= (p.val as Date));
+                  }
+                }
                 if (p.type === 'and' && Array.isArray(p.conditions)) {
-                  const conds = p.conditions as Array<{ col: unknown; val: unknown }>;
+                  const conds = p.conditions as Array<{ type?: string; col: unknown; val: unknown }>;
                   return inMemoryDb.serviceTransactions.filter((s) => {
                     for (const c of conds) {
                       const col = getColName(c.col);
-                      if ((col === 'business_id' || col === 'businessid') && s.businessId !== c.val) return false;
-                      if ((col === 'service_type' || col === 'servicetype') && s.serviceType !== c.val) return false;
-                      if (col === 'id' && s.id !== c.val) return false;
+                      if (c.type === 'gte' && (col === 'created_at' || col === 'createdat')) {
+                        if (new Date(s.createdAt) < new Date(c.val as Date)) return false;
+                        continue;
+                      }
+                      if (c.type === 'lte' && (col === 'created_at' || col === 'createdat')) {
+                        if (new Date(s.createdAt) > new Date(c.val as Date)) return false;
+                        continue;
+                      }
+                      if (c.type === 'eq' || !c.type) {
+                        if ((col === 'business_id' || col === 'businessid') && s.businessId !== c.val) return false;
+                        if ((col === 'service_type' || col === 'servicetype') && s.serviceType !== c.val) return false;
+                        if (col === 'status' && s.status !== c.val) return false;
+                        if (col === 'id' && s.id !== c.val) return false;
+                      }
                     }
                     return true;
                   });

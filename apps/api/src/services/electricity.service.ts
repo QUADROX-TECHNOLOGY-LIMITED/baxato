@@ -818,6 +818,10 @@ export class ElectricityService {
     // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('ELEC');
+    const initialRoute =
+      typeof this.router.resolveDynamicRouting === 'function'
+        ? await this.router.resolveDynamicRouting(ServiceType.ELECTRICITY)
+        : { primaryName: 'MONNIFY' };
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;
     try {
@@ -833,7 +837,7 @@ export class ElectricityService {
           totalAmount: amountToDebitKobo,
           status: TransactionStatus.PROCESSING,
           recipient: cleanMeter,
-          providerName: 'MONNIFY' as any,
+          providerName: initialRoute.primaryName as any,
           clientReference: clientRef,
           requestReference,
           metadata: {
@@ -924,26 +928,30 @@ export class ElectricityService {
           })
           .where(eq(serviceTransactions.id, txnRow.id));
 
-        await ledgerService.recordDoubleEntry({
-          businessId: input.businessId,
-          reference: clientRef,
-          type: LedgerEntryType.SERVICE_PAYMENT,
-          category: 'ELECTRICITY_PURCHASE',
-          description: `Electricity purchase (Processing): ${formatNairaFromKobo(faceAmountKobo)} for ${config.name} (${input.meterType}) meter ${cleanMeter}`,
-          transactionId: txnRow.id,
-          debit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo,
-            balanceAfterKobo,
-          },
-          credit: {
-            walletId: mainWallet.id, // Platform clearing balance
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo: 0n,
-            balanceAfterKobo: amountToDebitKobo,
-          },
-        });
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'ELECTRICITY_PURCHASE',
+            description: `Electricity purchase (Processing): ${formatNairaFromKobo(faceAmountKobo)} for ${config.name} (${input.meterType}) meter ${cleanMeter}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id, // Platform clearing balance
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((err) => {
+            console.error('[ElectricityService] Processing ledger recording warning:', err);
+          });
 
         const receipt: ElectricityReceiptDto = {
           transactionId: txnRow.id,
@@ -1022,26 +1030,30 @@ export class ElectricityService {
         .where(eq(serviceTransactions.id, txnRow.id));
 
       // 7. Post balanced Zero-Sum Financial Ledger entry
-      await ledgerService.recordDoubleEntry({
-        businessId: input.businessId,
-        reference: clientRef,
-        type: LedgerEntryType.SERVICE_PAYMENT,
-        category: 'ELECTRICITY_PURCHASE',
-        description: `Electricity purchase: ${formatNairaFromKobo(faceAmountKobo)} for ${config.name} (${input.meterType}) meter ${cleanMeter}`,
-        transactionId: txnRow.id,
-        debit: {
-          walletId: mainWallet.id,
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo,
-          balanceAfterKobo,
-        },
-        credit: {
-          walletId: mainWallet.id, // Platform clearing balance
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo: 0n,
-          balanceAfterKobo: amountToDebitKobo,
-        },
-      });
+      await ledgerService
+        .recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'ELECTRICITY_PURCHASE',
+          description: `Electricity purchase: ${formatNairaFromKobo(faceAmountKobo)} for ${config.name} (${input.meterType}) meter ${cleanMeter}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing balance
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        })
+        .catch((err) => {
+          console.error('[ElectricityService] Ledger recording warning after successful vend:', err);
+        });
 
       const receipt: ElectricityReceiptDto = {
         transactionId: txnRow.id,
@@ -1320,7 +1332,14 @@ export class ElectricityService {
         return receipt;
       }
 
-      if (requeryResult.status === TransactionStatus.FAILED) {
+      const isConfirmedFailed =
+        requeryResult.status === TransactionStatus.FAILED &&
+        !/not\s*found|invalid\s*request/i.test(String(requeryResult.responseMessage || '')) &&
+        !['UNKNOWN', 'NETWORK_ERROR', '20010', '99', '099', '015'].includes(
+          String(requeryResult.responseCode || '').toUpperCase(),
+        );
+
+      if (isConfirmedFailed) {
         // Atomically claim terminal FAILED transition BEFORE crediting wallet to prevent double refunds
         const [claimed] = await db
           .update(serviceTransactions)

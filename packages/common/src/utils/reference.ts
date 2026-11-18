@@ -6,16 +6,29 @@ const crockfordUppercaseAlphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 const generateNumeric = (len: number) => customAlphabet(numericAlphabet, len)();
 const generateAlphanumeric16 = customAlphabet(alphanumericAlphabet, 16);
-const generateRefCode10 = customAlphabet(crockfordUppercaseAlphabet, 10);
+const generateRefCode8 = customAlphabet(crockfordUppercaseAlphabet, 8);
 
 /**
- * Generates a branded BAXATO transaction request reference (e.g. 'BX-20261118-8F3K9M2P4Q').
+ * Generates a branded BAXATO transaction request reference in Africa/Lagos (WAT) time
+ * (e.g. '202611181135BX8F3K9M2P').
+ * Natively compatible with BAXATO ledger tracking, Monnify `reference`/`vendReference`,
+ * and VTPass `request_id` (YYYYMMDDHHII in Africa/Lagos + alphanumeric suffix).
  */
 export function generateBaxatoReference(date: Date = new Date()): string {
-  const yyyy = date.getUTCFullYear();
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  return `BX-${yyyy}${mm}${dd}-${generateRefCode10()}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const pick = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  const hourRaw = pick('hour');
+  const hh = hourRaw === '24' ? '00' : hourRaw;
+  return `${pick('year')}${pick('month')}${pick('day')}${hh}${pick('minute')}BX${generateRefCode8()}`;
 }
 
 /**

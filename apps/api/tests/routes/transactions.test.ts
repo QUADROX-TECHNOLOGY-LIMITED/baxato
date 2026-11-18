@@ -10,6 +10,7 @@ import {
 import { generateToken } from '../../src/plugins/auth.plugin';
 import { inMemoryDb } from '../test-utils/mock-db';
 import { buildTransactionConditions } from '../../src/routes/transactions';
+import { providerRouterService } from '../../src/services/providers';
 
 vi.mock('@baxato/database', async () => {
   const { createMockDatabase } = await import('../test-utils/mock-db');
@@ -52,6 +53,15 @@ describe('Unified Transactions Endpoint (/transactions)', () => {
       updatedAt: new Date(),
     });
 
+    inMemoryDb.wallets.push({
+      id: 'wal_tx_main_100',
+      businessId: testBizId,
+      type: 'MAIN',
+      balance: 1000000n,
+      lockedBalance: 0n,
+      version: 1,
+    });
+
     inMemoryDb.serviceTransactions.push(
       {
         id: 'txn_web_1',
@@ -69,8 +79,8 @@ describe('Unified Transactions Endpoint (/transactions)', () => {
         clientReference: 'CLIENT_WEB_1',
         errorMessage: 'Upstream gateway timeout on DISCO node',
         metadata: { disco: 'IKEDC' },
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date('2026-11-10T12:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T12:00:00.000Z'),
       },
       {
         id: 'txn_api_1',
@@ -88,8 +98,8 @@ describe('Unified Transactions Endpoint (/transactions)', () => {
         clientReference: 'CLIENT_API_1',
         errorMessage: null,
         metadata: { channel: 'API' },
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date('2026-11-18T09:00:00.000Z'),
+        updatedAt: new Date('2026-11-18T09:00:00.000Z'),
       },
     );
 
@@ -160,6 +170,195 @@ describe('Unified Transactions Endpoint (/transactions)', () => {
     const webConds = buildTransactionConditions(testBizId, { channel: 'WEB' });
     expect(webConds).toHaveLength(2);
     expect((webConds[1] as any).type).toBe('and');
+  });
+
+  it('filters transactions by startDate and endDate calendar bounds', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/transactions?startDate=2026-11-18&endDate=2026-11-18',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ApiResponse<{ transactions: any[]; total: number }>>();
+    expect(body.success).toBe(true);
+    expect(body.data?.transactions).toHaveLength(1);
+    expect(body.data?.transactions[0]?.id).toBe('txn_api_1');
+
+    const badRes = await app.inject({
+      method: 'GET',
+      url: '/transactions?startDate=2026-02-31',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(badRes.statusCode).toBe(400);
+  });
+
+  it('checks PROCESSING transaction status: keeps wallet debited while processing, updates to SUCCESSFUL on delivery, and refunds once on confirmed FAILED', async () => {
+    inMemoryDb.serviceTransactions.push(
+      {
+        id: 'txn_proc_ok',
+        businessId: testBizId,
+        userId: ownerId,
+        serviceType: ServiceType.AIRTIME,
+        amount: 20000n,
+        fee: 0n,
+        discount: 400n,
+        totalAmount: 19600n,
+        status: TransactionStatus.PROCESSING,
+        recipient: '08011111111',
+        providerName: 'VTPASS',
+        requestReference: '202611181135BXPROC0001',
+        clientReference: 'CLIENT_PROC_1',
+        errorMessage: null,
+        metadata: { network: 'MTN' },
+        createdAt: new Date('2026-11-18T10:35:00.000Z'),
+        updatedAt: new Date('2026-11-18T10:35:00.000Z'),
+      },
+      {
+        id: 'txn_proc_fail',
+        businessId: testBizId,
+        userId: ownerId,
+        serviceType: ServiceType.AIRTIME,
+        amount: 50000n,
+        fee: 0n,
+        discount: 1000n,
+        totalAmount: 49000n,
+        status: TransactionStatus.PROCESSING,
+        recipient: '08030000000',
+        providerName: 'VTPASS',
+        requestReference: '202611181136BXPROC0002',
+        clientReference: 'CLIENT_PROC_2',
+        errorMessage: null,
+        metadata: { network: 'MTN' },
+        createdAt: new Date('2026-11-18T10:36:00.000Z'),
+        updatedAt: new Date('2026-11-18T10:36:00.000Z'),
+      },
+      {
+        id: 'txn_other_biz',
+        businessId: 'biz_other_999',
+        userId: 'usr_other_999',
+        serviceType: ServiceType.AIRTIME,
+        amount: 10000n,
+        fee: 0n,
+        discount: 0n,
+        totalAmount: 10000n,
+        status: TransactionStatus.PROCESSING,
+        recipient: '08099999999',
+        providerName: 'VTPASS',
+        requestReference: '202611181137BXOTHER999',
+        clientReference: 'CLIENT_OTHER_999',
+        errorMessage: null,
+        metadata: {},
+        createdAt: new Date('2026-11-18T10:37:00.000Z'),
+        updatedAt: new Date('2026-11-18T10:37:00.000Z'),
+      },
+    );
+
+    const requerySpy = vi.spyOn(providerRouterService, 'requeryTransaction');
+
+    // 1. Still processing -> wallet stays untouched
+    requerySpy.mockResolvedValueOnce({
+      status: TransactionStatus.PROCESSING,
+      providerName: 'VTPASS' as any,
+      providerReference: '202611181135BXPROC0001',
+      requestReference: '202611181135BXPROC0001',
+      responseCode: '099',
+      responseMessage: 'TRANSACTION PROCESSING',
+    });
+
+    const stillProcRes = await app.inject({
+      method: 'POST',
+      url: '/transactions/txn_proc_ok/check-status',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(stillProcRes.statusCode).toBe(200);
+    expect(stillProcRes.json<ApiResponse<any>>().data.status).toBe('PROCESSING');
+    expect(inMemoryDb.wallets[0]?.balance).toBe(1000000n);
+
+    // 2. Delivered -> updates to SUCCESSFUL without crediting wallet
+    requerySpy.mockResolvedValueOnce({
+      status: TransactionStatus.SUCCESSFUL,
+      providerName: 'VTPASS' as any,
+      providerReference: '202611181135BXPROC0001',
+      requestReference: '202611181135BXPROC0001',
+      responseCode: '000',
+      responseMessage: 'TRANSACTION SUCCESSFUL',
+    });
+
+    const deliveredRes = await app.inject({
+      method: 'POST',
+      url: '/transactions/txn_proc_ok/check-status',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(deliveredRes.statusCode).toBe(200);
+    const deliveredData = deliveredRes.json<ApiResponse<any>>().data;
+    expect(deliveredData.status).toBe('SUCCESSFUL');
+    expect(deliveredData.updated).toBe(true);
+    expect(deliveredData.refunded).toBe(false);
+    expect(deliveredData.transaction).not.toHaveProperty('providerName');
+    expect(inMemoryDb.wallets[0]?.balance).toBe(1000000n);
+
+    // 3. Confirmed FAILED -> refunds 49000n ONCE, and repeat call does not double-refund
+    requerySpy.mockResolvedValueOnce({
+      status: TransactionStatus.FAILED,
+      providerName: 'VTPASS' as any,
+      providerReference: '202611181136BXPROC0002',
+      requestReference: '202611181136BXPROC0002',
+      responseCode: '016',
+      responseMessage: 'TRANSACTION FAILED',
+    });
+
+    const failedRes = await app.inject({
+      method: 'POST',
+      url: '/transactions/txn_proc_fail/check-status',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(failedRes.statusCode).toBe(200);
+    const failedData = failedRes.json<ApiResponse<any>>().data;
+    expect(failedData.status).toBe('FAILED');
+    expect(failedData.refunded).toBe(true);
+    expect(inMemoryDb.wallets[0]?.balance).toBe(1049000n);
+
+    // Repeat call on already-refunded FAILED transaction must be idempotent
+    const repeatFailedRes = await app.inject({
+      method: 'POST',
+      url: '/transactions/txn_proc_fail/check-status',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(repeatFailedRes.statusCode).toBe(200);
+    expect(repeatFailedRes.json<ApiResponse<any>>().data.refunded).toBe(false);
+    expect(inMemoryDb.wallets[0]?.balance).toBe(1049000n);
+
+    // 4. Cross-tenant isolation -> 404
+    const crossTenantRes = await app.inject({
+      method: 'POST',
+      url: '/transactions/txn_other_biz/check-status',
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        'x-business-id': testBizId,
+      },
+    });
+    expect(crossTenantRes.statusCode).toBe(404);
+
+    requerySpy.mockRestore();
   });
 });
 

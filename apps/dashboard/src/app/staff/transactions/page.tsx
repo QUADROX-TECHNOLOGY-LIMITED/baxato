@@ -77,6 +77,8 @@ export default function StaffTransactionsPage() {
   const [txSearch, setTxSearch] = useState<string>('');
   const [txServiceFilter, setTxServiceFilter] = useState<string>('ALL');
   const [txStatusFilter, setTxStatusFilter] = useState<string>('ALL');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [businessIdFilter, setBusinessIdFilter] = useState<string>('');
   const [txPage, setTxPage] = useState<number>(1);
   const [txPagination, setTxPagination] = useState<any>(null);
@@ -106,11 +108,15 @@ export default function StaffTransactionsPage() {
         const status = params.get('status');
         const serviceType = params.get('serviceType');
         const businessId = params.get('businessId');
+        const fromParam = params.get('startDate');
+        const toParam = params.get('endDate');
 
         if (search) setTxSearch(search);
         if (status) setTxStatusFilter(status);
         if (serviceType) setTxServiceFilter(serviceType);
         if (businessId) setBusinessIdFilter(businessId);
+        if (fromParam) setStartDate(fromParam);
+        if (toParam) setEndDate(toParam);
       }
     } catch {}
     setHasInitializedParams(true);
@@ -123,7 +129,10 @@ export default function StaffTransactionsPage() {
   };
 
   const loadTransactions = useCallback(
-    async (overrideSearch?: string) => {
+    async (
+      overrideSearch?: string,
+      overrideDates?: { startDate: string; endDate: string },
+    ) => {
       try {
         setIsLoadingTx(true);
         setLoadError(null);
@@ -134,6 +143,8 @@ export default function StaffTransactionsPage() {
         }
 
         const effectiveSearch = overrideSearch !== undefined ? overrideSearch : txSearch;
+        const effectiveStart = overrideDates ? overrideDates.startDate : startDate;
+        const effectiveEnd = overrideDates ? overrideDates.endDate : endDate;
         const params = new URLSearchParams({
           page: txPage.toString(),
           limit: '20',
@@ -141,6 +152,8 @@ export default function StaffTransactionsPage() {
         if (effectiveSearch.trim()) params.append('search', effectiveSearch.trim());
         if (txServiceFilter !== 'ALL') params.append('serviceType', txServiceFilter);
         if (txStatusFilter !== 'ALL') params.append('status', txStatusFilter);
+        if (effectiveStart) params.append('startDate', effectiveStart);
+        if (effectiveEnd) params.append('endDate', effectiveEnd);
         if (businessIdFilter) params.append('businessId', businessIdFilter);
 
         const res = await fetch(`/api/admin/transactions?${params.toString()}`, {
@@ -164,13 +177,13 @@ export default function StaffTransactionsPage() {
         setIsLoadingTx(false);
       }
     },
-    [txPage, txSearch, txServiceFilter, txStatusFilter, businessIdFilter],
+    [txPage, txSearch, txServiceFilter, txStatusFilter, startDate, endDate, businessIdFilter],
   );
 
   useEffect(() => {
     if (!hasInitializedParams) return;
     void loadTransactions();
-  }, [hasInitializedParams, txPage, txServiceFilter, txStatusFilter, businessIdFilter]);
+  }, [hasInitializedParams, txPage, txServiceFilter, txStatusFilter, startDate, endDate, businessIdFilter]);
 
   useEffect(() => {
     const handleRefreshEvent = () => {
@@ -193,12 +206,14 @@ export default function StaffTransactionsPage() {
     setTxSearch('');
     setTxServiceFilter('ALL');
     setTxStatusFilter('ALL');
+    setStartDate('');
+    setEndDate('');
     setBusinessIdFilter('');
     setTxPage(1);
     if (typeof window !== 'undefined' && window.location.search) {
       window.history.replaceState({}, '', '/staff/transactions');
     }
-    void loadTransactions('');
+    void loadTransactions('', { startDate: '', endDate: '' });
   };
 
   const handleOpenInspect = (tx: any) => {
@@ -301,6 +316,8 @@ export default function StaffTransactionsPage() {
     Boolean(txSearch.trim()) ||
     txServiceFilter !== 'ALL' ||
     txStatusFilter !== 'ALL' ||
+    Boolean(startDate) ||
+    Boolean(endDate) ||
     Boolean(businessIdFilter);
 
   return (
@@ -313,61 +330,103 @@ export default function StaffTransactionsPage() {
       <search>
         <form
           onSubmit={handleSearchSubmit}
-          className="grid grid-cols-2 sm:grid-cols-12 gap-2.5"
+          className="space-y-2.5"
         >
-          <div className="col-span-2 sm:col-span-5 relative">
-            <Search
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-              aria-hidden="true"
+          <div className="grid grid-cols-2 sm:grid-cols-12 gap-2.5">
+            <div className="col-span-2 sm:col-span-5 relative">
+              <Search
+                className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                aria-label="Search transactions"
+                placeholder="Reference, phone, meter, or smartcard..."
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                className="w-full h-11 pl-10 pr-3.5 text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
+              />
+            </div>
+
+            <StaffFilterSelect
+              className="col-span-1 sm:col-span-3"
+              ariaLabel="Filter by service"
+              options={SERVICE_OPTIONS}
+              value={txServiceFilter}
+              onChange={(val) => {
+                setTxServiceFilter(val);
+                setTxPage(1);
+              }}
             />
-            <input
-              type="search"
-              aria-label="Search transactions"
-              placeholder="Reference, phone, meter, or smartcard..."
-              value={txSearch}
-              onChange={(e) => setTxSearch(e.target.value)}
-              className="w-full h-11 pl-10 pr-3.5 text-sm rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-[#126BEB] dark:focus:border-[#38BDF8] focus:ring-2 focus:ring-[#126BEB]/15"
+
+            <StaffFilterSelect
+              className="col-span-1 sm:col-span-2"
+              ariaLabel="Filter by status"
+              options={STATUS_OPTIONS}
+              value={txStatusFilter}
+              onChange={(val) => {
+                setTxStatusFilter(val);
+                setTxPage(1);
+              }}
             />
+
+            <div className="col-span-2 sm:col-span-2 flex gap-2">
+              <button
+                type="submit"
+                className="flex-1 h-11 px-4 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
+              >
+                Search
+              </button>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="h-11 px-3.5 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
-          <StaffFilterSelect
-            className="col-span-1 sm:col-span-3"
-            ariaLabel="Filter by service"
-            options={SERVICE_OPTIONS}
-            value={txServiceFilter}
-            onChange={(val) => {
-              setTxServiceFilter(val);
-              setTxPage(1);
-            }}
-          />
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5">
+            <label className="flex items-center gap-2 h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm text-slate-800 dark:text-slate-100 focus-within:border-[#126BEB] dark:focus-within:border-[#38BDF8] focus-within:ring-2 focus-within:ring-[#126BEB]/15 sm:w-52">
+              <span className="text-xs font-medium text-slate-400 shrink-0">From</span>
+              <input
+                type="date"
+                aria-label="From date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setStartDate(next);
+                  if (next && endDate && next > endDate) {
+                    setEndDate(next);
+                  }
+                  setTxPage(1);
+                }}
+                className="w-full min-w-0 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
+              />
+            </label>
 
-          <StaffFilterSelect
-            className="col-span-1 sm:col-span-2"
-            ariaLabel="Filter by status"
-            options={STATUS_OPTIONS}
-            value={txStatusFilter}
-            onChange={(val) => {
-              setTxStatusFilter(val);
-              setTxPage(1);
-            }}
-          />
-
-          <div className="col-span-2 sm:col-span-2 flex gap-2">
-            <button
-              type="submit"
-              className="flex-1 h-11 px-4 rounded-lg text-sm font-semibold bg-[#126BEB] hover:bg-[#0E59C9] text-white transition-colors"
-            >
-              Search
-            </button>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="h-11 px-3.5 rounded-lg text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
-              >
-                Reset
-              </button>
-            )}
+            <label className="flex items-center gap-2 h-11 px-3 rounded-lg bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm text-slate-800 dark:text-slate-100 focus-within:border-[#126BEB] dark:focus-within:border-[#38BDF8] focus-within:ring-2 focus-within:ring-[#126BEB]/15 sm:w-52">
+              <span className="text-xs font-medium text-slate-400 shrink-0">To</span>
+              <input
+                type="date"
+                aria-label="To date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setEndDate(next);
+                  if (next && startDate && next < startDate) {
+                    setStartDate(next);
+                  }
+                  setTxPage(1);
+                }}
+                className="w-full min-w-0 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
+              />
+            </label>
           </div>
         </form>
       </search>

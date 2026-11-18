@@ -271,6 +271,10 @@ export class AirtimeService {
     // 4. Generate reference & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('AIRTIME');
+    const initialRoute =
+      typeof this.router.resolveDynamicRouting === 'function'
+        ? await this.router.resolveDynamicRouting(ServiceType.AIRTIME)
+        : { primaryName: 'MONNIFY' };
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;
     try {
@@ -286,7 +290,7 @@ export class AirtimeService {
           totalAmount: amountToDebitKobo,
           status: TransactionStatus.PROCESSING,
           recipient: normalizedPhone,
-          providerName: 'MONNIFY' as any, // initial provider
+          providerName: initialRoute.primaryName as any,
           clientReference: clientRef,
           requestReference,
           metadata: {
@@ -344,27 +348,31 @@ export class AirtimeService {
           })
           .where(eq(serviceTransactions.id, txnRow.id));
 
-        // 7. Post balanced Zero-Sum Financial Ledger entry
-        await ledgerService.recordDoubleEntry({
-          businessId: input.businessId,
-          reference: clientRef,
-          type: LedgerEntryType.SERVICE_PAYMENT,
-          category: 'AIRTIME_PURCHASE',
-          description: `Airtime purchase: ${config.name} ₦${koboToNaira(faceAmountKobo)} to ${normalizedPhone}`,
-          transactionId: txnRow.id,
-          debit: {
-            walletId: mainWallet.id,
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo,
-            balanceAfterKobo,
-          },
-          credit: {
-            walletId: mainWallet.id, // Platform clearing balance
-            amountKobo: amountToDebitKobo,
-            balanceBeforeKobo: 0n,
-            balanceAfterKobo: amountToDebitKobo,
-          },
-        });
+        // 7. Post balanced Zero-Sum Financial Ledger entry (non-throwing after settled vend)
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'AIRTIME_PURCHASE',
+            description: `Airtime purchase: ${config.name} ₦${koboToNaira(faceAmountKobo)} to ${normalizedPhone}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id, // Platform clearing balance
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((ledgerErr) => {
+            console.error('[AirtimeService] Ledger recording warning:', ledgerErr);
+          });
 
         const receipt: AirtimeReceiptDto = {
           transactionId: txnRow.id,
@@ -381,7 +389,7 @@ export class AirtimeService {
           amountDebitedKobo: amountToDebitKobo.toString(),
           amountDebitedNaira: koboToNaira(amountToDebitKobo),
           formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
-          reference: clientRef,
+          reference: requestReference,
           clientReference: clientRef,
           providerReference: vendResult.providerReference,
           providerName: vendResult.providerName,
@@ -407,7 +415,7 @@ export class AirtimeService {
         vendResult.status === TransactionStatus.PROCESSING ||
         vendResult.status === TransactionStatus.PENDING
       ) {
-        // Provider is processing top-up with mobile operator
+        // Provider is processing top-up with mobile operator (wallet remains debited until confirmed failed)
         await db
           .update(serviceTransactions)
           .set({
@@ -417,6 +425,31 @@ export class AirtimeService {
             updatedAt: new Date(),
           })
           .where(eq(serviceTransactions.id, txnRow.id));
+
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'AIRTIME_PURCHASE',
+            description: `Airtime purchase (Processing): ${config.name} ₦${koboToNaira(faceAmountKobo)} to ${normalizedPhone}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((ledgerErr) => {
+            console.error('[AirtimeService] Processing ledger recording warning:', ledgerErr);
+          });
 
         const receipt: AirtimeReceiptDto = {
           transactionId: txnRow.id,
@@ -433,7 +466,7 @@ export class AirtimeService {
           amountDebitedKobo: amountToDebitKobo.toString(),
           amountDebitedNaira: koboToNaira(amountToDebitKobo),
           formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
-          reference: clientRef,
+          reference: requestReference,
           clientReference: clientRef,
           providerReference: vendResult.providerReference,
           providerName: vendResult.providerName,
@@ -671,7 +704,14 @@ export class AirtimeService {
         return receipt;
       }
 
-      if (requeryResult.status === TransactionStatus.FAILED) {
+      const isConfirmedFailed =
+        requeryResult.status === TransactionStatus.FAILED &&
+        !/not\s*found|invalid\s*request/i.test(String(requeryResult.responseMessage || '')) &&
+        !['UNKNOWN', 'NETWORK_ERROR', '20010', '99', '099', '015'].includes(
+          String(requeryResult.responseCode || '').toUpperCase(),
+        );
+
+      if (isConfirmedFailed) {
         // Atomically claim terminal FAILED transition BEFORE crediting wallet to prevent double refunds
         const [claimed] = await db
           .update(serviceTransactions)

@@ -486,6 +486,10 @@ export class EducationService {
     // 4. Generate references & initialize service transaction row (refund wallet if DB insert fails)
     const requestReference = generateBaxatoReference();
     const clientRef = input.clientReference || generateTransactionReference('EPN');
+    const initialRoute =
+      typeof this.router.resolveDynamicRouting === 'function'
+        ? await this.router.resolveDynamicRouting(ServiceType.EXAM_PIN)
+        : { primaryName: 'MONNIFY' };
 
     let txnRow: typeof serviceTransactions.$inferSelect | undefined;
     try {
@@ -501,7 +505,7 @@ export class EducationService {
           totalAmount: amountToDebitKobo,
           status: TransactionStatus.PROCESSING,
           recipient: cleanCandidateId,
-          providerName: 'MONNIFY' as any,
+          providerName: initialRoute.primaryName as any,
           clientReference: clientRef,
           requestReference,
           metadata: {
@@ -536,12 +540,13 @@ export class EducationService {
       const dispensedPins: Array<{ pin: string; serialNumber?: string; instructions?: string }> = [];
       let fulfillmentSource: 'LIVE_PROVIDER' | 'ENCRYPTED_INVENTORY' = 'LIVE_PROVIDER';
       let providerReference = requestReference;
-      let providerName = 'MONNIFY';
+      let providerName: string = initialRoute.primaryName;
 
       // Attempt 1: Live Provider Vending (exact quantity loop)
+      let upstreamInFlight = false;
       try {
         for (let i = 0; i < quantity; i++) {
-          const subRef = i === 0 ? requestReference : `${requestReference}-${i + 1}`;
+          const subRef = i === 0 ? requestReference : `${requestReference}${i + 1}`;
           const vendResult = await this.router.vendService(
             {
               serviceType: ServiceType.EXAM_PIN,
@@ -553,6 +558,17 @@ export class EducationService {
             },
             txnRow.id,
           );
+
+          if (
+            (vendResult.status === TransactionStatus.PROCESSING ||
+              vendResult.status === TransactionStatus.PENDING) &&
+            dispensedPins.length === 0
+          ) {
+            upstreamInFlight = true;
+            providerReference = vendResult.providerReference || subRef;
+            providerName = vendResult.providerName;
+            break;
+          }
 
           if (vendResult.status !== TransactionStatus.SUCCESSFUL) {
             break;
@@ -575,6 +591,84 @@ export class EducationService {
         }
       } catch {
         // Live provider failed; continue to Encrypted Inventory Fallback for remaining PINs
+      }
+
+      if (upstreamInFlight) {
+        await db
+          .update(serviceTransactions)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            providerName: providerName as any,
+            providerReference,
+            updatedAt: new Date(),
+          })
+          .where(eq(serviceTransactions.id, txnRow.id));
+
+        await ledgerService
+          .recordDoubleEntry({
+            businessId: input.businessId,
+            reference: clientRef,
+            type: LedgerEntryType.SERVICE_PAYMENT,
+            category: 'EXAM_PIN_PURCHASE',
+            description: `Education PIN vend (Processing): ${quantity}x ${pkg.name} for ${cleanCandidateId}`,
+            transactionId: txnRow.id,
+            debit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo,
+              balanceAfterKobo,
+            },
+            credit: {
+              walletId: mainWallet.id,
+              amountKobo: amountToDebitKobo,
+              balanceBeforeKobo: 0n,
+              balanceAfterKobo: amountToDebitKobo,
+            },
+          })
+          .catch((err) => {
+            console.error('[EducationService] Processing ledger recording warning:', err);
+          });
+
+        const processingReceipt: ExamPinReceiptDto = {
+          transactionId: txnRow.id,
+          status: TransactionStatus.PROCESSING,
+          packageCode: pkg.packageCode,
+          packageName: pkg.name,
+          examBody: pkg.examBody,
+          serviceType: pkg.serviceType,
+          candidateId: cleanCandidateId,
+          candidateName: input.candidateName,
+          pins: [],
+          quantity,
+          baseCostKobo: baseCostKobo.toString(),
+          baseCostNaira: koboToNaira(baseCostKobo),
+          formattedBaseCost: formatNairaFromKobo(baseCostKobo),
+          merchantMarkupKobo: markupKobo.toString(),
+          merchantMarkupNaira: koboToNaira(markupKobo),
+          formattedMerchantMarkup: formatNairaFromKobo(markupKobo),
+          amountDebitedKobo: amountToDebitKobo.toString(),
+          amountDebitedNaira: koboToNaira(amountToDebitKobo),
+          formattedAmountDebited: formatNairaFromKobo(amountToDebitKobo),
+          reference: requestReference,
+          clientReference: clientRef,
+          providerReference,
+          providerName,
+          portalUrl: pkg.portalUrl,
+          instructions: pkg.instructions,
+          source: fulfillmentSource,
+          createdAt: new Date(),
+        };
+
+        if (input.idempotencyKey) {
+          await idempotencyService.completeLock(
+            input.idempotencyKey,
+            input.businessId,
+            201,
+            processingReceipt,
+          );
+        }
+
+        return processingReceipt;
       }
 
       // Attempt 2: Fallback to Encrypted Offline Inventory for any remaining unfulfilled PINs
@@ -687,26 +781,30 @@ export class EducationService {
         .where(eq(serviceTransactions.id, txnRow.id));
 
       // 7. Record balanced Zero-Sum Financial Ledger entry
-      await ledgerService.recordDoubleEntry({
-        businessId: input.businessId,
-        reference: clientRef,
-        type: LedgerEntryType.SERVICE_PAYMENT,
-        category: 'EXAM_PIN_PURCHASE',
-        description: `Education PIN vend: ${finalQuantity}x ${pkg.name} for ${cleanCandidateId}`,
-        transactionId: txnRow.id,
-        debit: {
-          walletId: mainWallet.id,
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo,
-          balanceAfterKobo,
-        },
-        credit: {
-          walletId: mainWallet.id, // Platform clearing
-          amountKobo: amountToDebitKobo,
-          balanceBeforeKobo: 0n,
-          balanceAfterKobo: amountToDebitKobo,
-        },
-      });
+      await ledgerService
+        .recordDoubleEntry({
+          businessId: input.businessId,
+          reference: clientRef,
+          type: LedgerEntryType.SERVICE_PAYMENT,
+          category: 'EXAM_PIN_PURCHASE',
+          description: `Education PIN vend: ${finalQuantity}x ${pkg.name} for ${cleanCandidateId}`,
+          transactionId: txnRow.id,
+          debit: {
+            walletId: mainWallet.id,
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo,
+            balanceAfterKobo,
+          },
+          credit: {
+            walletId: mainWallet.id, // Platform clearing
+            amountKobo: amountToDebitKobo,
+            balanceBeforeKobo: 0n,
+            balanceAfterKobo: amountToDebitKobo,
+          },
+        })
+        .catch((err) => {
+          console.error('[EducationService] Ledger recording warning after successful vend:', err);
+        });
 
       const receipt: ExamPinReceiptDto = {
         transactionId: txnRow.id,

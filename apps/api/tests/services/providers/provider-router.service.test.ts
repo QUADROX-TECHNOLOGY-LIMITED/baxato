@@ -152,8 +152,8 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
       true,
     );
 
-    // Make Monnify reject
-    (mockMonnify.vendService as any).mockRejectedValueOnce(new Error('Monnify gateway timeout'));
+    // Make Monnify reject with a non-timeout 503 error
+    (mockMonnify.vendService as any).mockRejectedValueOnce(new Error('Monnify 503 service unavailable'));
 
     const result = await router.vendService({
       serviceType: ServiceType.ELECTRICITY,
@@ -250,7 +250,7 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
     expect(result.units).toBe('45 kWh');
   });
 
-  it('aborts failover and throws timeout error when primary times out and requery is indeterminate', async () => {
+  it('blocks failover and holds order as PROCESSING when primary times out and requery is indeterminate', async () => {
     router.updateRoutingConfig(
       ServiceType.ELECTRICITY,
       ProviderRoutingStrategy.PRIMARY_FALLBACK,
@@ -267,18 +267,48 @@ describe('ProviderRouterService (Dynamic Routing & Circuit Breaking)', () => {
       new Error('Requery service unreachable'),
     );
 
-    await expect(
-      router.vendService({
-        serviceType: ServiceType.ELECTRICITY,
-        paymentCode: '053396201',
-        customerId: '01234567890',
-        amountKobo: 500000n,
-        requestReference: 'REF_TIMEOUT_GUARD_3',
-      }),
-    ).rejects.toThrow(CircuitBreakerTimeoutError);
+    const result = await router.vendService({
+      serviceType: ServiceType.ELECTRICITY,
+      paymentCode: '053396201',
+      customerId: '01234567890',
+      amountKobo: 500000n,
+      requestReference: 'REF_TIMEOUT_GUARD_3',
+    });
 
+    expect(result.status).toBe(TransactionStatus.PROCESSING);
+    expect(result.providerName).toBe(ProviderName.MONNIFY);
     // Secondary provider must NOT be invoked when state is indeterminate
     expect(mockVtpass.vendService).not.toHaveBeenCalled();
+  });
+
+  it('returns PROCESSING without throwing when single-provider strategy (VTPASS_ONLY) times out', async () => {
+    router.updateRoutingConfig(
+      ServiceType.AIRTIME,
+      ProviderRoutingStrategy.VTPASS_ONLY,
+      false,
+    );
+
+    (mockVtpass.vendService as any).mockRejectedValueOnce(
+      new CircuitBreakerTimeoutError('VTPASS', 15000),
+    );
+    (mockVtpass.requeryTransaction as any).mockResolvedValueOnce({
+      status: TransactionStatus.PROCESSING,
+      providerReference: '202611181135BX8F3K9M2P',
+      responseCode: '099',
+      responseMessage: 'TRANSACTION PROCESSING',
+    });
+
+    const result = await router.vendService({
+      serviceType: ServiceType.AIRTIME,
+      paymentCode: 'MTN',
+      customerId: '08011111111',
+      amountKobo: 10000n,
+      requestReference: '202611181135BX8F3K9M2P',
+    });
+
+    expect(result.status).toBe(TransactionStatus.PROCESSING);
+    expect(result.providerName).toBe(ProviderName.VTPASS);
+    expect(result.providerReference).toBe('202611181135BX8F3K9M2P');
   });
 
   it('throws error when primary circuit breaker is OPEN and no fallback is enabled', async () => {

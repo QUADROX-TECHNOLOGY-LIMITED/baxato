@@ -93,27 +93,41 @@ export default function TransactionReceiptModal({
   const isFullBleedLogo =
     currentReceipt?.network === 'MTN' || currentReceipt?.network === 'GLO';
 
+  const canPoll = Boolean(
+    (pollingEndpoint && currentReceipt?.reference) || currentReceipt?.transactionId,
+  );
+
   const checkStatus = useCallback(async () => {
-    if (!currentReceipt?.reference || !pollingEndpoint) return;
+    if (!currentReceipt || !canPoll) return;
     try {
       setIsPinging(true);
       const authToken = localStorage.getItem('bx_auth_token') || '';
-      const endpoint = `${pollingEndpoint}${encodeURIComponent(currentReceipt.reference)}`;
+      const activeBizId = localStorage.getItem('bx_active_business_id') || '';
+
+      const useSpecificEndpoint = Boolean(pollingEndpoint && currentReceipt.reference);
+      const endpoint = useSpecificEndpoint
+        ? `${pollingEndpoint}${encodeURIComponent(currentReceipt.reference)}`
+        : `/api/transactions/${encodeURIComponent(currentReceipt.transactionId)}/check-status`;
 
       const res = await fetch(endpoint, {
+        method: useSpecificEndpoint ? 'GET' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(activeBizId ? { 'x-business-id': activeBizId } : {}),
         },
       });
 
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success && json?.data) {
-        const remoteStatus = json.data.status;
+        const remoteStatus = json.data.status || json.data.transaction?.status;
         if (remoteStatus && remoteStatus !== currentReceipt.status) {
           const updated: TransactionReceiptData = {
             ...currentReceipt,
             status: remoteStatus,
+            ...(remoteStatus === 'FAILED' && json.data.message
+              ? { errorMessage: json.data.message }
+              : {}),
           };
           setCurrentReceipt(updated);
           onStatusUpdated?.(updated);
@@ -124,10 +138,10 @@ export default function TransactionReceiptModal({
     } finally {
       setIsPinging(false);
     }
-  }, [currentReceipt, pollingEndpoint, onStatusUpdated]);
+  }, [currentReceipt, canPoll, pollingEndpoint, onStatusUpdated]);
 
   useEffect(() => {
-    if (!isOpen || !currentReceipt || !isProcessing || !pollingEndpoint) {
+    if (!isOpen || !currentReceipt || !isProcessing || !canPoll) {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
@@ -149,7 +163,7 @@ export default function TransactionReceiptModal({
         pollingRef.current = null;
       }
     };
-  }, [isOpen, currentReceipt, isProcessing, pollingEndpoint, checkStatus]);
+  }, [isOpen, currentReceipt, isProcessing, canPoll, checkStatus]);
 
   if (!currentReceipt) return null;
 
@@ -327,7 +341,7 @@ export default function TransactionReceiptModal({
             </p>
           </div>
 
-          {isProcessing && pollingEndpoint && (
+          {isProcessing && canPoll && (
             <div className="no-print px-3 py-2 rounded-lg bg-amber-50/70 dark:bg-amber-950/35 border border-amber-200/80 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <RefreshCw

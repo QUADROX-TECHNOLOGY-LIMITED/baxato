@@ -7,11 +7,12 @@ import {
 } from '../../src/utils/reference.js';
 
 describe('Reference Generation Utilities', () => {
-  it('generates a branded BX-YYYYMMDD-XXXXXXXXXX reference', () => {
-    const fixedDate = new Date('2026-11-18T09:00:00Z');
+  it('generates a branded YYYYMMDDHHmmBX... reference in Africa/Lagos time', () => {
+    // 09:05 UTC = 10:05 Africa/Lagos (UTC+1)
+    const fixedDate = new Date('2026-11-18T09:05:00Z');
     const ref1 = generateBaxatoReference(fixedDate);
     const ref2 = generateBaxatoReference(fixedDate);
-    expect(ref1).toMatch(/^BX-20261118-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/);
+    expect(ref1).toMatch(/^202611181005BX[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
     expect(ref1).not.toBe(ref2);
   });
   it('generates a 20-digit numeric reference starting with prefix 2411', () => {

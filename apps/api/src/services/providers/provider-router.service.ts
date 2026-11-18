@@ -25,6 +25,7 @@ import {
   CircuitBreakerTimeoutError,
 } from './circuit-breaker.js';
 import { sanitizeForJson } from '../audit.service.js';
+import { serviceControlsService } from '../service-controls.service.js';
 
 export interface ProviderRouterOptions {
   env: Env;
@@ -64,7 +65,7 @@ export class ProviderRouterService {
         failureThreshold: 3,
         resetTimeoutMs: 30000,
         successThreshold: 2,
-        timeoutMs: 25000,
+        timeoutMs: 15000,
       }),
     );
     this.circuitBreakers.set(
@@ -74,7 +75,7 @@ export class ProviderRouterService {
         failureThreshold: 3,
         resetTimeoutMs: 30000,
         successThreshold: 2,
-        timeoutMs: 25000,
+        timeoutMs: 15000,
       }),
     );
 
@@ -188,13 +189,41 @@ export class ProviderRouterService {
     return updated;
   }
 
+  public async hydratePersistedRouting(): Promise<ServiceRoutingConfig[]> {
+    if (!this.db) {
+      return this.getRoutingConfig();
+    }
+    try {
+      const settings = await serviceControlsService.getSettings();
+      const persisted = settings.serviceRouting || {};
+      const validStrategies = new Set<string>(Object.values(ProviderRoutingStrategy));
+      for (const [svc, strat] of Object.entries(persisted)) {
+        if (
+          Object.values(ServiceType).includes(svc as ServiceType) &&
+          validStrategies.has(strat)
+        ) {
+          this.updateRoutingConfig(
+            svc as ServiceType,
+            strat as ProviderRoutingStrategy,
+            strat === ProviderRoutingStrategy.PRIMARY_FALLBACK ||
+              strat === ProviderRoutingStrategy.VTPASS_FALLBACK,
+          );
+        }
+      }
+    } catch {
+      // Non-fatal fallback to current in-memory configuration
+    }
+    return this.getRoutingConfig();
+  }
+
   /**
-   * Dynamically resolves the active provider for a service from PostgreSQL `providers` table.
-   * Allows live hot-switching via TablePlus or DB admin tools.
+   * Dynamically resolves the active provider for a service from PostgreSQL `system_settings` and `providers` table.
+   * Allows live hot-switching via Staff Routing or TablePlus DB admin tools across server restarts.
    */
   public async resolveDynamicRouting(
     serviceType: ServiceType,
   ): Promise<{ primaryName: ProviderName; fallbackName?: ProviderName; allowFailover: boolean }> {
+    await this.hydratePersistedRouting();
     const config = this.getRoutingConfig(serviceType)[0];
     let primaryName = config?.primaryProvider ?? ProviderName.MONNIFY;
     let fallbackName = config?.fallbackProvider;
@@ -395,16 +424,19 @@ export class ProviderRouterService {
       }
     }
 
-    // 2. Automatic Failover to Fallback Provider
-    // SAFETY GUARD: If primary timed out, it may still be executing downstream with the telco/biller.
-    // Blindly falling over to a secondary provider causes duplicate vending (double-charging).
+    // 2. Timeout & Indeterminate In-Flight Guard
+    // SAFETY GUARD: If primary timed out after receiving the vend request, it may still be executing
+    // downstream with the telco/biller. Never throw a fatal error (which triggers premature refund)
+    // and never blindly fail over unless requery confirms explicit terminal failure.
     const isTimeout =
       caughtError instanceof CircuitBreakerTimeoutError ||
-      (caughtError as any)?.code === 'TIMEOUT';
+      (caughtError as any)?.code === 'TIMEOUT' ||
+      (caughtError as any)?.name === 'AbortError' ||
+      /timed?\s*out/i.test(String(caughtError?.message || ''));
 
-    if (isTimeout && allowFailover && fallbackName) {
+    if (isTimeout) {
       console.warn(
-        `[PROVIDER FAILOVER GUARD] Primary ${primaryName} timed out. Requerying before considering failover to prevent duplicate transaction...`,
+        `[PROVIDER TIMEOUT GUARD] Primary ${primaryName} timed out. Requerying status before settling...`,
       );
       try {
         const requery = await primaryProvider.requeryTransaction(request.requestReference);
@@ -433,23 +465,34 @@ export class ProviderRouterService {
             Date.now() - startTime,
           );
           return resolved;
-        } else if (
-          requery &&
-          (requery.status === TransactionStatus.PROCESSING ||
-            requery.status === TransactionStatus.PENDING)
-        ) {
-          console.log(
-            `[PROVIDER REQUERY IN-FLIGHT] Primary ${primaryName} is still processing. Marking as PROCESSING (failover blocked to prevent double-vend).`,
-          );
-          const processingResult: ServiceVendingResult = {
-            status: TransactionStatus.PROCESSING,
+        }
+
+        if (requery && requery.status === TransactionStatus.FAILED) {
+          // Confirmed terminal failure on primary — safe to attempt fallback if enabled, or return FAILED
+          caughtError = null;
+          result = {
+            status: TransactionStatus.FAILED,
             providerName: primaryName,
             providerReference: requery.providerReference || request.requestReference,
             requestReference: request.requestReference,
             amountKobo: request.amountKobo,
-            responseCode: requery.responseCode || '099',
-            responseMessage: requery.responseMessage || 'Processing with provider',
+            responseCode: requery.responseCode || 'FAILED',
+            responseMessage: requery.responseMessage || 'Transaction failed on gateway',
             rawResponse: requery.rawResponse,
+          };
+        } else {
+          console.log(
+            `[PROVIDER REQUERY IN-FLIGHT] Primary ${primaryName} is still processing after timeout. Returning PROCESSING.`,
+          );
+          const processingResult: ServiceVendingResult = {
+            status: TransactionStatus.PROCESSING,
+            providerName: primaryName,
+            providerReference: requery?.providerReference || request.requestReference,
+            requestReference: request.requestReference,
+            amountKobo: request.amountKobo,
+            responseCode: requery?.responseCode || '099',
+            responseMessage: requery?.responseMessage || 'Processing with provider',
+            rawResponse: requery?.rawResponse,
           };
           await this.auditProviderTransaction(
             transactionId,
@@ -462,11 +505,29 @@ export class ProviderRouterService {
           return processingResult;
         }
       } catch (_reqErr) {
-        // If requery is indeterminate, do not blindly double vend on secondary!
+        // Requery itself was unreachable after timeout: keep order in PROCESSING so funds stay held safely
+        // until status can be confirmed via subsequent requery (never double-vend or prematurely refund!).
         console.warn(
-          `[PROVIDER FAILOVER BLOCKED] Primary ${primaryName} is indeterminate after timeout. Aborting failover to prevent double-charge.`,
+          `[PROVIDER TIMEOUT INDETERMINATE] Primary ${primaryName} requery unreachable after timeout. Holding as PROCESSING.`,
         );
-        throw caughtError;
+        const indeterminateResult: ServiceVendingResult = {
+          status: TransactionStatus.PROCESSING,
+          providerName: primaryName,
+          providerReference: request.requestReference,
+          requestReference: request.requestReference,
+          amountKobo: request.amountKobo,
+          responseCode: '099',
+          responseMessage: 'Processing — awaiting confirmation from provider',
+        };
+        await this.auditProviderTransaction(
+          transactionId,
+          primaryName,
+          request,
+          indeterminateResult,
+          '099',
+          Date.now() - startTime,
+        );
+        return indeterminateResult;
       }
     }
 
@@ -501,6 +562,33 @@ export class ProviderRouterService {
           return result;
         }
       } catch (fallbackErr) {
+        const fbTimeout =
+          fallbackErr instanceof CircuitBreakerTimeoutError ||
+          (fallbackErr as any)?.code === 'TIMEOUT' ||
+          (fallbackErr as any)?.name === 'AbortError' ||
+          /timed?\s*out/i.test(String((fallbackErr as Error)?.message || ''));
+
+        if (fbTimeout) {
+          const fbProcessing: ServiceVendingResult = {
+            status: TransactionStatus.PROCESSING,
+            providerName: fallbackName,
+            providerReference: request.requestReference,
+            requestReference: request.requestReference,
+            amountKobo: request.amountKobo,
+            responseCode: '099',
+            responseMessage: 'Processing — awaiting confirmation from provider',
+          };
+          await this.auditProviderTransaction(
+            transactionId,
+            fallbackName,
+            request,
+            fbProcessing,
+            '099',
+            Date.now() - fallbackStart,
+          );
+          return fbProcessing;
+        }
+
         console.error(`[PROVIDER FAILOVER FAILED] Fallback ${fallbackName} also failed: ${(fallbackErr as Error).message}`);
         await this.auditProviderTransaction(
           transactionId,

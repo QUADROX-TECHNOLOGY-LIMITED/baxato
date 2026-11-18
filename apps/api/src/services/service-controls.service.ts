@@ -25,6 +25,7 @@ export interface SystemSettingsState {
   killSwitches: KillSwitchesConfig;
   disabledNetworks: DisabledNetworksConfig;
   disabledDataPlans: string[];
+  serviceRouting: Record<string, string>;
   feeSchedules: {
     airtimeDiscountBps: number;
     dataDiscountBps: number;
@@ -51,6 +52,7 @@ export interface UpdateSystemSettingsInput {
     EDUCATION?: string[];
   };
   disabledDataPlans?: string[];
+  serviceRouting?: Record<string, string>;
 }
 
 const SETTINGS_KEY = 'GLOBAL';
@@ -84,6 +86,7 @@ const DEFAULT_SETTINGS: SystemSettingsState = {
     EDUCATION: [],
   },
   disabledDataPlans: [],
+  serviceRouting: {},
   feeSchedules: {
     airtimeDiscountBps: 250,
     dataDiscountBps: 300,
@@ -199,6 +202,14 @@ class ServiceControlsService {
       disabledDataPlans: Array.isArray(row?.disabledDataPlans)
         ? row!.disabledDataPlans.filter((id): id is string => typeof id === 'string')
         : [],
+      serviceRouting:
+        ks.serviceRouting && typeof ks.serviceRouting === 'object' && !Array.isArray(ks.serviceRouting)
+          ? Object.fromEntries(
+              Object.entries(ks.serviceRouting as Record<string, unknown>).filter(
+                ([, v]) => typeof v === 'string' && v.length > 0,
+              ) as Array<[string, string]>,
+            )
+          : {},
       feeSchedules: { ...DEFAULT_SETTINGS.feeSchedules },
       securityPolicies: { ...DEFAULT_SETTINGS.securityPolicies },
     };
@@ -322,9 +333,17 @@ class ServiceControlsService {
         ? normalizePlanIds(input.disabledDataPlans)
         : current.disabledDataPlans;
 
+    const nextServiceRouting: Record<string, string> =
+      input.serviceRouting !== undefined
+        ? { ...current.serviceRouting, ...input.serviceRouting }
+        : { ...current.serviceRouting };
+
     const storedKillSwitches: Record<string, any> = { ...nextKillSwitches };
     if (nextNotice) {
       storedKillSwitches.maintenanceNotice = nextNotice;
+    }
+    if (Object.keys(nextServiceRouting).length > 0) {
+      storedKillSwitches.serviceRouting = nextServiceRouting;
     }
 
     const [existing] = await db

@@ -9,6 +9,8 @@ export async function GET(request: Request) {
     const status = searchParams.get('status') || '';
     const channel = searchParams.get('channel') || '';
     const search = searchParams.get('search') || '';
+    const startDate = searchParams.get('startDate') || '';
+    const endDate = searchParams.get('endDate') || '';
     const limit = searchParams.get('limit') || '20';
     const offset = searchParams.get('offset') || '0';
 
@@ -17,15 +19,21 @@ export async function GET(request: Request) {
     if (status && status !== 'ALL') params.set('status', status);
     if (channel && channel !== 'ALL') params.set('channel', channel);
     if (search) params.set('search', search);
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
     params.set('limit', limit);
     params.set('offset', offset);
 
-    const result = await proxyToBackendApi(`/transactions?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
+    const result = await proxyToBackendApi(
+      `/transactions?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
       },
-    });
+      request,
+    );
 
     return NextResponse.json(result.data, { status: result.status });
   } catch (err: unknown) {

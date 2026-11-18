@@ -36,12 +36,19 @@ describe('VtpassProvider Adapter Implementation', () => {
   });
 
   describe('Utility & Reference Generation', () => {
-    it('generateVtpassRequestId produces a strictly compliant timestamp-prefixed ID', () => {
+    it('generateVtpassRequestId produces a strictly compliant Africa/Lagos timestamp-prefixed ID', () => {
       const id = generateVtpassRequestId();
-      const now = new Date();
-      const expectedDatePrefix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(new Date());
+      const get = (t: string) => parts.find((p) => p.type === t)?.value || '';
+      const expectedDatePrefix = `${get('year')}${get('month')}${get('day')}`;
 
       expect(id.startsWith(expectedDatePrefix)).toBe(true);
+      expect(/^\d{14}[A-Z0-9]+$/i.test(id)).toBe(true);
       expect(id.length).toBeGreaterThanOrEqual(18);
 
       const id2 = generateVtpassRequestId();
@@ -307,7 +314,7 @@ describe('VtpassProvider Adapter Implementation', () => {
 
       expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
       expect(result.providerName).toBe(ProviderName.VTPASS);
-      expect(result.providerReference).toBe('VTP_TXN_98765');
+      expect(result.providerReference).toBe('20261106120000123456');
       expect(result.responseCode).toBe('000');
       expect(result.amountKobo).toBe(100000n);
 
@@ -395,7 +402,7 @@ describe('VtpassProvider Adapter Implementation', () => {
       expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
       expect(result.token).toBe('1234 5678 9012 3456 7890');
       expect(result.units).toBe('68.4 kWh');
-      expect(result.providerReference).toBe('VTP_ELEC_54321');
+      expect(result.providerReference).toBe('20261106120000888888');
 
       expect(global.fetch).toHaveBeenCalledWith(
         'https://sandbox.vtpass.com/api/pay',
@@ -528,7 +535,7 @@ describe('VtpassProvider Adapter Implementation', () => {
 
       expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
       expect(result.providerName).toBe(ProviderName.VTPASS);
-      expect(result.providerReference).toBe('VTP_CABLE_GOTV_1');
+      expect(result.providerReference).toBe('20261106120000777777');
 
       const lastFetchCall = (global.fetch as any).mock.calls[0];
       expect(lastFetchCall[0]).toBe('https://sandbox.vtpass.com/api/pay');
@@ -575,7 +582,7 @@ describe('VtpassProvider Adapter Implementation', () => {
       });
 
       expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
-      expect(result.providerReference).toBe('VTP_CABLE_DSTV_PADI');
+      expect(result.providerReference).toBe('20261106120000666666');
 
       expect(global.fetch).toHaveBeenCalledWith(
         'https://sandbox.vtpass.com/api/pay',
@@ -657,7 +664,7 @@ describe('VtpassProvider Adapter Implementation', () => {
         });
 
         expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
-        expect(result.providerReference).toBe(`VTP_${c.expectedServiceId}`);
+        expect(result.providerReference).toBe('20261111120000DATA');
 
         const sentBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
         expect(sentBody.serviceID).toBe(c.expectedServiceId);
@@ -727,7 +734,7 @@ describe('VtpassProvider Adapter Implementation', () => {
       const result = await provider.requeryTransaction('20261106120000111111');
 
       expect(result.status).toBe(TransactionStatus.SUCCESSFUL);
-      expect(result.providerReference).toBe('VTP_REQUERY_OK');
+      expect(result.providerReference).toBe('20261106120000111111');
       expect(result.token).toBe('9999 8888 7777 6666 5555');
       expect(result.units).toBe('50 kWh');
 
@@ -738,6 +745,38 @@ describe('VtpassProvider Adapter Implementation', () => {
           body: JSON.stringify({ request_id: '20261106120000111111' }),
         }),
       );
+    });
+
+    it('passes unified YYYYMMDDHHmmBX... BAXATO requestReference directly as VTpass request_id', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            code: '000',
+            response_description: 'TRANSACTION SUCCESSFUL',
+            requestId: '202611181135BX8F3K9M2P',
+            content: {
+              transactions: {
+                status: 'delivered',
+                transactionId: '1795000001',
+              },
+            },
+          }),
+      } as any);
+
+      const vend = await provider.vendService({
+        serviceType: ServiceType.AIRTIME,
+        paymentCode: 'MTN',
+        customerId: '08011111111',
+        amountKobo: 10000n,
+        requestReference: '202611181135BX8F3K9M2P',
+        metadata: { network: 'MTN' },
+      });
+
+      const sentPayBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+      expect(sentPayBody.request_id).toBe('202611181135BX8F3K9M2P');
+      expect(vend.providerReference).toBe('202611181135BX8F3K9M2P');
     });
 
     it('returns status FAILED when transactions.status is failed', async () => {

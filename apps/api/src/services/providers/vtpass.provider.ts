@@ -24,19 +24,25 @@ export interface VtpassConfig {
 }
 
 /**
- * Generate VTpass strictly compliant request_id:
- * Must start with current date in YYYYMMDD followed by HHmmss + random suffix.
+ * Generate VTpass strictly compliant request_id in Africa/Lagos (WAT / GMT+1) time:
+ * Must start with current date in YYYYMMDDHHmm followed by alphanumeric suffix.
  */
-export function generateVtpassRequestId(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
+export function generateVtpassRequestId(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const pick = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  const hourRaw = pick('hour');
+  const hh = hourRaw === '24' ? '00' : hourRaw;
   const randomSuffix = crypto.randomInt(100000, 1000000);
-  return `${year}${month}${day}${hours}${minutes}${seconds}${randomSuffix}`;
+  return `${pick('year')}${pick('month')}${pick('day')}${hh}${pick('minute')}${pick('second')}${randomSuffix}`;
 }
 
 export const TELCO_TO_VTPASS_AIRTIME: Record<string, string> = {
@@ -501,9 +507,12 @@ export class VtpassProvider implements ProviderAdapter {
    */
   public async vendService(request: ServiceVendingRequest): Promise<ServiceVendingResult> {
     const amountInNaira = Math.round(Number(request.amountKobo) / 100);
+    const hasCompliantRequestRef =
+      typeof request.requestReference === 'string' &&
+      /^\d{12}[A-Z0-9]{4,36}$/i.test(request.requestReference);
     const requestId =
       (request.metadata?.vtpassRequestId as string) ||
-      generateVtpassRequestId();
+      (hasCompliantRequestRef ? request.requestReference : generateVtpassRequestId());
 
     const endpoint = `${this.config.baseUrl}/pay`;
 
@@ -651,11 +660,14 @@ export class VtpassProvider implements ProviderAdapter {
       data?.content?.transactions?.units ||
       undefined;
 
-    // On SUCCESSFUL vends, prefer transactionId if returned; on PROCESSING vends,
-    // preserve the exact VTpass request_id so /api/requery can always locate the order.
-    const providerReference = isSuccess
-      ? String(data?.content?.transactions?.transactionId ?? '') || data?.requestId || requestId
-      : String(data?.requestId ?? '') || requestId;
+    // Always preserve the exact VTpass request_id so POST /api/requery can always locate the order
+    const providerReference = String(data?.requestId ?? '') || requestId;
+
+    const rawDesc = String(data?.response_description || '').trim();
+    const friendlyFailureMessage =
+      code === '019'
+        ? 'Duplicate request detected. Wait 15 seconds before recharging the same recipient.'
+        : rawDesc || (isSuccess ? 'Transaction Successful' : 'Transaction declined by service provider.');
 
     return {
       status,
@@ -664,9 +676,7 @@ export class VtpassProvider implements ProviderAdapter {
       requestReference: request.requestReference,
       amountKobo: request.amountKobo,
       responseCode: code || String(res.status),
-      responseMessage:
-        data?.response_description ||
-        (isSuccess ? 'Transaction Successful' : 'Transaction Failed'),
+      responseMessage: isSuccess ? rawDesc || 'Transaction Successful' : friendlyFailureMessage,
       token,
       units,
       customerAddress: data?.content?.transactions?.unique_element,
@@ -761,8 +771,7 @@ export class VtpassProvider implements ProviderAdapter {
     return {
       status,
       providerName: this.providerName,
-      providerReference:
-        String(data?.content?.transactions?.transactionId ?? '') || primaryRef,
+      providerReference: String(data?.requestId ?? '') || primaryRef,
       requestReference,
       responseCode: code || 'UNKNOWN',
       responseMessage:
